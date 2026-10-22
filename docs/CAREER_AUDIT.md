@@ -91,6 +91,22 @@ Evidence: a deterministic probe signed wave-one player `00-0036900`. The origina
 
 Proposed fix: persist a stable free-agent pool/order for the offseason, or page by unseen IDs rather than a mutable index. Add tests for zero through four signings before advancing the wave.
 
+### P1 — rapid mobile taps can execute a different newly rendered action
+
+Impact: a double tap can perform two decisions instead of one. Because the first tap immediately rerenders the page, the second tap may land on a different control occupying the same screen position, making irreversible roster and staffing choices without a deliberate selection.
+
+Evidence from an isolated 400×742 Chrome mobile-emulation run:
+
+- Double-tapping the owner decision both accepted the brief and hired the head coach that rendered under the second tap.
+- Double-tapping one restructure applied the restructure twice, reducing Patrick Mahomes's charge from 45.5M to 22.3M.
+- Double-tapping the first trade acceptance accepted two different offers; the second offer's headline replaced the first.
+- Double-tapping the round-one prospect drafted both the round-one and round-two players.
+- Double-tapping a weekly decision submitted the decision and then activated the newly positioned “Ask the wire” control. In local development this produced a gracefully handled narrative-endpoint 404 and the fallback message.
+
+The season-creation double tap itself created only one season, and ordinary single taps worked throughout. This was browser emulation, not a physical touchscreen test.
+
+Proposed fix: lock all actionable controls synchronously after the first activation, keep the submitted control in place until navigation settles, and add end-to-end double-tap tests across phase-changing actions. Destructive roster and draft choices should require an action-specific idempotency key or reducer guard, not only UI disabling.
+
 ### P2 — expired extra-pick records accumulate
 
 Impact: old acquired picks stay in every subsequent save. They are ignored by current-year draft filtering, so no duplicate selections were observed, but career saves and state grow unnecessarily and stale data complicates future ownership logic.
@@ -119,12 +135,15 @@ The local training-camp persistence fix does not alter development.
 - Repeated intro and camp submissions are rejected without mutating the accepted state.
 - An accepted trade removes the outgoing player from the user roster and processes the incoming player and pick compensation exactly once; resubmitting the same offer is rejected. A separate audit probe confirms the outgoing player is not added to the CPU destination team.
 - The local camp-selection fix persists checked cuts after a reload. This was verified in an isolated browser origin.
-- The Turbopack development build rendered correctly at a 400×742 responsive viewport. Season setup, team buttons, primary actions, and the fixed bottom navigation were reachable. No application runtime errors or browser issues were shown; the console contained only React/Next development messages.
+- The Turbopack development build rendered correctly at a 400×742 responsive viewport. A complete single season ran through setup, owner/staff decisions, cap, free agency, two accepted trades, all three draft rounds, camp, one played week, simulation, playoffs, and recap. A daily challenge also completed through its result card.
+- Refresh persistence passed at the owner meeting, after editing the camp cut list, during week two with the week-one result intact, and on the completed daily result. Navigating from the active season to Daily and back to Desk also preserved the season phase and state.
+- Camp cut controls were touch-accessible. An invalid 27-player selection disabled “Open the season”; restoring the saved cut enabled it. An unaffordable free-agent signing displayed “Not enough cap room” without mutating the phase.
+- No application exception was observed. The only console error was the expected local-development 404 after the rapid-tap issue accidentally invoked the optional narrative rewrite endpoint; the UI handled it with its rule-based fallback message.
 - The webpack fallback static export completed, but its CSS contains empty Tailwind theme/utility layers because this repository configures `@tailwindcss/turbopack` and no webpack/PostCSS Tailwind plugin. It is therefore a compilation fallback, not a deploy-ready visual artifact.
 
 The 14 passing tests cover existing engine behavior plus JSON round-trips, repeated intro/camp rejection, and one-time processing of the tested trade action. They do **not** assert that the confirmed CPU-draft, camp dead-end, career-year reset, trade-destination, free-agency pagination, restructure, or stale-pick defects are fixed. In particular, the trade regression verifies removal from the user roster and one-time incoming/pick processing; the separate audit probe is what proves the outgoing player is missing from every team.
 
-Mobile coverage was a responsive rendering and navigation/setup check. The interrupted reload persistence check was performed on desktop in the isolated local origin, and repeated submissions were exercised at the engine-test layer. The audit did not complete separate interrupted/repeated full gameplay flows under mobile emulation, so that remains unverified.
+Mobile coverage used Chrome's 400×742 responsive emulation in an isolated local origin, not a physical phone. It now includes a full season, a daily challenge, refresh interruptions, navigation away/back, invalid input, and repeated taps across phase-changing controls. Hardware-specific touch behavior, mobile Safari, Android Chrome, orientation changes, screen-reader gestures, and poor-network recovery remain unverified.
 
 ## Verification commands
 
