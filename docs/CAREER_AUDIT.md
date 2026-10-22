@@ -117,10 +117,14 @@ The local training-camp persistence fix does not alter development.
 
 - Added regression coverage for JSON round-trip/resume across all phases, including fired-state serialization.
 - Repeated intro and camp submissions are rejected without mutating the accepted state.
-- An accepted trade moves the outgoing player, incoming player, and pick compensation exactly once; resubmitting the same offer is rejected.
+- An accepted trade removes the outgoing player from the user roster and processes the incoming player and pick compensation exactly once; resubmitting the same offer is rejected. A separate audit probe confirms the outgoing player is not added to the CPU destination team.
 - The local camp-selection fix persists checked cuts after a reload. This was verified in an isolated browser origin.
 - The Turbopack development build rendered correctly at a 400×742 responsive viewport. Season setup, team buttons, primary actions, and the fixed bottom navigation were reachable. No application runtime errors or browser issues were shown; the console contained only React/Next development messages.
 - The webpack fallback static export completed, but its CSS contains empty Tailwind theme/utility layers because this repository configures `@tailwindcss/turbopack` and no webpack/PostCSS Tailwind plugin. It is therefore a compilation fallback, not a deploy-ready visual artifact.
+
+The 14 passing tests cover existing engine behavior plus JSON round-trips, repeated intro/camp rejection, and one-time processing of the tested trade action. They do **not** assert that the confirmed CPU-draft, camp dead-end, career-year reset, trade-destination, free-agency pagination, restructure, or stale-pick defects are fixed. In particular, the trade regression verifies removal from the user roster and one-time incoming/pick processing; the separate audit probe is what proves the outgoing player is missing from every team.
+
+Mobile coverage was a responsive rendering and navigation/setup check. The interrupted reload persistence check was performed on desktop in the isolated local origin, and repeated submissions were exercised at the engine-test layer. The audit did not complete separate interrupted/repeated full gameplay flows under mobile emulation, so that remains unverified.
 
 ## Verification commands
 
