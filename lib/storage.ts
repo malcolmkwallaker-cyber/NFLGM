@@ -1,4 +1,5 @@
 import type { Profile } from "@/lib/types";
+import { ensureMinimumRoster, suggestedCuts } from "@/lib/engine/season";
 
 export const STORAGE_KEY = "nfl-gm-career-v1";
 
@@ -24,10 +25,26 @@ export function loadProfile(): Profile {
     if (!raw) return freshProfile();
     const parsed = JSON.parse(raw) as Profile;
     if (parsed.version !== 1) return freshProfile();
-    return { ...freshProfile(), ...parsed, daily: { ...freshProfile().daily, ...parsed.daily } };
+    return migrateProfile({ ...freshProfile(), ...parsed, daily: { ...freshProfile().daily, ...parsed.daily } });
   } catch {
     return freshProfile();
   }
+}
+
+export function migrateProfile(profile: Profile): Profile {
+  const next = structuredClone(profile);
+  const seasons = [next.season, next.career?.season].filter((season) => season !== null && season !== undefined);
+  for (const season of seasons) {
+    season.restructuredIds ??= [];
+    season.faPool ??= [];
+    if (season.phase !== "camp") continue;
+    const addedToUser = ensureMinimumRoster(season, season.teamId);
+    for (const teamId of Object.keys(season.teams)) {
+      if (teamId !== season.teamId) ensureMinimumRoster(season, teamId);
+    }
+    if (addedToUser.length) season.campCutIds = suggestedCuts(season);
+  }
+  return next;
 }
 
 export function saveProfile(profile: Profile) {

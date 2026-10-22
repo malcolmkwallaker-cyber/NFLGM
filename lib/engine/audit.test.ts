@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createCareer, takeJob } from "@/lib/engine/career";
 import { applyAction, createSeason, ensureMinimumRoster, rolloverSeason, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
+import { freshProfile, migrateProfile } from "@/lib/storage";
 
 function advanceTo(state: SeasonState, phase: Phase): SeasonState {
   let current = state;
@@ -143,5 +144,23 @@ describe("audit regressions", () => {
     expect(hired.season.teams.BUF.roster.some((player) => player.id === markerId)).toBe(true);
     expect(hired.season.staffStep).toBe(0);
     expect(hired.season.phase).toBe("intro");
+  });
+
+  it("migrates an older deadlocked camp save without losing the original", () => {
+    const season = createSeason({ teamId: "KC", gmName: "Migration Audit", seed: 26, mode: "career" });
+    season.phase = "camp";
+    season.teams.KC.roster = season.teams.KC.roster.filter((player) => player.pos !== "QB").slice(0, 9);
+    delete season.restructuredIds;
+    delete season.faPool;
+    const profile = { ...freshProfile(), active: "season" as const, season };
+    const migrated = migrateProfile(profile);
+    if (!migrated.season) throw new Error("Migration removed the active season");
+
+    expect(profile.season?.teams.KC.roster).toHaveLength(9);
+    expect(migrated.season.restructuredIds).toEqual([]);
+    expect(migrated.season.faPool).toEqual([]);
+    expect(migrated.season.teams.KC.roster).toHaveLength(22);
+    expect(migrated.season.teams.KC.roster.some((player) => player.pos === "QB")).toBe(true);
+    expect(migrated.season.campCutIds).toEqual(suggestedCuts(migrated.season));
   });
 });
