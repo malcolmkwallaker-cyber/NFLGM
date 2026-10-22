@@ -9,6 +9,8 @@ Local camp-selection fix: `a9106af` (not pushed or deployed)
 
 The audited defects are repaired on this branch; production remains unchanged. The repair includes:
 
+Core repair commit: `833dba8` (`Fix audited career mode defects`). A follow-up commit adds backward-compatible recovery for legacy saves already paused at a deadlocked training camp.
+
 - drafted players now join the roster of the team that owns the pick;
 - accepted trades move the outgoing player to the offering team exactly once;
 - every active modern team receives a replacement quarterback when needed and is restored to a 22-player minimum before camp, including the user team;
