@@ -310,6 +310,8 @@ export function applyAction(state: SeasonState, action: Action): SeasonState {
       return doDraft(next, action.prospectId);
     case "draft-trade":
       return doDraftTrade(next, action.accept);
+    case "camp-selection":
+      return doCampSelection(next, action.cutIds);
     case "camp":
       return doCamp(next, action.cutIds);
     case "decide":
@@ -915,6 +917,13 @@ export function suggestedCuts(state: SeasonState): string[] {
     .sort((a, b) => a.ovr - b.ovr || b.cap - a.cap)
     .slice(0, extra)
     .map((p) => p.id);
+}
+
+function doCampSelection(state: SeasonState, cutIds: string[]): SeasonState {
+  if (state.phase !== "camp") throw new Error("Camp cuts are not open");
+  const rosterIds = new Set(yourRoster(state).map((player) => player.id));
+  state.campCutIds = [...new Set(cutIds)].filter((id) => rosterIds.has(id));
+  return state;
 }
 
 function doCamp(state: SeasonState, cutIds: string[]): SeasonState {

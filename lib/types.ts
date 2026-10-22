@@ -355,6 +355,7 @@ export type Action =
   | { type: "trade-done" }
   | { type: "draft"; prospectId: string }
   | { type: "draft-trade"; accept: boolean }
+  | { type: "camp-selection"; cutIds: string[] }
   | { type: "camp"; cutIds: string[] }
   | { type: "decide"; choiceId: string }
   | { type: "play-week" }

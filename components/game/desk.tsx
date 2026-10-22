@@ -40,14 +40,13 @@ export function Desk() {
   const game = useGame();
   const { season, ready, error, clearError, dispatch, profile, advanceYear, openJobOffers, acceptJob, retire } = game;
   const [note, setNote] = useState("");
-  const [cuts, setCuts] = useState<string[] | null>(null);
   const [shopId, setShopId] = useState("");
   const [wire, setWire] = useState("");
 
   const cutIds = useMemo(() => {
     if (!season || season.phase !== "camp") return [];
-    return cuts ?? season.campCutIds;
-  }, [cuts, season]);
+    return season.campCutIds;
+  }, [season]);
 
   if (!ready) return <p className="text-sm text-muted-foreground">Pulling the binder…</p>;
   if (!season) {
@@ -145,8 +144,8 @@ export function Desk() {
           remaining={remaining}
           campOk={campOk}
           onToggle={(id) => {
-            const base = cuts ?? season.campCutIds;
-            setCuts(base.includes(id) ? base.filter((item) => item !== id) : [...base, id]);
+            const next = cutIds.includes(id) ? cutIds.filter((item) => item !== id) : [...cutIds, id];
+            dispatch({ type: "camp-selection", cutIds: next });
           }}
           onSubmit={() => dispatch({ type: "camp", cutIds })}
         />

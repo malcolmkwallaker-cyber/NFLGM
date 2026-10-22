@@ -84,6 +84,19 @@ describe("season", () => {
     }
   });
 
+  it("persists training-camp selections across serialization", () => {
+    const state = createSeason({ teamId: "KC", gmName: "Test GM", seed: 12 });
+    state.phase = "camp";
+    const roster = state.teams.KC.roster;
+    const selected = [roster[1].id, roster[2].id];
+
+    const edited = applyAction(state, { type: "camp-selection", cutIds: selected });
+    const reloaded = JSON.parse(JSON.stringify(edited)) as typeof edited;
+
+    expect(reloaded.campCutIds).toEqual(selected);
+    expect(state.campCutIds).toEqual([]);
+  });
+
   it("plays the 1985 Bears through a season", () => {
     const state = createSeason({
       teamId: "CHI",
