@@ -219,8 +219,10 @@ export interface SeasonState {
   deadMoney: number;
   futureDead: number;
   extraPicks: { round: number; year: number }[];
+  restructuredIds?: string[];
   faWave: number;
   faBoard: Player[];
+  faPool?: Player[];
   walked: string[];
   tradeOffers: TradeOffer[];
   shop: TradeOffer | null;

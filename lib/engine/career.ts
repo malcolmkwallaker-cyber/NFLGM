@@ -88,12 +88,10 @@ export function withJobOffers(career: CareerState): CareerState {
 
 export function takeJob(career: CareerState, teamId: string): CareerState {
   const summary = summarize(career.season);
-  const season = createSeason({
-    gmName: career.gmName,
-    teamId,
-    seed: career.seed + career.jobs + 1,
-    mode: "career",
-  });
+  if (!career.season.teams[teamId]) throw new Error("That job is no longer available");
+  const season = rolloverSeason({ ...career.season, teamId });
+  season.staff = {};
+  season.staffStep = 0;
   season.meters.owner = 58;
   season.log.unshift(`${career.gmName} is hired after being fired.`);
   return {

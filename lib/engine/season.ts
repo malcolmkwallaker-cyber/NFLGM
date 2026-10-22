@@ -35,6 +35,7 @@ const ROSTERS = rosterFile as {
 
 export const LEAGUE_YEAR = 2027;
 export const PROJECTED_CAP = 322;
+export const MIN_ROSTER = 22;
 
 const OWNERS = [
   "Dana Crowe",
@@ -182,8 +183,10 @@ export function createSeason(input: {
     deadMoney: historical?.deadMoney ?? ROSTERS.teams[teamId]?.dead ?? 12,
     futureDead: 0,
     extraPicks: [],
+    restructuredIds: [],
     faWave: 1,
     faBoard: [],
+    faPool: [],
     walked: [],
     tradeOffers: [],
     shop: null,
@@ -424,9 +427,11 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
   const player = roster.find((p) => p.id === playerId) ?? biggestCap(roster);
   if (!player) throw new Error("No contract to touch");
   if (choice === "restructure") {
+    if (state.restructuredIds?.includes(player.id)) throw new Error("That contract was already restructured this year");
     const saved = Math.round(player.cap * 0.3 * 10) / 10;
     player.cap = Math.round((player.cap - saved) * 10) / 10;
     state.futureDead = Math.round((state.futureDead + saved) * 10) / 10;
+    state.restructuredIds = [...(state.restructuredIds ?? []), player.id];
     bump(state, state.owner.priority === "fiscal" ? -1 : 1, 0, -1);
     pushDecision(state, "Cap", `Restructured ${player.name}`, `Restructured ${player.name}, saving $${saved.toFixed(1)}M now and pushing it forward.`, -1);
     state.headlines = makeHeadlines(state, "neutral", {
@@ -476,6 +481,7 @@ function queueRipple(state: SeasonState, week: number, decision: Decision) {
 function openFreeAgency(state: SeasonState): SeasonState {
   state.phase = "fa";
   state.faWave = 1;
+  state.faPool = freeAgentPool(state);
   state.faBoard = buildBoard(state, 1);
   state.headlines = makeHeadlines(state, "neutral", {
     beat: "Free agency opens. The board is short on purpose. You cannot sign the whole league.",
@@ -483,6 +489,17 @@ function openFreeAgency(state: SeasonState): SeasonState {
     analytics: `You enter with $${capSpace(state).toFixed(1)}M. Asking prices are estimates, not filings.`,
   });
   return state;
+}
+
+function freeAgentPool(state: SeasonState): Player[] {
+  const pool: Player[] = [];
+  for (const [id, team] of Object.entries(state.teams)) {
+    if (id === state.teamId) continue;
+    for (const player of team.roster) {
+      if (player.years <= 0) pool.push({ ...player, origin: id, cap: Math.round(marketAsk(player) * 1.08 * 10) / 10 });
+    }
+  }
+  return pool.sort((a, b) => b.ovr - a.ovr);
 }
 
 function buildBoard(state: SeasonState, wave: number): Player[] {
@@ -493,14 +510,8 @@ function buildBoard(state: SeasonState, wave: number): Player[] {
       .slice(0, 4)
       .map((p) => ({ ...p, cap: Math.round(marketAsk(p) * 0.95 * 10) / 10, origin: state.teamId }));
   }
-  const pool: Player[] = [];
-  for (const [id, team] of Object.entries(state.teams)) {
-    if (id === state.teamId) continue;
-    for (const player of team.roster) {
-      if (player.years <= 0) pool.push({ ...player, origin: id, cap: Math.round(marketAsk(player) * 1.08 * 10) / 10 });
-    }
-  }
-  pool.sort((a, b) => b.ovr - a.ovr);
+  const pool = state.faPool?.length ? state.faPool : freeAgentPool(state);
+  state.faPool = pool;
   const start = (wave - 1) * 4;
   return pool.slice(start, start + 4);
 }
@@ -627,9 +638,11 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
   if (idx < 0) throw new Error("That player is not on the roster");
   const sent = roster[idx];
   roster.splice(idx, 1);
+  const from = state.teams[offer.fromTeamId];
+  if (!from) throw new Error("The offering team no longer exists");
+  from.roster.push({ ...sent, origin: state.teamId });
   if (offer.incoming) {
-    const from = state.teams[offer.fromTeamId];
-    if (from) from.roster = from.roster.filter((p) => p.id !== offer.incoming?.id);
+    from.roster = from.roster.filter((p) => p.id !== offer.incoming?.id);
     roster.push({ ...offer.incoming, origin: offer.fromTeamId });
   }
   if (offer.pickRound && offer.pickYear) state.extraPicks.push({ round: offer.pickRound, year: offer.pickYear });
@@ -680,6 +693,7 @@ function beginDraft(state: SeasonState): SeasonState {
   state.phase = "draft";
   state.prospects = makeProspects(state);
   state.draftPicks = makeDraftOrder(state);
+  state.extraPicks = state.extraPicks.filter((pick) => pick.year > state.year);
   state.draftCursor = 0;
   advanceCpu(state);
   state.headlines = makeHeadlines(state, "neutral", {
@@ -776,7 +790,7 @@ function advanceCpu(state: SeasonState) {
     const pick = state.draftPicks[state.draftCursor];
     if (!pick) break;
     const prospect = cpuSelect(state, pick.teamId);
-    if (prospect) assignPick(state, pick, prospect, true);
+    if (prospect) assignPick(state, pick, prospect);
     state.draftCursor += 1;
   }
   if (state.draftCursor >= state.draftPicks.length) {
@@ -797,10 +811,11 @@ function advanceCpu(state: SeasonState) {
   }
 }
 
-function assignPick(state: SeasonState, pick: DraftPick, prospect: Prospect, cpu: boolean) {
+function assignPick(state: SeasonState, pick: DraftPick, prospect: Prospect) {
   pick.prospectId = prospect.id;
   pick.prospectName = prospect.name;
-  if (!cpu) {
+  const team = state.teams[pick.teamId];
+  if (team) {
     const player: Player = {
       id: `draft-${prospect.id}`,
       name: prospect.name,
@@ -814,7 +829,7 @@ function assignPick(state: SeasonState, pick: DraftPick, prospect: Prospect, cpu
       perceived: prospect.perceived,
       drafted: true,
     };
-    yourRoster(state).push(player);
+    team.roster.push(player);
   }
 }
 
@@ -848,7 +863,7 @@ function doDraft(state: SeasonState, prospectId: string): SeasonState {
   if (!pick || pick.teamId !== state.teamId) throw new Error("It is not your pick");
   const prospect = availableProspects(state).find((p) => p.id === prospectId);
   if (!prospect) throw new Error("That prospect is gone");
-  assignPick(state, pick, prospect, false);
+  assignPick(state, pick, prospect);
   const gap = prospect.trueOvr - prospect.perceived;
   bump(state, 0, gap >= 4 ? 1 : 0, 0);
   pushDecision(
@@ -896,6 +911,7 @@ function finishDraft(state: SeasonState) {
     late.push(`${prospect.name} (${prospect.pos})`);
     need.delete(prospect.pos);
   }
+  for (const team of Object.values(state.teams)) ensureMinimumRoster(state, team.id);
   state.phase = "camp";
   state.campCutIds = suggestedCuts(state);
   state.log.push(`Later rounds: ${late.join(", ")}.`);
@@ -1572,7 +1588,10 @@ export function suggestAction(state: SeasonState): Action | null {
   if (state.phase === "cap") {
     if (state.capMode === "hard" && capSpace(state) < 0) {
       const roster = yourRoster(state);
-      const big = biggestCap(roster);
+      const restructured = new Set(state.restructuredIds ?? []);
+      const big = roster
+        .filter((player) => !restructured.has(player.id))
+        .sort((a, b) => b.cap - a.cap)[0];
       if (big && big.cap > 2) return { type: "cap", choice: "restructure", playerId: big.id };
       const cut = roster.slice().sort((a, b) => a.ovr - b.ovr)[0];
       return { type: "cap", choice: "cut", playerId: cut?.id };
@@ -1656,7 +1675,9 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   next.activeDecision = null;
   next.ripples = [];
   next.faBoard = [];
+  next.faPool = [];
   next.faWave = 1;
+  next.restructuredIds = [];
   next.tradeOffers = [];
   next.shop = null;
   next.shopUsed = false;
@@ -1691,23 +1712,9 @@ export function rolloverSeason(state: SeasonState): SeasonState {
       else if (player.age >= 30 && rng.next() > 0.55) player.ovr = Math.max(62, player.ovr - 1);
     }
     team.roster = team.roster.filter((p) => p.years >= 0 && p.age < 39 && p.ovr >= 60);
-    if (team.id !== next.teamId) {
-      while (team.roster.length < 22) {
-        const pos = POS_CYCLE[team.roster.length % POS_CYCLE.length] ?? "LB";
-        team.roster.push({
-          id: `camp-${team.id}-${next.year}-${team.roster.length}`,
-          name: `${team.id} Camp ${pos}`,
-          pos,
-          ovr: 66,
-          age: 23,
-          cap: 1,
-          years: 2,
-          potential: 70,
-          real: false,
-        });
-      }
-    }
+    ensureMinimumRoster(next, team.id);
   }
+  next.extraPicks = next.extraPicks.filter((pick) => pick.year >= next.year);
   next.schedule = buildSchedule(
     next.directory.map((t) => t.id),
     next.seasonLength,
@@ -1721,6 +1728,36 @@ export function rolloverSeason(state: SeasonState): SeasonState {
     analytics: `Cap is now $${next.capLimit.toFixed(1)}M. Dead money carried in: $${next.deadMoney.toFixed(1)}M.`,
   });
   return next;
+}
+
+export function ensureMinimumRoster(state: SeasonState, teamId: string): Player[] {
+  const team = state.teams[teamId];
+  if (!team || (team.roster.length === 0 && team.lockOff)) return [];
+  const added: Player[] = [];
+  const add = (pos: Pos) => {
+    const index = team.roster.length;
+    const ovr = teamId === state.teamId ? 60 : 66;
+    const player: Player = {
+      id: `replacement-${teamId}-${state.year}-${index}`,
+      name: `${teamById(teamId, state.directory).abbr} Replacement ${pos} ${index + 1}`,
+      pos,
+      ovr,
+      age: 24,
+      cap: 0.9,
+      years: 1,
+      potential: ovr + 2,
+      real: false,
+      origin: "replacement",
+    };
+    team.roster.push(player);
+    added.push(player);
+  };
+  if (!team.roster.some((player) => player.pos === "QB")) add("QB");
+  while (team.roster.length < MIN_ROSTER) add(POS_CYCLE[team.roster.length % POS_CYCLE.length] ?? "LB");
+  if (added.length && teamId === state.teamId) {
+    state.log.push(`Emergency roster pool added ${added.length} player${added.length === 1 ? "" : "s"} before camp.`);
+  }
+  return added;
 }
 
 export function advancedLines(state: SeasonState) {

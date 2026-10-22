@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { advanceCareer, createCareer, summarize, takeJob, withJobOffers } from "@/lib/engine/career";
 import { challengeForDate, nextStreak, optionById, percentileFor } from "@/lib/engine/daily";
@@ -11,6 +11,7 @@ import type { Action, DailyResult, Profile, SeasonState } from "@/lib/types";
 
 type GameContextValue = {
   ready: boolean;
+  interactionLocked: boolean;
   profile: Profile;
   error: string | null;
   clearError: () => void;
@@ -84,6 +85,19 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const profile = useSyncExternalStore(subscribe, profileSnapshot, () => serverProfile);
   const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
   const [error, setError] = useState<string | null>(null);
+  const [interactionLocked, setInteractionLocked] = useState(false);
+  const actionLockRef = useRef(0);
+
+  const acquireInteractionLock = useCallback(() => {
+    const now = Date.now();
+    if (now < actionLockRef.current) return false;
+    actionLockRef.current = now + 450;
+    setInteractionLocked(true);
+    window.setTimeout(() => {
+      if (Date.now() >= actionLockRef.current) setInteractionLocked(false);
+    }, 460);
+    return true;
+  }, []);
 
   const update = useCallback((recipe: (profile: Profile) => Profile) => {
     commitProfile(recipe(currentProfile));
@@ -100,6 +114,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   );
 
   const dispatch = useCallback((action: Action) => {
+    if (action.type !== "camp-selection" && !acquireInteractionLock()) return;
     setError(null);
     const season = currentSeason(currentProfile);
     if (!season) return;
@@ -108,10 +123,11 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "That move did not go through.");
     }
-  }, []);
+  }, [acquireInteractionLock]);
 
   const startSeason = useCallback(
     (teamId: string, historicalId?: string) => {
+      if (!acquireInteractionLock()) return;
       setError(null);
       update((prev) => {
         const season = createSeason({
@@ -124,11 +140,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       });
       router.push("/play");
     },
-    [router, update],
+    [acquireInteractionLock, router, update],
   );
 
   const startCareer = useCallback(
     (teamId: string) => {
+      if (!acquireInteractionLock()) return;
       setError(null);
       update((prev) => ({
         ...prev,
@@ -137,10 +154,11 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       }));
       router.push("/play");
     },
-    [router, update],
+    [acquireInteractionLock, router, update],
   );
 
   const advanceYear = useCallback(() => {
+    if (!acquireInteractionLock()) return;
     setError(null);
     if (!currentProfile.career) return;
     try {
@@ -152,14 +170,16 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "The next year is not open.");
     }
-  }, []);
+  }, [acquireInteractionLock]);
 
   const openJobOffers = useCallback(() => {
+    if (!acquireInteractionLock()) return;
     update((prev) => (prev.career ? { ...prev, career: withJobOffers(prev.career) } : prev));
-  }, [update]);
+  }, [acquireInteractionLock, update]);
 
   const acceptJob = useCallback(
     (teamId: string) => {
+      if (!acquireInteractionLock()) return;
       setError(null);
       if (!currentProfile.career) return;
       try {
@@ -174,10 +194,11 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       }
       router.push("/play");
     },
-    [router],
+    [acquireInteractionLock, router],
   );
 
   const retire = useCallback(() => {
+    if (!acquireInteractionLock()) return;
     update((prev) => {
       if (!prev.career) return prev;
       let career = prev.career;
@@ -199,7 +220,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       retired.wikipedia = writeWikipedia(retired);
       return { ...prev, career: retired };
     });
-  }, [update]);
+  }, [acquireInteractionLock, update]);
 
   const playDaily = useCallback(
     (optionId: string, day: string) => {
@@ -236,6 +257,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<GameContextValue>(
     () => ({
       ready,
+      interactionLocked,
       profile,
       error,
       clearError,
@@ -254,6 +276,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       ready,
+      interactionLocked,
       profile,
       error,
       clearError,

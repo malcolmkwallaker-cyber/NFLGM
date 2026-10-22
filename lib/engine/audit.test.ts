@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyAction, createSeason, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
+import { createCareer, takeJob } from "@/lib/engine/career";
+import { applyAction, createSeason, ensureMinimumRoster, rolloverSeason, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 
 function advanceTo(state: SeasonState, phase: Phase): SeasonState {
@@ -68,9 +69,79 @@ describe("audit regressions", () => {
     state = applyAction(state, { type: "trade", offerId: offer.id, accept: true });
 
     expect(yourRoster(state).some((player) => player.id === outgoing)).toBe(false);
+    expect(state.teams[source].roster.filter((player) => player.id === outgoing)).toHaveLength(1);
     expect(yourRoster(state).filter((player) => player.id === incoming)).toHaveLength(1);
     expect(state.teams[source].roster.some((player) => player.id === incoming)).toBe(false);
     expect(state.extraPicks.filter((pick) => pick.round === offer.pickRound && pick.year === offer.pickYear)).toHaveLength(1);
     expect(() => applyAction(state, { type: "trade", offerId: offer.id, accept: true })).toThrow("That offer expired");
+  });
+
+  it("assigns every CPU draft choice to the team that made the pick", () => {
+    const state = advanceTo(createSeason({ teamId: "KC", gmName: "Draft Audit", seed: 18 }), "camp");
+    for (const pick of state.draftPicks) {
+      expect(pick.prospectId).toBeTruthy();
+      expect(state.teams[pick.teamId].roster.filter((player) => player.id === `draft-${pick.prospectId}`)).toHaveLength(1);
+    }
+  });
+
+  it("restores a minimum viable roster and quarterback without duplicates", () => {
+    const state = createSeason({ teamId: "KC", gmName: "Roster Audit", seed: 21, mode: "career" });
+    state.teams.KC.roster = state.teams.KC.roster.filter((player) => player.pos !== "QB").slice(0, 9);
+    const first = ensureMinimumRoster(state, "KC");
+    const second = ensureMinimumRoster(state, "KC");
+    expect(first.length).toBeGreaterThan(0);
+    expect(second).toHaveLength(0);
+    expect(state.teams.KC.roster).toHaveLength(22);
+    expect(state.teams.KC.roster.some((player) => player.pos === "QB")).toBe(true);
+    expect(new Set(state.teams.KC.roster.map((player) => player.id)).size).toBe(22);
+  });
+
+  it("allows only one restructure per player per season", () => {
+    const state = createSeason({ teamId: "KC", gmName: "Contract Audit", seed: 22 });
+    state.phase = "cap";
+    const player = state.teams.KC.roster.slice().sort((a, b) => b.cap - a.cap)[0];
+    const once = applyAction(state, { type: "cap", choice: "restructure", playerId: player.id });
+    const snapshot = JSON.stringify(once);
+    expect(() => applyAction(once, { type: "cap", choice: "restructure", playerId: player.id })).toThrow("already restructured");
+    expect(JSON.stringify(once)).toBe(snapshot);
+    const next = rolloverSeason(once);
+    expect(next.restructuredIds).toEqual([]);
+  });
+
+  it("uses a stable free-agent pool across waves", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "FA Audit", seed: 23 }), "fa");
+    expect(state.faPool?.length).toBeGreaterThanOrEqual(8);
+    const expectedWaveTwo = state.faPool?.slice(4, 8).map((player) => player.id);
+    state.capMode = "payroll";
+    const first = state.faBoard[0];
+    state = applyAction(state, { type: "sign", playerId: first.id });
+    state = applyAction(state, { type: "next-wave" });
+    expect(state.faBoard.map((player) => player.id)).toEqual(expectedWaveTwo);
+  });
+
+  it("consumes current picks, prunes stale picks, and retains only future picks", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "Pick Audit", seed: 24 }), "trade");
+    state.extraPicks = [
+      { round: 1, year: state.year - 1 },
+      { round: 2, year: state.year },
+      { round: 3, year: state.year + 1 },
+    ];
+    state = applyAction(state, { type: "trade-done" });
+    expect(state.draftPicks.some((pick) => pick.note === "Acquired" && pick.round === 2)).toBe(true);
+    expect(state.extraPicks).toEqual([{ round: 3, year: state.year + 1 }]);
+  });
+
+  it("preserves league state and advances the year when changing jobs", () => {
+    const career = createCareer("Job Audit", "KC", 25);
+    career.season.year = 2036;
+    career.season.phase = "fired";
+    career.season.grade = { letter: "F", score: 35, round: "missed", champ: false, wins: 3, losses: 14, pf: 200, pa: 400, headline: "Fired", best: "None", worst: "Record" };
+    const markerId = career.season.teams.BUF.roster[0].id;
+    const hired = takeJob(career, "BUF");
+    expect(hired.season.year).toBe(2037);
+    expect(hired.season.teamId).toBe("BUF");
+    expect(hired.season.teams.BUF.roster.some((player) => player.id === markerId)).toBe(true);
+    expect(hired.season.staffStep).toBe(0);
+    expect(hired.season.phase).toBe("intro");
   });
 });

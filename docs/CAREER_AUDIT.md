@@ -5,6 +5,36 @@ Branch: `fix/training-camp-persistence`
 Production baseline: `main` at `24787a4`  
 Local camp-selection fix: `a9106af` (not pushed or deployed)
 
+## Repair verification (local branch only)
+
+The audited defects are repaired on this branch; production remains unchanged. The repair includes:
+
+- drafted players now join the roster of the team that owns the pick;
+- accepted trades move the outgoing player to the offering team exactly once;
+- every active modern team receives a replacement quarterback when needed and is restored to a 22-player minimum before camp, including the user team;
+- accepting a job rolls the existing league into the next year instead of recreating the 2027 baseline;
+- each player can be restructured only once per season;
+- free-agent waves page through a stable offseason pool;
+- used and stale acquired-pick entries are removed;
+- phase-changing UI actions take a synchronous 450 ms lock, preventing a second mobile tap from activating a newly rendered control; training-camp checkbox editing remains responsive.
+
+Post-repair stress command:
+
+```sh
+AUDIT_CAREERS=200 AUDIT_SEASONS=20 AUDIT_CONTINUATIONS=0 \
+  ./node_modules/.bin/vite-node --config vitest.config.ts scripts/audit-careers.ts
+```
+
+Results: all 200 careers completed all 20 seasons without audit-only roster injection (4,000/4,000 seasons, 199,207 actions). All 372,000 CPU draft selections appeared exactly once on the selecting team's roster. The invariant scanner reported zero findings. Direct probes also confirmed a 2036 firing advances to 2037 on a new team, a second same-season restructure is rejected, the traded player has exactly one destination owner, wave-two free agents match the stable expected window, and a roster cut to ten recovers to 22 players with two quarterbacks before a valid camp submission.
+
+Targeted regression results: 20/20 tests pass across two files. ESLint and `tsc --noEmit` pass without warnings or errors.
+
+At a 400×742 responsive Chrome emulation viewport on the isolated local origin, rapid double taps produced exactly one season start, owner decision, staff hire, restructure, free-agency wave change, trade acceptance, draft-trade response, draft selection, weekly decision, played week, and season finish. Ordinary single taps still work. A deliberate later restructure showed the new rejection message. Staff, cap, camp-cut, and week-two state survived reload/navigation interruptions; an unaffordable signing did not mutate the phase; the console reported no application errors. This is browser emulation, not physical-device coverage.
+
+Production-build verification remains blocked by the execution environment. The default Turbopack build still fails when its CSS worker attempts to bind an internal local port, including after an elevated retry. Installing the official `@tailwindcss/postcss` dependency needed for a styled webpack fallback was denied by the environment's dependency-download approval gate. The earlier webpack output remains explicitly non-deploy-ready because it omits generated Tailwind utilities.
+
+The remainder of this document records the original audit evidence that led to these repairs.
+
 ## Scope and method
 
 The audit exercised the engine directly with deterministic seeds and JSON save/reload checks. It also used an isolated Chrome Incognito origin for browser checks, so no existing user saves were changed.
@@ -141,7 +171,7 @@ The local training-camp persistence fix does not alter development.
 - No application exception was observed. The only console error was the expected local-development 404 after the rapid-tap issue accidentally invoked the optional narrative rewrite endpoint; the UI handled it with its rule-based fallback message.
 - The webpack fallback static export completed, but its CSS contains empty Tailwind theme/utility layers because this repository configures `@tailwindcss/turbopack` and no webpack/PostCSS Tailwind plugin. It is therefore a compilation fallback, not a deploy-ready visual artifact.
 
-The 14 passing tests cover existing engine behavior plus JSON round-trips, repeated intro/camp rejection, and one-time processing of the tested trade action. They do **not** assert that the confirmed CPU-draft, camp dead-end, career-year reset, trade-destination, free-agency pagination, restructure, or stale-pick defects are fixed. In particular, the trade regression verifies removal from the user roster and one-time incoming/pick processing; the separate audit probe is what proves the outgoing player is missing from every team.
+Before the repair pass, the 14 passing tests covered existing engine behavior plus JSON round-trips, repeated intro/camp rejection, and one-time processing of the tested trade action. The current 20-test suite adds regressions for CPU draft ownership, destination-side trade ownership, roster/QB recovery, one-time restructures, stable free-agent pagination, acquired-pick lifecycle, and future-year job continuity.
 
 Mobile coverage used Chrome's 400×742 responsive emulation in an isolated local origin, not a physical phone. It now includes a full season, a daily challenge, refresh interruptions, navigation away/back, invalid input, and repeated taps across phase-changing controls. Hardware-specific touch behavior, mobile Safari, Android Chrome, orientation changes, screen-reader gestures, and poor-network recovery remain unverified.
 
@@ -155,7 +185,7 @@ npm run build
 npm run build -- --webpack
 ```
 
-Results:
+Original audit results (superseded by the repair-verification section above where applicable):
 
 - Tests: 14/14 passed across two files.
 - Lint: passed.

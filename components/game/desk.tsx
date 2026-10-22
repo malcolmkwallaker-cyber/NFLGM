@@ -38,7 +38,7 @@ function money(value: number) {
 
 export function Desk() {
   const game = useGame();
-  const { season, ready, error, clearError, dispatch, profile, advanceYear, openJobOffers, acceptJob, retire } = game;
+  const { season, ready, interactionLocked, error, clearError, dispatch, profile, advanceYear, openJobOffers, acceptJob, retire } = game;
   const [note, setNote] = useState("");
   const [shopId, setShopId] = useState("");
   const [wire, setWire] = useState("");
@@ -81,6 +81,7 @@ export function Desk() {
   const campOk = remaining >= 22 && remaining <= 26 && keptQb;
 
   async function polish() {
+    if (wire === "Calling the wire…") return;
     setWire("Calling the wire…");
     const next = await enrichHeadlines(
       live.headlines,
@@ -96,7 +97,7 @@ export function Desk() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${interactionLocked ? "pointer-events-none select-none" : ""}`} aria-busy={interactionLocked}>
       <section className="yard-lines overflow-hidden rounded-2xl border border-white/10 bg-card">
         <div className="flex items-start gap-3 border-b border-white/10 px-4 py-4">
           <TeamMark team={team} size="lg" />

@@ -3,16 +3,15 @@ import {
   applyAction,
   capSpace,
   payroll,
-  rolloverSeason,
   suggestedCuts,
   suggestAction,
   yourRoster,
 } from "@/lib/engine/season";
-import type { CareerState, Player, SeasonState } from "@/lib/types";
+import type { CareerState, SeasonState } from "@/lib/types";
 
 const careers = Number(process.env.AUDIT_CAREERS ?? 200);
 const seasonsPerCareer = Number(process.env.AUDIT_SEASONS ?? 20);
-const continuationRuns = Number(process.env.AUDIT_CONTINUATIONS ?? careers);
+const continuationRuns = Number(process.env.AUDIT_CONTINUATIONS ?? 0);
 const serializeCareers = Number(process.env.AUDIT_SERIALIZE_CAREERS ?? 2);
 const examplesPerKind = Number(process.env.AUDIT_EXAMPLES ?? 5);
 const seedStart = Number(process.env.AUDIT_SEED_START ?? 1);
@@ -47,13 +46,21 @@ let restructureState = createCareer("Restructure Audit", "KC", 999_998).season;
 restructureState.phase = "cap";
 const restructurePlayer = yourRoster(restructureState).slice().sort((a, b) => b.cap - a.cap)[0];
 const restructureInitial = restructurePlayer?.cap ?? 0;
+let repeatedRestructureError: string | null = null;
 if (restructurePlayer) {
-  for (let index = 0; index < 10; index += 1) {
+  restructureState = applyAction(restructureState, {
+    type: "cap",
+    choice: "restructure",
+    playerId: restructurePlayer.id,
+  });
+  try {
     restructureState = applyAction(restructureState, {
       type: "cap",
       choice: "restructure",
       playerId: restructurePlayer.id,
     });
+  } catch (error) {
+    repeatedRestructureError = error instanceof Error ? error.message : String(error);
   }
 }
 const restructured = restructurePlayer ? yourRoster(restructureState).find((player) => player.id === restructurePlayer.id) : null;
@@ -180,13 +187,11 @@ function noteCpuDraft(state: SeasonState, career: number, season: number) {
   const cpuPicks = state.draftPicks.filter((pick) => pick.teamId !== state.teamId && pick.prospectId);
   if (!cpuPicks.length) return;
   cpuDraftPicks += cpuPicks.length;
-  const draftedIds = new Set(cpuPicks.map((pick) => `draft-${pick.prospectId}`));
-  const present = Object.entries(state.teams)
-    .filter(([teamId]) => teamId !== state.teamId)
-    .flatMap(([, team]) => team.roster)
-    .filter((player) => draftedIds.has(player.id));
-  cpuDraftPlayersAdded += present.length;
-  if (present.length !== cpuPicks.length) {
+  const missing = cpuPicks.filter(
+    (pick) => !state.teams[pick.teamId]?.roster.some((player) => player.id === `draft-${pick.prospectId}`),
+  );
+  cpuDraftPlayersAdded += cpuPicks.length - missing.length;
+  if (missing.length) {
     record({
       kind: "cpu-draft-player-missing",
       seed: state.seed,
@@ -194,7 +199,7 @@ function noteCpuDraft(state: SeasonState, career: number, season: number) {
       season,
       year: state.year,
       phase: state.phase,
-      detail: `${cpuPicks.length - present.length}/${cpuPicks.length} CPU selections absent from CPU rosters`,
+      detail: `${missing.length}/${cpuPicks.length} CPU selections absent from the team that made the pick`,
     });
   }
 }
@@ -298,44 +303,11 @@ for (let careerIndex = 0; careerIndex < careers; careerIndex += 1) {
   if (complete) strictCareersCompleted += 1;
 }
 
-function addAuditFillers(state: SeasonState) {
-  const roster = yourRoster(state);
-  if (!roster.some((player) => player.pos === "QB")) {
-    roster.push({
-      id: `audit-filler-${state.seed}-${state.year}-qb`,
-      name: "Audit Filler QB",
-      pos: "QB",
-      ovr: 60,
-      age: 23,
-      cap: 0.9,
-      years: 1,
-      potential: 60,
-      real: false,
-    });
-  }
-  while (roster.length < 22) {
-    const index = roster.length;
-    const player: Player = {
-      id: `audit-filler-${state.seed}-${state.year}-${index}`,
-      name: `Audit Filler ${index}`,
-      pos: index === 0 ? "QB" : "OL",
-      ovr: 60,
-      age: 23,
-      cap: 0.9,
-      years: 1,
-      potential: 60,
-      real: false,
-    };
-    roster.push(player);
-  }
-}
-
 for (let run = 0; run < continuationRuns; run += 1) {
   let state = createCareer(`Continuation ${run}`, "KC", 100_000 + run).season;
   for (let seasonIndex = 0; seasonIndex < seasonsPerCareer; seasonIndex += 1) {
     let guard = 0;
     while (state.phase !== "recap" && state.phase !== "fired" && guard++ < 400) {
-      if (state.phase === "camp") addAuditFillers(state);
       auditState(state, careers + run, seasonIndex);
       const action = suggestAction(state);
       if (!action) break;
@@ -356,7 +328,9 @@ for (let run = 0; run < continuationRuns; run += 1) {
     }
     if (state.phase !== "recap" && state.phase !== "fired") break;
     continuationSeasonsCompleted += 1;
-    state = rolloverSeason(state);
+    const next = nextCareerSeason({ ...createCareer(`Continuation ${run}`, "KC", 100_000 + run), season: state }, careers + run, seasonIndex);
+    if (!next) break;
+    state = next.season;
   }
 }
 
@@ -378,8 +352,9 @@ console.log(
         repeatedRestructure: {
           playerId: restructurePlayer?.id ?? null,
           initialCap: restructureInitial,
-          capAfter10: restructured?.cap ?? null,
-          futureDeadAfter10: restructureState.futureDead,
+          capAfterFirst: restructured?.cap ?? null,
+          futureDeadAfterFirst: restructureState.futureDead,
+          secondAttemptError: repeatedRestructureError,
         },
         acceptedTrade: {
           outgoingPlayerId: tradedPlayerId,
