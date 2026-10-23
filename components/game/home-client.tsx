@@ -95,6 +95,19 @@ export function HomeClient({
           Make the call
         </Button>
       </section>
+
+      <section className="rounded-2xl border border-primary/30 bg-card p-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-primary">New daily mode</p>
+          <h2 className="mt-1 font-display text-3xl tracking-wide">Rewrite a historic season</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Take one shared, sourced season setup and try to beat the real result in a deterministic simulation.
+          </p>
+        </div>
+        <Button className="mt-4 !h-11 sm:mt-0" nativeButton={false} render={<Link href="/turnaround" />}>
+          Today’s turnaround
+        </Button>
+      </section>
     </div>
   );
 }

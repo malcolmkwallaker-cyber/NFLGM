@@ -8,6 +8,10 @@ import { applyAction, createSeason } from "@/lib/engine/season";
 import { writeWikipedia } from "@/lib/engine/wikipedia";
 import { freshProfile, loadProfile, saveProfile } from "@/lib/storage";
 import type { Action, DailyResult, Profile, SeasonState } from "@/lib/types";
+import {
+  HISTORIC_TURNAROUND_RULES_VERSION,
+  type HistoricTurnaroundScenario,
+} from "@/lib/engine/historic-turnaround";
 
 type GameContextValue = {
   ready: boolean;
@@ -21,6 +25,7 @@ type GameContextValue = {
   dispatch: (action: Action) => void;
   startSeason: (teamId: string, historicalId?: string) => void;
   startCareer: (teamId: string) => void;
+  startTurnaround: (scenario: HistoricTurnaroundScenario, seed: number, day: string) => void;
   advanceYear: () => void;
   openJobOffers: () => void;
   acceptJob: (teamId: string) => void;
@@ -157,6 +162,23 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     [acquireInteractionLock, router, update],
   );
 
+  const startTurnaround = useCallback(
+    (scenario: HistoricTurnaroundScenario, seed: number, day: string) => {
+      if (!acquireInteractionLock()) return;
+      setError(null);
+      update((prev) => {
+        const season = createSeason({ teamId: scenario.teamId, gmName: prev.name || "GM", seed });
+        season.flags.turnaroundScenarioId = scenario.id;
+        season.flags.turnaroundDate = day;
+        season.flags.turnaroundRulesVersion = HISTORIC_TURNAROUND_RULES_VERSION;
+        season.flags.turnaroundSeed = seed;
+        return { ...prev, active: "season", season };
+      });
+      router.push("/play");
+    },
+    [acquireInteractionLock, router, update],
+  );
+
   const advanceYear = useCallback(() => {
     if (!acquireInteractionLock()) return;
     setError(null);
@@ -267,6 +289,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       dispatch,
       startSeason,
       startCareer,
+      startTurnaround,
       advanceYear,
       openJobOffers,
       acceptJob,
@@ -286,6 +309,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       dispatch,
       startSeason,
       startCareer,
+      startTurnaround,
       advanceYear,
       openJobOffers,
       acceptJob,

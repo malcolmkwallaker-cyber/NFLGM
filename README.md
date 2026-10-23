@@ -20,6 +20,8 @@ The dev server listens on [http://127.0.0.1:43117](http://127.0.0.1:43117).
 
 The save lives in `localStorage` under `nfl-gm-career-v1`. There is no account server. `lib/access.ts` explicitly enables free-testing mode without changing the stored Pro entitlement, so existing saves remain compatible and the future billing foundation stays isolated. No payment details are requested or charged.
 
+The personal leaderboard at `/leaderboard` is derived from that same on-device save. It is explicitly not global and uploads nothing. A dormant, versioned contract for a future verified shared leaderboard lives in `lib/leaderboard.ts`. The deterministic Daily Historic Turnaround at `/turnaround` rotates sourced season facts, but uses current generic simulation rosters and modern 17-game rules rather than claiming an authentic historical replay. See `docs/LEADERBOARD_AND_HISTORIC_DAILY.md`.
+
 ## How a day works
 
 **Daily GM Challenge** (free) is the same puzzle for everyone. The index is the number of UTC days since 2026-03-11, modulo the challenge list. You pick one option, get a green / yellow / orange / red grade, then see what the real front office did. Grades are hindsight: they score how the move turned out. The percentile and rank are a modeled field from each option's popularity, not a live player count. The share card includes an `NFLGM1` line a league can paste back in.

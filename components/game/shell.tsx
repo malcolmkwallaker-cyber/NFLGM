@@ -7,10 +7,12 @@ import { cn } from "cn";
 const LINKS = [
   { href: "/", label: "Home" },
   { href: "/daily", label: "Daily" },
+  { href: "/turnaround", label: "Turnaround" },
   { href: "/play", label: "Desk" },
   { href: "/season", label: "Season" },
   { href: "/career", label: "Career" },
   { href: "/historical", label: "History" },
+  { href: "/leaderboard", label: "Scores" },
   { href: "/leagues", label: "Leagues" },
 ];
 
@@ -46,6 +48,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <footer className="mx-auto w-full max-w-5xl space-y-3 px-4 pb-24 text-xs leading-relaxed text-muted-foreground md:pb-8">
         <p className="flex flex-wrap gap-3">
           <Link href="/stats" className="hover:text-foreground">Stats</Link>
+          <Link href="/leaderboard" className="hover:text-foreground">Personal leaderboard</Link>
           <Link href="/settings" className="hover:text-foreground">Settings</Link>
           <Link href="/upgrade" className="hover:text-foreground">Playtest access</Link>
         </p>
