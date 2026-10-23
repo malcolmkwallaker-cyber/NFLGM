@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { DAILY_CHALLENGES } from "@/lib/data/daily-challenges";
 import { useGame } from "@/components/profile";
@@ -28,14 +29,29 @@ export function HomeClient({
         <div className="border-b border-primary/30 bg-primary/10 px-5 py-3 text-[11px] uppercase tracking-[0.22em] text-primary">
           Live from the war room
         </div>
-        <div className="space-y-4 px-5 py-6">
-          <h1 className="max-w-xl font-display text-5xl leading-[0.9] tracking-wide sm:text-6xl">
-            Call the shot. Live with it in January.
-          </h1>
-          <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-            One real front-office decision every morning, then a full season if you want the chair: hire the staff,
-            spend the cap, draft, and find out whether the owner still likes you in February.
-          </p>
+        <div className="space-y-5 px-5 py-6">
+          <div className="grid items-center gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <div>
+              <h1 className="max-w-xl font-display text-5xl leading-[0.9] tracking-wide sm:text-6xl">
+                Call the shot. Live with it in January.
+              </h1>
+              <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                One real front-office decision every morning, then a full season if you want the chair: hire the staff,
+                spend the cap, draft, and find out whether the owner still likes you in February.
+              </p>
+            </div>
+            <div className="mx-auto w-full max-w-[19rem] rounded-2xl border border-white/10 bg-black/20 p-2 shadow-[0_0_42px_rgba(160,255,0,0.08)] sm:max-w-[22rem] lg:max-w-none">
+              <Image
+                src="/brand/run-the-roster-football-logo.png"
+                alt="Run The Roster football logo"
+                width={960}
+                height={640}
+                className="h-auto w-full object-contain"
+                priority
+                unoptimized
+              />
+            </div>
+          </div>
           <div className="grid gap-3 md:grid-cols-3">
             <HomeMode
               href="/daily"

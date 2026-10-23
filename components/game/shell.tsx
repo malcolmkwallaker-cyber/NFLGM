@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
@@ -23,9 +24,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0b1018]/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-4 py-3">
-          <Link href="/" className="min-w-0">
-            <p className="font-display text-xl leading-none tracking-wide text-primary">RUN THE ROSTER</p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Front office, one decision at a time</p>
+          <Link href="/" className="flex min-w-0 shrink-0 items-center gap-2" aria-label="Run The Roster home">
+            <Image
+              src="/brand/run-the-roster-football-logo-header.png"
+              alt=""
+              width={360}
+              height={240}
+              className="h-10 w-auto shrink-0 object-contain sm:h-12"
+              priority
+              unoptimized
+            />
+            <span className="min-w-0">
+              <span className="block font-display text-lg leading-none tracking-wide text-primary sm:text-xl">RUN THE ROSTER</span>
+              <span className="mt-1 hidden text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:block">Front office, one decision at a time</span>
+            </span>
           </Link>
           <nav className="ml-auto hidden items-center gap-1 md:flex">
             {LINKS.map((link) => (
