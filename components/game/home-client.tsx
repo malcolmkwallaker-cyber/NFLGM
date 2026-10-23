@@ -36,7 +36,7 @@ export function HomeClient({
                 Call the shot. Live with it in January.
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                One real front-office decision every morning, then a full season if you want the chair: hire the staff,
+                One sourced historical or clearly labeled original front-office scenario every morning, then a full season if you want the chair: hire the staff,
                 spend the cap, draft, and find out whether the owner still likes you in February.
               </p>
             </div>
@@ -58,7 +58,7 @@ export function HomeClient({
               testId="home-daily-cta"
               kicker="Daily Challenge · Free"
               title="Make today’s call"
-              body="One real front-office decision, an instant grade, and the story of what happened next."
+              body="One historical or original fictional decision, an instant grade, and a transparent review."
               action={dailyComplete ? "View today’s result →" : `Play Daily #${puzzle} →`}
             />
             <HomeMode
@@ -101,8 +101,7 @@ export function HomeClient({
           <Badge variant="outline">{challenge.category}</Badge>
         </div>
         <p className="mt-3 text-sm text-muted-foreground">
-          {challenge.year} · {challenge.teamName}. Puzzle {puzzle} in the rotation. The grade is hindsight, and the
-          result says so.
+          {challenge.fictional ? "Original fictional scenario" : `${challenge.year} · ${challenge.teamName}`}. Puzzle {puzzle} in the rotation. The grade is hindsight, and the result says so.
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
           {DAILY_CHALLENGES.filter((challenge) => !challenge.fictional).length} sourced historical decisions and{" "}

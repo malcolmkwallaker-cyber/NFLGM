@@ -1,5 +1,6 @@
 import type { PlayoffRound } from "@/lib/types";
 import { hashSeed } from "@/lib/engine/rng";
+import { createSeason } from "@/lib/engine/season";
 
 export const HISTORIC_TURNAROUND_RULES_VERSION = "historic-turnaround-v1";
 export const HISTORIC_TURNAROUND_EPOCH = Date.UTC(2026, 9, 23);
@@ -36,6 +37,22 @@ export type TurnaroundScore = {
   gradeAdjustment: number;
   ownerAdjustment: number;
 };
+
+export function createHistoricTurnaroundSeason(
+  scenario: HistoricTurnaroundScenario,
+  gmName: string,
+  seed: number,
+  day: string,
+) {
+  const season = createSeason({ teamId: scenario.teamId, gmName, seed });
+  season.year = scenario.season;
+  season.historicalTitle = scenario.title;
+  season.flags.turnaroundScenarioId = scenario.id;
+  season.flags.turnaroundDate = day;
+  season.flags.turnaroundRulesVersion = HISTORIC_TURNAROUND_RULES_VERSION;
+  season.flags.turnaroundSeed = seed;
+  return season;
+}
 
 const PLAYOFF_BONUS: Record<PlayoffRound, number> = {
   missed: 0,

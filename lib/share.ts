@@ -6,7 +6,6 @@ export function dailyShareText(input: {
   puzzle: number;
   category: string;
   grade: GradeColor;
-  percentile: number;
   streak: number;
   date: string;
   challengeId: string;
@@ -19,7 +18,7 @@ export function dailyShareText(input: {
     `${GRADE_WORD[input.grade]} · ${input.streak > 0 ? `🔥 ${input.streak}` : "streak starts tomorrow"}`,
     "runtheroster.com",
     "",
-    `NFLGM1|D|${input.date}|${input.challengeId}|${input.optionId}|${input.grade}|${input.percentile}|${input.streak}`,
+    `RTR1|D|${input.date}|${input.challengeId}|${input.optionId}|${input.grade}|${input.streak}`,
   ].join("\n");
 }
 
@@ -34,7 +33,7 @@ export function seasonShareText(state: SeasonState): string {
     `Grade ${grade?.letter ?? "—"} · ${round}`,
     "runtheroster.com",
     "",
-    `NFLGM1|S|${state.year}|${abbr}|${record}|${grade?.letter ?? "F"}|${round}|${grade?.score ?? 0}`,
+    `RTR1|S|${state.year}|${abbr}|${record}|${grade?.letter ?? "F"}|${round}|${grade?.score ?? 0}`,
   ].join("\n");
 }
 
@@ -42,9 +41,20 @@ export function parseShare(text: string, name = "Friend"): LeagueEntry | null {
   const line = text
     .split("\n")
     .map((l) => l.trim())
-    .find((l) => l.startsWith("NFLGM1|"));
+    .find((l) => l.startsWith("RTR1|") || l.startsWith("NFLGM1|"));
   if (!line) return null;
   const parts = line.split("|");
+  if (parts[0] === "RTR1" && parts[1] === "D" && parts.length >= 7) {
+    const grade = parts[5];
+    const score = grade === "green" ? 100 : grade === "yellow" ? 75 : grade === "orange" ? 45 : 20;
+    return {
+      name,
+      kind: "daily",
+      score,
+      detail: `${grade} · ${parts[2]} · streak ${parts[6]}`,
+      at: new Date().toISOString(),
+    };
+  }
   if (parts[1] === "D" && parts.length >= 8) {
     const percentile = Number(parts[6]);
     return {
@@ -72,7 +82,7 @@ export function resultFromShare(text: string): DailyResult | null {
   const line = text
     .split("\n")
     .map((l) => l.trim())
-    .find((l) => l.startsWith("NFLGM1|D|"));
+    .find((l) => l.startsWith("RTR1|D|") || l.startsWith("NFLGM1|D|"));
   if (!line) return null;
   const [, , date, challengeId, optionId, grade, percentile] = line.split("|");
   if (!date || !challengeId || !optionId) return null;
@@ -83,7 +93,7 @@ export function resultFromShare(text: string): DailyResult | null {
     challengeId,
     optionId,
     grade,
-    percentile: Number(percentile) || 0,
+    percentile: line.startsWith("RTR1|") ? 0 : Number(percentile) || 0,
     echo: "",
   };
 }

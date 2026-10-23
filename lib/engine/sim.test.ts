@@ -9,6 +9,7 @@ import { buildSchedule } from "@/lib/engine/schedule";
 import { applyAction, capSpace, createSeason, simulateUntil, standings } from "@/lib/engine/season";
 import { writeWikipedia } from "@/lib/engine/wikipedia";
 import { dailyShareText, parseShare } from "@/lib/share";
+import { formatMoney } from "@/lib/format";
 
 describe("daily challenge", () => {
   it("has at least 100 substantive challenges with one best answer", () => {
@@ -176,6 +177,21 @@ describe("career", () => {
     const page = writeWikipedia({ ...career, season: done, history: [{ year: 2027, teamId: "BUF", teamName: "Buffalo Bills", wins: 11, losses: 6, round: "divisional", champ: false, fired: false, grade: "B", gradeScore: 74, legacy: 20, headline: "A real year." }] });
     expect(page).toContain("Alex Kim");
   });
+
+  it("preserves a three-season history and writes a complete retirement retrospective", () => {
+    let career = createCareer("Morgan Lee", "BUF", 90);
+    for (let year = 0; year < 3; year += 1) {
+      career.season.phase = "recap";
+      career.season.grade = { letter: "B+", score: 80, round: year === 2 ? "conference" : "divisional", champ: false, wins: 10 + year, losses: 7 - year, pf: 400, pa: 330, headline: `Season ${year + 1}`, best: "Draft", worst: "Cap" };
+      career = advanceCareer(career);
+    }
+    expect(career.history.map((season) => season.year)).toEqual([2027, 2028, 2029]);
+    expect(career.season.year).toBe(2030);
+    const retrospective = writeWikipedia(career);
+    expect(retrospective).toContain("3 seasons");
+    expect(retrospective).toContain("2029");
+    expect(retrospective).toContain("Morgan Lee");
+  });
 });
 
 describe("text and shares", () => {
@@ -193,12 +209,20 @@ describe("text and shares", () => {
   });
 
   it("shares a streak without inventing a global rank", () => {
-    const text = dailyShareText({ puzzle: 8, category: "Draft", grade: "green", percentile: 91, streak: 4, date: "2026-10-23", challengeId: "test", optionId: "pick" });
+    const text = dailyShareText({ puzzle: 8, category: "Draft", grade: "green", streak: 4, date: "2026-10-23", challengeId: "test", optionId: "pick" });
     expect(text).toContain("RUN THE ROSTER");
     expect(text).toContain("🔥 4");
     expect(text).toContain("runtheroster.com");
     expect(text).not.toContain("rank");
     expect(text).not.toContain("better than");
+    expect(text).toContain("RTR1|D|");
+    expect(text).not.toContain("NFLGM1|D|");
+    expect(parseShare(text, "Taylor")?.score).toBe(100);
+  });
+
+  it("formats negative cap space with the sign before the currency symbol", () => {
+    expect(formatMoney(-9.7)).toBe("−$9.7M");
+    expect(formatMoney(9.7)).toBe("$9.7M");
   });
 });
 
@@ -210,6 +234,8 @@ describe("historical catalog", () => {
     expect(ids).toContain("2013-seahawks");
     for (const pack of HISTORICAL) {
       expect(pack.teams.some((t) => t.id === pack.teamId && (t.roster?.length ?? 0) > 15)).toBe(true);
+      expect(pack.teams.find((team) => team.id === "RAM")?.abbr).not.toBe("RAM");
+      expect(pack.teams.find((team) => team.id === "LARD")?.abbr).not.toBe("LARD");
     }
   });
 });

@@ -107,8 +107,8 @@ export function takeJob(career: CareerState, teamId: string): CareerState {
 }
 
 export function hofStatus(career: CareerState): string {
-  if (career.superBowls >= 2 || career.legacy >= 140) return "Hall of Fame";
-  if (career.superBowls >= 1 || career.legacy >= 80) return "On the ballot";
+  if (career.superBowls >= 2 || career.legacy >= 140) return "Elite legacy";
+  if (career.superBowls >= 1 || career.legacy >= 80) return "Strong legacy";
   if (career.history.length >= 1) return "Building a file";
   return "No résumé yet";
 }

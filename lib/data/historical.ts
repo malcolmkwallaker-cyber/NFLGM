@@ -142,7 +142,8 @@ function foe(
   off: number,
   def: number,
 ): EraTeam {
-  return { id, city, name, abbr: id, color, text, conf, div, off, def };
+  const abbr = id === "RAM" ? "LA Rams" : id === "LARD" ? "LA Raiders" : id;
+  return { id, city, name, abbr, color, text, conf, div, off, def };
 }
 
 export const HISTORICAL: HistoricalPack[] = [

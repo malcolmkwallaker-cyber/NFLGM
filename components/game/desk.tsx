@@ -15,6 +15,7 @@ import { seasonShareText } from "@/lib/share";
 import { advancedLines, divisionTable, priorityLabel, standings, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
+import { formatMoney } from "@/lib/format";
 
 const ROLES: StaffRole[] = ["hc", "oc", "dc", "scout"];
 
@@ -33,7 +34,7 @@ const PHASE_TITLE: Record<Phase, string> = {
 };
 
 function money(value: number) {
-  return `$${value.toFixed(1)}M`;
+  return formatMoney(value);
 }
 
 export function Desk() {
@@ -54,7 +55,7 @@ export function Desk() {
         <p className="text-xs uppercase tracking-[0.18em] text-primary">Empty desk</p>
         <h1 className="mt-2 font-display text-4xl tracking-wide">Nobody has given you the keys.</h1>
         <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
-          Take one team from the owner meeting through the Super Bowl, or start a Pro career if the preview switch is on.
+          Take one team from the owner meeting through the Super Bowl, or build a free multi-season career during the public playtest.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <Button className="!h-12 !px-4" nativeButton={false} render={<Link href="/season" />}>
@@ -86,7 +87,11 @@ export function Desk() {
           <TeamMark team={team} size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] uppercase tracking-[0.18em] text-primary">
-              {season.historicalTitle ? `${season.historicalTitle} · historical` : `${season.year} · ${season.mode}`}
+              {season.flags.turnaroundScenarioId
+                ? `${season.year} ${team.city} · turnaround`
+                : season.historicalTitle
+                  ? `${season.historicalTitle} · historical`
+                  : `${season.year} · ${season.mode}`}
             </p>
             <h1 data-testid="phase-title" className="font-display text-3xl leading-none tracking-wide sm:text-4xl">
               {PHASE_TITLE[season.phase]}
@@ -113,6 +118,12 @@ export function Desk() {
 
       <Headlines season={season} />
 
+      {profile.settings.testerMode ? (
+        <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          Tester note: schedules are generated, draft prospects and outside free agents are fictional, and modern roster contracts and cap hits are estimates.
+        </p>
+      ) : null}
+
       {season.phase === "intro" ? <Intro season={season} note={note} setNote={setNote} /> : null}
       {season.phase === "staff" ? <Staff season={season} role={role} /> : null}
       {season.phase === "cap" ? <Cap season={season} roster={roster} space={space} /> : null}
@@ -123,6 +134,7 @@ export function Desk() {
       {season.phase === "draft" ? <Draft season={season} /> : null}
       {season.phase === "camp" ? (
         <Camp
+          season={season}
           roster={roster}
           cutIds={cutIds}
           remaining={remaining}
@@ -264,7 +276,7 @@ function Staff({ season, role }: { season: SeasonState; role: StaffRole }) {
   const { dispatch } = useGame();
   return (
     <section className="space-y-3">
-      <h2 className="font-display text-2xl tracking-wide">Hire a {ROLE_LABEL[role].toLowerCase()}</h2>
+      <h2 className="font-display text-2xl tracking-wide">Hire your {ROLE_LABEL[role].toLowerCase()}</h2>
       <div className="grid gap-2">
         {season.market[role].map((member) => (
           <button
@@ -319,8 +331,8 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" data-testid={`choice-re-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "restructure", playerId: player.id })}>
-                Restructure
+              <Button variant="outline" disabled={player.years <= 0} data-testid={`choice-re-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "restructure", playerId: player.id })}>
+                {player.years <= 0 ? "Expired — decide in free agency" : "Restructure"}
               </Button>
               <Button variant="ghost" data-testid={`choice-cut-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "cut", playerId: player.id })}>
                 Cut
@@ -384,6 +396,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           );
         })
       )}
+      {season.faWave > 1 && season.capMode === "hard" && season.faBoard.length > 0 && season.faBoard.every((player) => player.cap > space + 0.05) ? (
+        <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-muted-foreground">
+          No offer in this wave fits your remaining cap space. Advance the market, or continue without another signing.
+        </p>
+      ) : null}
       <Button variant="outline" className="!h-11" data-testid="choice-next-wave" onClick={() => dispatch({ type: "next-wave" })}>
         {season.faWave === 1 ? "Open the outside market" : season.faWave < 3 ? "Next wave" : "Close free agency"}
       </Button>
@@ -540,6 +557,7 @@ function Draft({ season }: { season: SeasonState }) {
 }
 
 function Camp({
+  season,
   roster,
   cutIds,
   remaining,
@@ -547,6 +565,7 @@ function Camp({
   onToggle,
   onSubmit,
 }: {
+  season: SeasonState;
   roster: Player[];
   cutIds: string[];
   remaining: number;
@@ -561,6 +580,18 @@ function Camp({
         <p className={campOk ? "text-emerald-300" : "text-red-300"}>{remaining} kept</p>
       </div>
       <p className="text-sm text-muted-foreground">Check the players you are cutting. Land between 22 and 26, and keep a quarterback.</p>
+      <section className="rounded-xl border border-white/10 bg-black/20 p-3" aria-label="Your draft class">
+        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Draft class added to camp</p>
+        <ul className="mt-2 space-y-1 text-sm">
+          {season.draftPicks
+            .filter((pick) => pick.teamId === season.teamId && pick.prospectName)
+            .map((pick) => (
+              <li key={`${pick.round}-${pick.overall}-${pick.prospectId}`}>
+                Round {pick.round}: {pick.prospectName}{pick.note ? ` · ${pick.note}` : ""}
+              </li>
+            ))}
+        </ul>
+      </section>
       <div className="grid gap-1">
         {roster.map((player) => {
           const cut = cutIds.includes(player.id);
@@ -727,13 +758,15 @@ function Recap({
   const lines = advancedLines(season);
   const rows = standings(season).slice(0, 8);
   const superBowl = season.results.find((game) => game.round === "superbowl");
+  const playedSuperBowl = Boolean(superBowl && (superBowl.home === season.teamId || superBowl.away === season.teamId));
+  const finish = grade?.champ ? "Champion" : grade?.round === "missed" ? "Missed playoffs" : grade?.round ?? "Season complete";
   return (
     <section className="space-y-4">
       <div className="rounded-2xl border border-primary/40 bg-card p-5">
         <p className="text-xs uppercase tracking-[0.18em] text-primary">GM grade</p>
         <p className="font-display text-7xl leading-none tracking-wide">{grade?.letter ?? "—"}</p>
         <p className="mt-2 font-display text-2xl tracking-wide">
-          {grade?.wins}-{grade?.losses} · {grade?.champ ? "Champion" : grade?.round}
+          {grade?.wins}-{grade?.losses} · {finish}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{grade?.headline}</p>
         {season.mode === "historical" ? (
@@ -743,7 +776,7 @@ function Recap({
         ) : null}
         {superBowl ? (
           <p className="mt-3 text-sm">
-            Super Bowl: {teamLabel(teamById(superBowl.away, season.directory))} {superBowl.awayScore} · {teamLabel(teamById(superBowl.home, season.directory))} {superBowl.homeScore}
+            {playedSuperBowl ? "Your Super Bowl" : "League Super Bowl (your season was already over)"}: {teamLabel(teamById(superBowl.away, season.directory))} {superBowl.awayScore} · {teamLabel(teamById(superBowl.home, season.directory))} {superBowl.homeScore}
           </p>
         ) : null}
         <p className="mt-3 text-sm">Best call: {grade?.best}</p>
@@ -783,7 +816,7 @@ function Recap({
             Open the next season
           </Button>
           <Button variant="outline" className="!h-12 !px-4" onClick={onRetire}>
-            Retire and write the page
+            Retire and write the retrospective
           </Button>
         </div>
       ) : (
@@ -837,7 +870,7 @@ function Fired({
             ))
           )}
           <Button variant="ghost" onClick={onRetire}>
-            Walk away and file the Wikipedia page
+            Walk away and file the career retrospective
           </Button>
         </div>
       ) : (

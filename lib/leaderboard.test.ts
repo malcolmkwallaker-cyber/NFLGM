@@ -16,7 +16,7 @@ describe("personal leaderboard", () => {
     const rows = personalBests(profile);
 
     expect(rows).toEqual([
-      expect.objectContaining({ id: "daily", score: 88, scoreLabel: "modeled benchmark percentile" }),
+      expect.objectContaining({ id: "daily", score: 100, scoreLabel: "decision grade score" }),
     ]);
     expect(JSON.stringify(profile)).toBe(before);
   });

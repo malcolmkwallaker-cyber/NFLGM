@@ -11,15 +11,15 @@ export default function HistoricalPage() {
 
   return (
     <ProGate
-      title="Historical teams are Pro"
-      body="Start as the GM of a famous roster. The field is the era, not the 2027 league. Pre-cap years use a payroll the owner notices. The cap years use the real cap number for that season."
+      title="Historical season mode"
+      body="Historical season mode is open during the public playtest. These are game recreations, not complete archival league databases."
     >
       <div className="space-y-3">
         <header>
           <h1 className="font-display text-4xl tracking-wide">Pick a year that already happened</h1>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Rosters use real names. Free agents and draft classes in these seasons are still the game&apos;s own board.
-            One season, then you are done unless you start another.
+            Featured rosters use selected real player names and simplified game ratings; opponents, coaches, contracts,
+            free agents, and draft classes are incomplete or synthetic. One season, then you are done unless you start another.
           </p>
         </header>
         {HISTORICAL.map((pack) => {

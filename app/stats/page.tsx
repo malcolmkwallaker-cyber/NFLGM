@@ -4,6 +4,7 @@ import Link from "next/link";
 import { GRADE_EMOJI } from "@/lib/engine/daily";
 import { advancedLines } from "@/lib/engine/season";
 import { useGame } from "@/components/profile";
+import { formatMoney } from "@/lib/format";
 import { hasFullAccess } from "@/lib/access";
 
 export default function StatsPage() {
@@ -35,12 +36,12 @@ export default function StatsPage() {
           <p>Point differential {lines.diff}</p>
           <p>Roster value {lines.rosterValue}</p>
           <p>
-            Cap space ${lines.cap.toFixed(1)}M · dead ${lines.dead.toFixed(1)}M · health {lines.health}
+            Cap space {formatMoney(lines.cap)} · dead {formatMoney(lines.dead)} · health {lines.health}
           </p>
           <ul className="mt-3 space-y-1">
             {lines.top.map((player) => (
               <li key={player.id}>
-                {player.name} · ${player.cap.toFixed(1)}M
+                {player.name} · {formatMoney(player.cap)}
               </li>
             ))}
           </ul>

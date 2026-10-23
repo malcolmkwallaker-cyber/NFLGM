@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createHistoricTurnaroundSeason,
   historicScenarioForDate,
   isPublishableHistoricScenario,
   scoreHistoricTurnaround,
@@ -26,6 +27,15 @@ const verifiedFixture: HistoricTurnaroundScenario = {
 };
 
 describe("historic turnaround challenge contract", () => {
+  it("labels a turnaround with its source year while retaining modern simulation rules", () => {
+    const scenario = HISTORIC_TURNAROUNDS.find((item) => item.id === "det-2008");
+    if (!scenario) throw new Error("Detroit fixture missing");
+    const season = createHistoricTurnaroundSeason(scenario, "Test GM", 12, "2026-10-23");
+    expect(season.year).toBe(2008);
+    expect(season.historicalTitle).toBe("Detroit’s winless season");
+    expect(season.seasonLength).toBe(17);
+    expect(season.flags.turnaroundScenarioId).toBe("det-2008");
+  });
   it("publishes only sourced season records with explicit game targets", () => {
     expect(HISTORIC_TURNAROUNDS).toHaveLength(8);
     for (const scenario of HISTORIC_TURNAROUNDS) {

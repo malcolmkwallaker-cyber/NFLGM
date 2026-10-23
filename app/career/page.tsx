@@ -12,8 +12,8 @@ export default function CareerPage() {
 
   return (
     <ProGate
-      title="Full career is a Pro file"
-      body="Stay past one season. Contracts age, the cap moves, and a firing is a job change instead of a game over. Retire and the game writes a GM Wikipedia page, with a Hall of Fame score."
+      title="Career mode"
+      body="Career mode is open during the public playtest. Contracts age, the cap moves, and a firing can become a job change instead of game over."
     >
       {!ready ? null : career ? (
         <section className="space-y-4">
@@ -44,7 +44,7 @@ export default function CareerPage() {
           </ul>
           {career.wikipedia ? (
             <article className="rounded-2xl border border-white/10 bg-card p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-primary">GM Wikipedia</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-primary">Career retrospective</p>
               <p className="mt-2 text-sm leading-relaxed">{career.wikipedia}</p>
             </article>
           ) : null}

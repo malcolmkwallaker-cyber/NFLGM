@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
 export default function SettingsPage() {
-  const { profile, ready, update } = useGame();
+  const { profile, ready, update, confirmAction } = useGame();
   if (!ready) return <p className="text-sm text-muted-foreground">Loading the save…</p>;
 
   return (
@@ -15,8 +15,8 @@ export default function SettingsPage() {
       <header>
         <h1 className="font-display text-4xl tracking-wide">This browser is the account</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          The save sits in local storage under nfl-gm-career-v1. A later login can lift that blob onto a real user, and
-          Stripe can own the Pro flag. Nothing here phones home.
+          Saves stay in this browser only. There is no login or cloud sync, and nothing uploads your career, Daily results,
+          or settings.
         </p>
       </header>
       <label className="block text-sm">
@@ -35,25 +35,30 @@ export default function SettingsPage() {
       </div>
       <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-4 py-3 text-sm">
         <span>
-          <span className="block">Experimental narrative hook</span>
+          <span className="block">Tester mode</span>
           <span className="text-xs text-muted-foreground">
-            Marks that you want richer copy later. The game still runs on rules if the hook is down.
+            Show extra notes about synthetic schedules, fictional draft classes, free agents, and estimated cap data.
           </span>
         </span>
         <Switch
-          checked={profile.settings.experimentalNarrative}
+          checked={profile.settings.testerMode ?? false}
           onCheckedChange={(on) =>
-            update((prev) => ({ ...prev, settings: { ...prev.settings, experimentalNarrative: on } }))
+            update((prev) => ({ ...prev, settings: { ...prev.settings, testerMode: on } }))
           }
-          aria-label="Experimental narrative"
+          aria-label="Tester mode"
         />
       </label>
       <Button
         variant="destructive"
         onClick={() => {
-          if (!window.confirm("Wipe every saved season, career, Daily result, and setting from this browser? This cannot be undone.")) return;
-          const next = freshProfile(profile.name || "GM");
-          update(() => next);
+          confirmAction(
+            "Wipe every saved season, career, Daily result, and setting from this browser? This cannot be undone.",
+            () => {
+              const next = freshProfile(profile.name || "GM");
+              update(() => next);
+            },
+            { title: "Wipe this browser save?", confirmLabel: "Wipe everything" },
+          );
         }}
       >
         Wipe this save

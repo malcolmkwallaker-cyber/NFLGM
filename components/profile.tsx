@@ -3,16 +3,18 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { advanceCareer, createCareer, summarize, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advanceDailyProgress, challengeForDate, optionById, percentileFor } from "@/lib/engine/daily";
+import { advanceDailyProgress, challengeForDate, optionById } from "@/lib/engine/daily";
 import { applyAction, createSeason } from "@/lib/engine/season";
 import { writeWikipedia } from "@/lib/engine/wikipedia";
 import { freshProfile, loadProfile, saveProfile } from "@/lib/storage";
 import type { Action, DailyResult, Profile, SeasonState } from "@/lib/types";
 import {
-  HISTORIC_TURNAROUND_RULES_VERSION,
+  createHistoricTurnaroundSeason,
   type HistoricTurnaroundScenario,
 } from "@/lib/engine/historic-turnaround";
 import { activateSaveSlot, startSaveWarning, type SaveSlot } from "@/lib/save-slots";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type GameContextValue = {
   ready: boolean;
@@ -21,6 +23,7 @@ type GameContextValue = {
   error: string | null;
   clearError: () => void;
   notice: (message: string) => void;
+  confirmAction: (message: string, action: () => void, options?: { title?: string; confirmLabel?: string }) => void;
   update: (recipe: (profile: Profile) => Profile) => void;
   setPro: (on: boolean) => void;
   dispatch: (action: Action) => void;
@@ -93,6 +96,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
   const [error, setError] = useState<string | null>(null);
   const [interactionLocked, setInteractionLocked] = useState(false);
+  const [confirmation, setConfirmation] = useState<{ message: string; action: () => void; title?: string; confirmLabel?: string } | null>(null);
   const actionLockRef = useRef(0);
 
   const acquireInteractionLock = useCallback(() => {
@@ -111,6 +115,9 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const notice = useCallback((message: string) => setError(message), []);
+  const confirmAction = useCallback((message: string, action: () => void, options?: { title?: string; confirmLabel?: string }) => {
+    setConfirmation({ message, action, ...options });
+  }, []);
   const clearError = useCallback(() => setError(null), []);
 
   const setPro = useCallback(
@@ -135,56 +142,66 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const startSeason = useCallback(
     (teamId: string, historicalId?: string, warningAccepted = false) => {
       const warning = startSaveWarning(currentProfile, "season", historicalId ? "this Historical Season" : "a new Single Season");
-      if (!warningAccepted && warning && !window.confirm(warning)) return;
-      if (!acquireInteractionLock()) return;
-      setError(null);
-      update((prev) => {
-        const season = createSeason({
-          teamId,
-          gmName: prev.name || "GM",
-          mode: historicalId ? "historical" : "season",
-          historicalId,
+      const run = () => {
+        if (!acquireInteractionLock()) return;
+        setError(null);
+        update((prev) => {
+          const season = createSeason({
+            teamId,
+            gmName: prev.name || "GM",
+            mode: historicalId ? "historical" : "season",
+            historicalId,
+          });
+          return { ...prev, active: "season", season };
         });
-        return { ...prev, active: "season", season };
-      });
-      router.push("/play");
+        router.push("/play");
+      };
+      if (!warningAccepted && warning) {
+        confirmAction(warning, run);
+        return;
+      }
+      run();
     },
-    [acquireInteractionLock, router, update],
+    [acquireInteractionLock, confirmAction, router, update],
   );
 
   const startCareer = useCallback(
     (teamId: string) => {
       const warning = startSaveWarning(currentProfile, "career", "a new Career");
-      if (warning && !window.confirm(warning)) return;
-      if (!acquireInteractionLock()) return;
-      setError(null);
-      update((prev) => ({
-        ...prev,
-        active: "career",
-        career: createCareer(prev.name || "GM", teamId),
-      }));
-      router.push("/play");
+      const run = () => {
+        if (!acquireInteractionLock()) return;
+        setError(null);
+        update((prev) => ({ ...prev, active: "career", career: createCareer(prev.name || "GM", teamId) }));
+        router.push("/play");
+      };
+      if (warning) {
+        confirmAction(warning, run);
+        return;
+      }
+      run();
     },
-    [acquireInteractionLock, router, update],
+    [acquireInteractionLock, confirmAction, router, update],
   );
 
   const startTurnaround = useCallback(
     (scenario: HistoricTurnaroundScenario, seed: number, day: string) => {
       const warning = startSaveWarning(currentProfile, "season", "today’s Historic Turnaround");
-      if (warning && !window.confirm(warning)) return;
-      if (!acquireInteractionLock()) return;
-      setError(null);
-      update((prev) => {
-        const season = createSeason({ teamId: scenario.teamId, gmName: prev.name || "GM", seed });
-        season.flags.turnaroundScenarioId = scenario.id;
-        season.flags.turnaroundDate = day;
-        season.flags.turnaroundRulesVersion = HISTORIC_TURNAROUND_RULES_VERSION;
-        season.flags.turnaroundSeed = seed;
-        return { ...prev, active: "season", season };
-      });
-      router.push("/play");
+      const run = () => {
+        if (!acquireInteractionLock()) return;
+        setError(null);
+        update((prev) => {
+          const season = createHistoricTurnaroundSeason(scenario, prev.name || "GM", seed, day);
+          return { ...prev, active: "season", season };
+        });
+        router.push("/play");
+      };
+      if (warning) {
+        confirmAction(warning, run);
+        return;
+      }
+      run();
     },
-    [acquireInteractionLock, router, update],
+    [acquireInteractionLock, confirmAction, router, update],
   );
 
   const resumeSave = useCallback(
@@ -281,7 +298,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           challengeId: challenge.id,
           optionId,
           grade: option.grade,
-          percentile: percentileFor(challenge, optionId),
+          percentile: option.score,
           echo: option.echo,
         };
         const progress = advanceDailyProgress({
@@ -316,6 +333,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       error,
       clearError,
       notice,
+      confirmAction,
       update,
       setPro,
       dispatch,
@@ -337,6 +355,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       error,
       clearError,
       notice,
+      confirmAction,
       update,
       setPro,
       dispatch,
@@ -352,7 +371,32 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
-  return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
+  return (
+    <GameContext.Provider value={value}>
+      {children}
+      <Dialog open={Boolean(confirmation)} onOpenChange={(open) => { if (!open) setConfirmation(null); }}>
+        <DialogContent data-testid="save-confirmation" className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmation?.title ?? "Replace this saved file?"}</DialogTitle>
+            <DialogDescription>{confirmation?.message}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmation(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                const action = confirmation?.action;
+                setConfirmation(null);
+                action?.();
+              }}
+            >
+              {confirmation?.confirmLabel ?? "Continue and replace"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </GameContext.Provider>
+  );
 }
 
 export function useGame() {

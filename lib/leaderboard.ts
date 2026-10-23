@@ -53,20 +53,24 @@ export type PersonalBest = {
   scoreLabel: string;
 };
 
+const DAILY_GRADE_SCORE = { green: 100, yellow: 75, orange: 45, red: 20 } as const;
+
 function bestSeason(rows: SeasonSummary[]): SeasonSummary | null {
   return rows.slice().sort((a, b) => b.gradeScore - a.gradeScore || b.wins - a.wins)[0] ?? null;
 }
 
 export function personalBests(profile: Profile): PersonalBest[] {
   const rows: PersonalBest[] = [];
-  const daily = profile.daily.results.slice().sort((a, b) => b.percentile - a.percentile)[0];
+  const daily = profile.daily.results
+    .slice()
+    .sort((a, b) => DAILY_GRADE_SCORE[b.grade] - DAILY_GRADE_SCORE[a.grade])[0];
   if (daily) {
     rows.push({
       id: "daily",
       label: "Daily Challenge",
-      score: daily.percentile,
+      score: DAILY_GRADE_SCORE[daily.grade],
       detail: `${daily.date} · puzzle ${daily.puzzle} · ${daily.grade}`,
-      scoreLabel: "modeled benchmark percentile",
+      scoreLabel: "decision grade score",
     });
   }
 

@@ -17,8 +17,8 @@ export default function UpgradePage() {
       <ul className="space-y-2 text-sm">
         {[
           "Multi-season career with aging, expiring deals, and a new draft each year",
-          "Hired, fired, and hired again, with a legacy score and a Hall of Fame line",
-          "An auto-written GM Wikipedia page when you retire",
+          "Hired, fired, and hired again, with a transparent in-game legacy score",
+          "A generated career retrospective when you retire",
           "1985 Bears, 1993 Cowboys, 1999 Rams, 2007 Patriots, 2013 Seahawks, 1989 49ers",
           "Private leagues by pasting share cards",
         ].map((item) => (

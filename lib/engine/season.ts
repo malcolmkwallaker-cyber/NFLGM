@@ -8,6 +8,7 @@ import { interpretFreeText } from "@/lib/engine/keywords";
 import { teamRatings } from "@/lib/engine/ratings";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { clamp, hashSeed, makeRng, shuffle } from "@/lib/engine/rng";
+import { formatMoney } from "@/lib/format";
 import type {
   Action,
   Choice,
@@ -36,6 +37,7 @@ const ROSTERS = rosterFile as {
 export const LEAGUE_YEAR = 2027;
 export const PROJECTED_CAP = 322;
 export const MIN_ROSTER = 22;
+export const FIRING_THRESHOLD = 20;
 
 const OWNERS = [
   "Dana Crowe",
@@ -337,7 +339,7 @@ function bump(state: SeasonState, owner = 0, fans = 0, locker = 0) {
   state.meters.owner = clamp(Math.round(state.meters.owner + owner), 0, 100);
   state.meters.fans = clamp(Math.round(state.meters.fans + fans), 0, 100);
   state.meters.locker = clamp(Math.round(state.meters.locker + locker), 0, 100);
-  if (state.meters.owner <= 10 && state.phase !== "fired" && state.phase !== "recap") {
+  if (state.meters.owner <= FIRING_THRESHOLD && state.phase !== "fired" && state.phase !== "recap") {
     fire(state, "Owner confidence collapsed. The chair is already someone else's problem.");
   }
 }
@@ -410,7 +412,7 @@ function openCap(state: SeasonState) {
   state.phase = "cap";
   const space = capSpace(state);
   state.headlines = makeHeadlines(state, space >= 0 ? "neutral" : "negative", {
-    beat: space >= 0 ? `The cap sheet has $${space.toFixed(1)}M of room before anyone is signed.` : `The roster is $${Math.abs(space).toFixed(1)}M over. Something has to give before free agency.`,
+    beat: space >= 0 ? `The cap sheet has ${formatMoney(space)} of room before anyone is signed.` : `The cap sheet is ${formatMoney(space)}. Something has to give before free agency.`,
     national: "Cap day is not content. It is still how GMs get fired in March.",
     analytics: `Charges ${payroll(yourRoster(state)).toFixed(1)} plus ${state.deadMoney.toFixed(1)} dead against a ${state.capLimit.toFixed(1)} ${state.capMode === "payroll" ? "payroll guide" : "cap"}.`,
   });
@@ -427,9 +429,10 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     pushDecision(state, "Cap", "Stood pat", "Left the cap sheet alone.", 0);
     return openFreeAgency(state);
   }
-  const player = roster.find((p) => p.id === playerId) ?? biggestCap(roster);
+  const player = roster.find((p) => p.id === playerId) ?? biggestCap(choice === "restructure" ? roster.filter((candidate) => candidate.years > 0) : roster);
   if (!player) throw new Error("No contract to touch");
   if (choice === "restructure") {
+    if (player.years <= 0) throw new Error("Expired contracts must be re-signed or tagged in free agency");
     if (state.restructuredIds?.includes(player.id)) throw new Error("That contract was already restructured this year");
     const saved = Math.round(player.cap * 0.3 * 10) / 10;
     player.cap = Math.round((player.cap - saved) * 10) / 10;
@@ -440,7 +443,7 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     state.headlines = makeHeadlines(state, "neutral", {
       beat: `${player.name}'s number drops this year. The bill does not disappear.`,
       national: "A restructure is not a savings plan. It is a calendar.",
-      analytics: `About $${saved.toFixed(1)}M moved into future dead money. Space is now $${capSpace(state).toFixed(1)}M.`,
+      analytics: `About ${formatMoney(saved)} moved into future dead money. Space is now ${formatMoney(capSpace(state))}.`,
     });
     return state;
   }
@@ -453,7 +456,7 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
   state.headlines = makeHeadlines(state, "negative", {
     beat: `${player.name} is out. The locker room noticed which direction the standard points.`,
     national: `Cutting ${player.name} is a choice you will hear about on the next show.`,
-    analytics: `Cap space moves to $${capSpace(state).toFixed(1)}M. Dead money is ${state.deadMoney.toFixed(1)}.`,
+    analytics: `Cap space moves to ${formatMoney(capSpace(state))}. Dead money is ${formatMoney(state.deadMoney)}.`,
   });
   return state;
 }
@@ -490,7 +493,7 @@ function openFreeAgency(state: SeasonState): SeasonState {
   state.headlines = makeHeadlines(state, "neutral", {
     beat: "Your expiring contracts come first. Re-sign a player, use one franchise tag, or let him reach the market.",
     national: "Every GM says they will be disciplined. The tape from March says otherwise.",
-    analytics: `You enter with $${capSpace(state).toFixed(1)}M. Asking prices are estimates, not filings.`,
+    analytics: `You enter with ${formatMoney(capSpace(state))}. Asking prices are estimates, not filings.`,
   });
   return state;
 }
@@ -554,7 +557,7 @@ function doSign(state: SeasonState, playerId: string): SeasonState {
   state.headlines = makeHeadlines(state, "positive", {
     beat: `${deal.name} is yours. $${ask.toFixed(1)}M a year, ${years} years on the sheet.`,
     national: deal.ovr >= 88 ? `${state.gmName} just bought a headline.` : `${deal.name} is a fit, not a parade.`,
-    analytics: `Space after the deal: $${capSpace(state).toFixed(1)}M. ${over ? "The owner will read this number." : "The cap still closes."}`,
+    analytics: `Space after the deal: ${formatMoney(capSpace(state))}. ${over ? "The owner will read this number." : "The cap still closes."}`,
   });
   return state;
 }
@@ -577,7 +580,7 @@ function doTag(state: SeasonState, playerId: string): SeasonState {
   state.headlines = makeHeadlines(state, "neutral", {
     beat: `${player.name} stays for one year on the franchise tag.`,
     national: "The tag keeps the player. It does not settle the contract.",
-    analytics: `Tag charge $${tag.toFixed(1)}M. Space after the move: $${capSpace(state).toFixed(1)}M.`,
+    analytics: `Tag charge ${formatMoney(tag)}. Space after the move: ${formatMoney(capSpace(state))}.`,
   });
   return state;
 }
@@ -603,7 +606,7 @@ function doNextWave(state: SeasonState): SeasonState {
     state.headlines = makeHeadlines(state, "neutral", {
       beat: state.faWave === 2 ? "Your unsigned players are now on the market. The first outside wave is on the board." : "The last outside wave is thinner. The mistakes are cheaper, too.",
       national: "The market always feels slower on day two. It is not kinder.",
-      analytics: `Wave ${state.faWave}. Space $${capSpace(state).toFixed(1)}M.`,
+      analytics: `Wave ${state.faWave}. Space ${formatMoney(capSpace(state))}.`,
     });
     return state;
   }
@@ -929,7 +932,7 @@ function finishDraft(state: SeasonState) {
     state.prospects = state.prospects.map((p) => (p.id === prospect.id ? { ...p, perceived: -1 } : p));
     prospect.perceived = -1;
     const player: Player = {
-      id: `late-${prospect.id}`,
+      id: `draft-${prospect.id}`,
       name: prospect.name,
       pos: prospect.pos,
       ovr: prospect.trueOvr,
@@ -942,7 +945,17 @@ function finishDraft(state: SeasonState) {
       drafted: true,
     };
     yourRoster(state).push(player);
-    late.push(`${prospect.name} (${prospect.pos})`);
+    const round = 4 + i;
+    state.draftPicks.push({
+      round,
+      slot: i + 1,
+      overall: Math.max(0, ...state.draftPicks.map((pick) => pick.overall)) + 1,
+      teamId: state.teamId,
+      prospectId: prospect.id,
+      prospectName: prospect.name,
+      note: "Staff auto-pick",
+    });
+    late.push(`Round ${round}: ${prospect.name} (${prospect.pos})`);
     need.delete(prospect.pos);
   }
   for (const team of Object.values(state.teams)) ensureMinimumRoster(state, team.id);
@@ -952,7 +965,7 @@ function finishDraft(state: SeasonState) {
   state.headlines = makeHeadlines(state, "neutral", {
     beat: `Camp opens with a roster that does not fit on the plane. You have to get to 26.`,
     national: "Cuts are where GMs find out which veterans have group chats.",
-    analytics: `Day-three adds: ${late.slice(0, 3).join(", ") || "none"}. Truth grades are now on the sheet.`,
+    analytics: `Rounds 4–7 staff picks: ${late.join(", ") || "none"}. Every addition is listed at camp.`,
   });
 }
 
@@ -1239,7 +1252,7 @@ function doPlayWeek(state: SeasonState): SeasonState {
     state.headlines = resultHeadlines(state, yours.won, yours.score, yours.opp, rng);
     state.log.push(`${yours.won ? "Beat" : "Lost to"} ${yours.opp} ${yours.score}.`);
   }
-  if (state.meters.owner <= 10) return state;
+  if (state.meters.owner <= FIRING_THRESHOLD) return state;
   if (state.week >= state.seasonLength) return startPlayoffs(state);
   state.week += 1;
   prepareWeek(state);
@@ -1629,10 +1642,10 @@ export function suggestAction(state: SeasonState): Action | null {
       const roster = yourRoster(state);
       const restructured = new Set(state.restructuredIds ?? []);
       const big = roster
-        .filter((player) => !restructured.has(player.id))
+        .filter((player) => player.years > 0 && !restructured.has(player.id))
         .sort((a, b) => b.cap - a.cap)[0];
       if (big && big.cap > 2) return { type: "cap", choice: "restructure", playerId: big.id };
-      const cut = roster.slice().sort((a, b) => a.ovr - b.ovr)[0];
+      const cut = roster.filter((player) => player.years > 0).sort((a, b) => a.ovr - b.ovr)[0];
       return { type: "cap", choice: "cut", playerId: cut?.id };
     }
     return { type: "cap", choice: "hold" };

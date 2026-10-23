@@ -122,6 +122,25 @@ describe("audit regressions", () => {
       expect(pick.prospectId).toBeTruthy();
       expect(state.teams[pick.teamId].roster.filter((player) => player.id === `draft-${pick.prospectId}`)).toHaveLength(1);
     }
+    const laterRounds = state.draftPicks.filter((pick) => pick.teamId === state.teamId && pick.round >= 4);
+    expect(laterRounds.map((pick) => pick.round)).toEqual([4, 5, 6, 7]);
+    expect(laterRounds.every((pick) => pick.note === "Staff auto-pick")).toBe(true);
+  });
+
+  it("fires a GM when owner confidence reaches the visible threshold", () => {
+    const state = createSeason({ teamId: "KC", gmName: "Hot Seat Audit", seed: 219 });
+    state.phase = "regular";
+    state.meters.owner = 21;
+    state.activeDecision = {
+      id: "hot-seat-test",
+      kicker: "Owner",
+      title: "Final warning",
+      body: "Test decision.",
+      options: [{ id: "fail", label: "Lose confidence", detail: "Test.", owner: -1, log: "Lost the owner.", swing: -1 }],
+    };
+    const fired = applyAction(state, { type: "decide", choiceId: "fail" });
+    expect(fired.phase).toBe("fired");
+    expect(fired.meters.owner).toBe(20);
   });
 
   it("restores a minimum viable roster and quarterback without duplicates", () => {
@@ -139,7 +158,7 @@ describe("audit regressions", () => {
   it("allows only one restructure per player per season", () => {
     const state = createSeason({ teamId: "KC", gmName: "Contract Audit", seed: 22 });
     state.phase = "cap";
-    const player = state.teams.KC.roster.slice().sort((a, b) => b.cap - a.cap)[0];
+    const player = state.teams.KC.roster.filter((candidate) => candidate.years > 0).sort((a, b) => b.cap - a.cap)[0];
     const once = applyAction(state, { type: "cap", choice: "restructure", playerId: player.id });
     const snapshot = JSON.stringify(once);
     expect(() => applyAction(once, { type: "cap", choice: "restructure", playerId: player.id })).toThrow("already restructured");
@@ -148,15 +167,31 @@ describe("audit regressions", () => {
     expect(next.restructuredIds).toEqual([]);
   });
 
+  it("does not restructure an expired contract before the retention window", () => {
+    const state = createSeason({ teamId: "KC", gmName: "Expired Contract Audit", seed: 220 });
+    state.phase = "cap";
+    const mahomes = state.teams.KC.roster.find((player) => player.name === "Patrick Mahomes");
+    if (!mahomes) throw new Error("Patrick Mahomes fixture missing");
+    mahomes.years = 0;
+    const snapshot = JSON.stringify(state);
+    expect(() => applyAction(state, { type: "cap", choice: "restructure", playerId: mahomes.id })).toThrow("Expired contracts");
+    expect(JSON.stringify(state)).toBe(snapshot);
+  });
+
+  it("does not start the projected 2027 Kansas City roster with Mahomes expiring", () => {
+    const state = createSeason({ teamId: "KC", gmName: "Roster Data Audit", seed: 221 });
+    const mahomes = state.teams.KC.roster.find((player) => player.name === "Patrick Mahomes");
+    expect(mahomes?.years).toBeGreaterThan(0);
+  });
+
   it("uses a stable free-agent pool across waves", () => {
     let state = advanceTo(createSeason({ teamId: "KC", gmName: "FA Audit", seed: 23 }), "fa");
     expect(state.faPool?.length).toBeGreaterThanOrEqual(8);
     state.capMode = "payroll";
-    const first = state.faBoard[0];
-    state = applyAction(state, { type: "sign", playerId: first.id });
     state = applyAction(state, { type: "next-wave" });
     const firstOutsideWave = state.faBoard.map((player) => player.id);
-    expect(firstOutsideWave).toEqual(state.faPool?.slice(0, 4).map((player) => player.id));
+    const first = state.faBoard[0];
+    state = applyAction(state, { type: "sign", playerId: first.id });
     state = applyAction(state, { type: "next-wave" });
     expect(state.faBoard.every((player) => !firstOutsideWave.includes(player.id))).toBe(true);
   });

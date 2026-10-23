@@ -1,6 +1,6 @@
-# NFL GM Career
+# Run The Roster
 
-A playable first version of an NFL general manager sim. Football fans get one shared front-office decision every day, and they can take a team from the owner meeting through the Super Bowl. Public testing currently includes the multi-season career, historical teams, advanced lines, and private leagues for free.
+A browser-based football general manager simulation. The Daily bank combines sourced historical decisions with clearly labeled original fictional scenarios. Public testing includes Single Season, multi-season Career, historical-inspired seasons, and on-device score rooms for free.
 
 This is an unofficial fan game. It is not affiliated with, endorsed by, or connected to the National Football League or any team. The site uses abbreviations and colors, not logos.
 
@@ -18,20 +18,20 @@ The dev server listens on [http://127.0.0.1:43117](http://127.0.0.1:43117).
 
 `npm run build` writes a static site to `out/`. No Node server is required to play it. Any static host can serve that folder. `public/_redirects` is copied into `out/` so a host such as Netlify rewrites unknown paths to `index.html`.
 
-The save lives in `localStorage` under `nfl-gm-career-v1`. There is no account server. Single Season and Career use separate slots; `profile.active` only selects which saved desk `/play` opens. Their landing pages explicitly reactivate the requested slot, and starting a mode warns before replacing its own slot or pausing the other. `lib/access.ts` explicitly enables free-testing mode without changing the stored Pro entitlement, so existing saves remain compatible and the future billing foundation stays isolated. No payment details are requested or charged.
+The save lives in `localStorage` under `nfl-gm-career-v1`. There is no account server or cloud sync. Single Season and Career use separate slots; `profile.active` only selects which saved desk `/play` opens. Their landing pages reactivate the requested slot, and accessible confirmation dialogs protect a slot before replacement. `lib/access.ts` explicitly enables free-testing mode while retaining the legacy entitlement field only for save compatibility. No payment details are requested or charged.
 
 The personal leaderboard at `/leaderboard` is derived from that same on-device save. It is explicitly not global and uploads nothing. A dormant, versioned contract for a future verified shared leaderboard lives in `lib/leaderboard.ts`. The deterministic Daily Historic Turnaround at `/turnaround` rotates sourced season facts, but uses current generic simulation rosters and modern 17-game rules rather than claiming an authentic historical replay. See `docs/LEADERBOARD_AND_HISTORIC_DAILY.md`.
 
 ## How a day works
 
-**Daily GM Challenge** (free) is the same puzzle for everyone. The index is the number of UTC days since 2026-03-11, modulo the challenge list. You pick one option, get a green / yellow / orange / red grade, then see what the real front office did. Grades are hindsight: they score how the move turned out. The percentile and rank are a modeled field from each option's popularity, not a live player count. The share card includes an `NFLGM1` line a league can paste back in.
+**Daily GM Challenge** (free) is the same puzzle for everyone. The 101-item bank contains 33 sourced historical decisions and 68 explicitly fictional scenarios. You pick one option and get a green / yellow / orange / red process grade. No global rank is shown because results are not uploaded. Share cards use an `RTR1` machine line; the parser still accepts legacy `NFLGM1` cards.
 
-**Single season** (free) is one team, one year: owner meeting, four hires, cap, three waves of free agency, trades, a three-round draft, camp cuts, then a week-by-week season with injuries, a deadline, and locker-room calls. Owner confidence at 10 or below fires you. The schedule is a generated circle slate, so every team plays once a week. It is not the real NFL schedule.
+**Single season** (free) is one team, one year: owner meeting, four hires, cap, three waves of free agency, trades, a three-round draft plus visible staff picks in rounds 4–7, camp cuts, then a week-by-week season with injuries, a deadline, and locker-room calls. Owner confidence at 20 or below fires you. The schedule is a generated circle slate, so every team plays once a week. It is not the real NFL schedule.
 
 **Public playtest access** adds:
 
-- Career mode. After the recap, the next year ages players, expires deals, and raises the cap 5%. A firing offers three weaker teams. Retire and the game writes a GM Wikipedia page plus a Hall of Fame line.
-- Six historical starts: 1985 Bears, 1993 Cowboys, 1999 Rams, 2007 Patriots, 2013 Seahawks, 1989 49ers. Pre-cap years use a payroll guide. Cap years use that season's cap number. Opponent ratings are locked. Your roster uses real names.
+- Career mode. After the recap, the next year ages players, expires deals, and raises the cap 5%. A firing offers three weaker teams. Retirement writes a generated career retrospective and legacy status.
+- Six historical-inspired starts: 1985 Bears, 1993 Cowboys, 1999 Rams, 2007 Patriots, 2013 Seahawks, 1989 49ers. Featured rosters contain selected real player names and simplified ratings; opponents, staff, contracts, free agents, and draft classes are incomplete or synthetic.
 - Advanced stat lines (Pythagorean wins, cap sheet, top contracts).
 - Private leagues stored on this device. Friends paste a share card. There is no server sync.
 
@@ -61,7 +61,7 @@ Add a pack to `HISTORICAL` in `lib/data/historical.ts`.
 - `legends`: real coaches you want on the hire board (`role` must be `hc`, `oc`, `dc`, or `scout`)
 - `teams`: one entry with a real `roster` for the club you run, plus era opponents
 
-Opponents without a roster use `off` and `def` ratings and do not sign free agents. Your roster players should use real names. Keep the camp roster between 22 and 26 players, including a quarterback, or the player has to cut down to that range. A ripple (a decision that returns later) can be added in `seedEraRipples` inside `lib/engine/season.ts`.
+Opponents without a roster use `off` and `def` ratings and do not sign free agents. Featured roster names must be sourced; unsupported names or contract claims should not be added. Keep the camp roster between 22 and 26 players, including a quarterback. A ripple (a decision that returns later) can be added in `seedEraRipples` inside `lib/engine/season.ts`.
 
 ## Rosters
 
@@ -77,27 +77,27 @@ The checked-in file is a 2026 roster snapshot (through the week the file was pub
 
 Headlines are written by rules in `lib/engine/headlines.ts`. The owner-meeting note is read for keywords (`win`, `youth`, `stars`, `fiscal`, `culture`) in `lib/engine/keywords.ts`.
 
-The desk button "Ask the wire for a rewrite" calls `POST /api/narrative` and keeps the rule-based headlines when that call fails. The static site has no server, so the call fails and the rules stay. `lib/narrative/provider.ts` is the place to point a later host at a model. The game never waits on it.
+Headlines are generated locally from game rules. The dormant provider module is not exposed in the static UI and no request is made to `/api/narrative`.
 
 ## Accounts and payments, later
 
-The profile in `lib/storage.ts` is the whole account: name, Pro flag, daily results, one season, one career, leagues. A real login can store that same JSON on a user id. The retained Pro flag can later be backed by a Stripe subscription (the $6 price is the intended one) after free-testing mode is turned off; there is no active checkout during the playtest. League boards should move off paste-a-card and onto that same account.
+The profile in `lib/storage.ts` contains the on-device name, compatibility flags, Daily results, one season, one career, and local rooms. There is no login, server save, checkout, or automatic upload. The legacy `pro` field remains only so older saves continue to load.
 
 ## What is done, and what is stubbed
 
 Done:
 
-- 33 daily challenges, grades, modeled percentile and rank, streak, emoji share card
+- 101 Daily challenges, streak freezes, honest on-device results, and text/PNG share cards
 - A full single season from the owner meeting through the playoffs, the Super Bowl, or a firing
 - Stakeholder meters, three fictional outlets, consequences that return as later decisions
-- Career rollover, job offers after a firing, legacy score, Hall of Fame line, Wikipedia page
+- Career rollover, job offers after a firing, legacy score, and generated career retrospective
 - Six historical teams
-- Explicit free-testing access control with the future Pro entitlement preserved in saves
+- Explicit free-testing access control with legacy entitlement data preserved only for save compatibility
 - Deterministic sim covered by `npm test`
 
 Stubbed or simplified:
 
-- Daily rank is a modeled crowd, not live players
+- No global Daily rank or shared leaderboard is claimed
 - Schedule is generated, not the real slate
 - Cap numbers are estimates, not contract filings
 - Draft prospects and most free-agent logic outside your roster are fictional
@@ -105,14 +105,14 @@ Stubbed or simplified:
 - CPU teams do not rebuild their rosters in free agency
 - Leagues do not sync
 - Headlines stay rule-based. The static export does not include an API route
-- No real auth, no Stripe, no server save
+- No login, cloud sync, billing, or server save
 - "Unlimited careers" means you can keep playing year to year and start again after you retire. This build stores one career and one season on the device
 
 ## Roadmap
 
-1. Accounts, then Stripe, so Pro is a subscription and the save follows the person.
-2. A daily service that records real answers and returns a real rank.
+1. An operator-approved account and privacy design before any optional cloud save or shared score service.
+2. A server-verified Daily service before displaying any global rank.
 3. League rooms on that service, for the daily card and a shared team.
-4. Plug a model into `/api/narrative` for headlines and free-text calls, with the rules as the fallback.
+4. Keep rule-based headlines unless a future server-backed narrative feature is explicitly approved and configured.
 5. Richer contracts from public cap data, and a schedule closer to the real one.
 6. More historical packs, and a career that can start inside an era instead of only playing that one season.

@@ -17,7 +17,7 @@ export default function SeasonPage() {
         <div className="rounded-xl border border-primary/40 bg-primary/10 p-4 text-sm">
           <p>
             {busy.gmName} still has the {busy.year} job. Free keeps one season on this device. Starting another
-            replaces it. Pro does not add a second saved season in this build. It adds careers.
+            replaces it. Single Season and Career each keep one separate on-device slot.
           </p>
           {profile.active === "career" && profile.career?.status === "active" ? (
             <p className="mt-2 text-muted-foreground">

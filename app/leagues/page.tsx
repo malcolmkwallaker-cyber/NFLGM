@@ -32,7 +32,7 @@ export default function LeaguesPage() {
   function addEntry() {
     const entry = parseShare(paste, friend.trim() || "Friend");
     if (!entry) {
-      setNote("That text does not include an NFLGM1 share line.");
+      setNote("That text does not include a Run The Roster share line.");
       return;
     }
     update((prev) => ({
@@ -47,8 +47,8 @@ export default function LeaguesPage() {
 
   return (
     <ProGate
-      title="Private leagues are Pro"
-      body="Everyone runs the same Daily Challenge, or you compare season cards. This build keeps the room on your device. Paste a friend's share card to put them on the board."
+      title="On-device rooms"
+      body="Everyone runs the same Daily Challenge, or you compare season cards. Rooms do not sync: paste a friend's share card to add it to this browser only."
     >
       <div className="space-y-4">
         <h1 className="font-display text-4xl tracking-wide">A room for the group chat</h1>

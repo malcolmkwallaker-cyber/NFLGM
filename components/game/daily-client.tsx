@@ -183,7 +183,7 @@ export function DailyClient({
               day. The call resembles {option.echo}.
             </p>
             <p className="mt-3 font-display text-2xl tracking-wide">{GRADE_EMOJI[option.grade]} · Streak {profile.daily.streak}</p>
-            <p className="text-xs text-muted-foreground">This result and streak are saved on this device. No fake global rank is shown.</p>
+            <p className="text-xs text-muted-foreground">This result and streak are saved on this device. No global rank is shown because scores are not uploaded.</p>
           </section>
           <ShareCard
             kicker={`Daily #${puzzle} · ${challenge.category}`}
@@ -194,7 +194,6 @@ export function DailyClient({
               puzzle,
               category: challenge.category,
               grade: option.grade,
-              percentile: result.percentile,
               streak: profile.daily.streak,
               date: today,
               challengeId: challenge.id,

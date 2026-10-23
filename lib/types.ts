@@ -334,7 +334,7 @@ export interface Profile {
   name: string;
   pro: boolean;
   email: string;
-  settings: { experimentalNarrative: boolean };
+  settings: { experimentalNarrative: boolean; testerMode?: boolean };
   daily: {
     streak: number;
     bestStreak: number;

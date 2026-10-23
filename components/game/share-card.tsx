@@ -52,7 +52,7 @@ export function ShareCard({
     context.fillText(title, 54, 160);
     context.font = "30px sans-serif";
     context.fillStyle = "#c3ccda";
-    const lines = text.split("\n").filter((row) => row && !row.startsWith("NFLGM1|"));
+    const lines = text.split("\n").filter((row) => row && !row.startsWith("RTR1|") && !row.startsWith("NFLGM1|"));
     let y = 230;
     for (const row of lines.slice(0, 7)) {
       context.fillText(row.slice(0, 64), 54, y);
