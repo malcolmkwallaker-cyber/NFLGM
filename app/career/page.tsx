@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ProGate } from "@/components/game/pro-gate";
 import { TeamPicker } from "@/components/game/team-picker";
 import { useGame } from "@/components/profile";
@@ -8,7 +7,7 @@ import { hofStatus } from "@/lib/engine/career";
 import { Button } from "@/components/ui/button";
 
 export default function CareerPage() {
-  const { profile, ready, startCareer, season } = useGame();
+  const { profile, ready, startCareer, resumeSave } = useGame();
   const career = profile.career;
 
   return (
@@ -16,7 +15,7 @@ export default function CareerPage() {
       title="Full career is a Pro file"
       body="Stay past one season. Contracts age, the cap moves, and a firing is a job change instead of a game over. Retire and the game writes a GM Wikipedia page, with a Hall of Fame score."
     >
-      {!ready ? null : career && (profile.active === "career" || career.history.length || career.wikipedia) ? (
+      {!ready ? null : career ? (
         <section className="space-y-4">
           <header>
             <p className="text-[11px] uppercase tracking-[0.18em] text-primary">{hofStatus(career)}</p>
@@ -25,9 +24,9 @@ export default function CareerPage() {
               Legacy {career.legacy} · jobs {career.jobs} · rings {career.superBowls} · fired {career.fired}
             </p>
           </header>
-          {career.status === "active" && season ? (
-            <Button className="!h-12 !px-4" nativeButton={false} render={<Link href="/play" />}>
-              {season.phase === "recap" ? "Read the year, then continue" : "Back to this season"}
+          {career.status === "active" ? (
+            <Button className="!h-12 !px-4" onClick={() => resumeSave("career")}>
+              {career.season.phase === "recap" ? "Read the year, then continue" : "Back to this career"}
             </Button>
           ) : null}
           <ul className="space-y-2">

@@ -18,7 +18,7 @@ The dev server listens on [http://127.0.0.1:43117](http://127.0.0.1:43117).
 
 `npm run build` writes a static site to `out/`. No Node server is required to play it. Any static host can serve that folder. `public/_redirects` is copied into `out/` so a host such as Netlify rewrites unknown paths to `index.html`.
 
-The save lives in `localStorage` under `nfl-gm-career-v1`. There is no account server. `lib/access.ts` explicitly enables free-testing mode without changing the stored Pro entitlement, so existing saves remain compatible and the future billing foundation stays isolated. No payment details are requested or charged.
+The save lives in `localStorage` under `nfl-gm-career-v1`. There is no account server. Single Season and Career use separate slots; `profile.active` only selects which saved desk `/play` opens. Their landing pages explicitly reactivate the requested slot, and starting a mode warns before replacing its own slot or pausing the other. `lib/access.ts` explicitly enables free-testing mode without changing the stored Pro entitlement, so existing saves remain compatible and the future billing foundation stays isolated. No payment details are requested or charged.
 
 The personal leaderboard at `/leaderboard` is derived from that same on-device save. It is explicitly not global and uploads nothing. A dormant, versioned contract for a future verified shared leaderboard lives in `lib/leaderboard.ts`. The deterministic Daily Historic Turnaround at `/turnaround` rotates sourced season facts, but uses current generic simulation rosters and modern 17-game rules rather than claiming an authentic historical replay. See `docs/LEADERBOARD_AND_HISTORIC_DAILY.md`.
 

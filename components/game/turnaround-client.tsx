@@ -8,12 +8,13 @@ import { useTodayTurnaround } from "@/components/game/use-today-turnaround";
 
 export function TurnaroundClient() {
   const today = useTodayTurnaround();
-  const { profile, season, startTurnaround } = useGame();
+  const { profile, startTurnaround, resumeSave } = useGame();
   if (!today) return <p className="text-sm text-muted-foreground">Setting today’s turnaround…</p>;
 
   const { scenario, seed, challengeNumber, day } = today;
-  const isCurrent = season?.flags.turnaroundScenarioId === scenario.id && season.flags.turnaroundDate === day;
-  const complete = isCurrent && season?.grade ? season : null;
+  const savedSeason = profile.season;
+  const isCurrent = savedSeason?.flags.turnaroundScenarioId === scenario.id && savedSeason.flags.turnaroundDate === day;
+  const complete = isCurrent && savedSeason?.grade ? savedSeason : null;
   const score = complete?.grade
     ? scoreHistoricTurnaround(scenario, {
         finalWins: complete.grade.wins,
@@ -25,8 +26,6 @@ export function TurnaroundClient() {
     : null;
 
   function begin() {
-    const unfinished = profile.active === "season" && season && season.phase !== "recap" && season.phase !== "fired";
-    if (unfinished && !window.confirm("Starting today’s turnaround replaces your active Single Season save. Continue?")) return;
     startTurnaround(scenario, seed, day);
   }
 
@@ -67,7 +66,7 @@ export function TurnaroundClient() {
           <p className="mt-2 text-sm text-muted-foreground">{scenario.actualOutcome} This is context, not your simulated result.</p>
         </section>
       ) : isCurrent ? (
-        <Button nativeButton={false} render={<Link href="/play" />}>Continue today’s run</Button>
+        <Button onClick={() => resumeSave("season")}>Continue today’s run</Button>
       ) : (
         <Button onClick={begin} data-testid="start-turnaround">Start the shared setup</Button>
       )}

@@ -12,6 +12,7 @@ import {
   HISTORIC_TURNAROUND_RULES_VERSION,
   type HistoricTurnaroundScenario,
 } from "@/lib/engine/historic-turnaround";
+import { activateSaveSlot, startSaveWarning, type SaveSlot } from "@/lib/save-slots";
 
 type GameContextValue = {
   ready: boolean;
@@ -23,9 +24,10 @@ type GameContextValue = {
   update: (recipe: (profile: Profile) => Profile) => void;
   setPro: (on: boolean) => void;
   dispatch: (action: Action) => void;
-  startSeason: (teamId: string, historicalId?: string) => void;
+  startSeason: (teamId: string, historicalId?: string, warningAccepted?: boolean) => void;
   startCareer: (teamId: string) => void;
   startTurnaround: (scenario: HistoricTurnaroundScenario, seed: number, day: string) => void;
+  resumeSave: (slot: SaveSlot) => void;
   advanceYear: () => void;
   openJobOffers: () => void;
   acceptJob: (teamId: string) => void;
@@ -131,7 +133,9 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   }, [acquireInteractionLock]);
 
   const startSeason = useCallback(
-    (teamId: string, historicalId?: string) => {
+    (teamId: string, historicalId?: string, warningAccepted = false) => {
+      const warning = startSaveWarning(currentProfile, "season", historicalId ? "this Historical Season" : "a new Single Season");
+      if (!warningAccepted && warning && !window.confirm(warning)) return;
       if (!acquireInteractionLock()) return;
       setError(null);
       update((prev) => {
@@ -150,6 +154,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const startCareer = useCallback(
     (teamId: string) => {
+      const warning = startSaveWarning(currentProfile, "career", "a new Career");
+      if (warning && !window.confirm(warning)) return;
       if (!acquireInteractionLock()) return;
       setError(null);
       update((prev) => ({
@@ -164,6 +170,8 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const startTurnaround = useCallback(
     (scenario: HistoricTurnaroundScenario, seed: number, day: string) => {
+      const warning = startSaveWarning(currentProfile, "season", "today’s Historic Turnaround");
+      if (warning && !window.confirm(warning)) return;
       if (!acquireInteractionLock()) return;
       setError(null);
       update((prev) => {
@@ -177,6 +185,21 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       router.push("/play");
     },
     [acquireInteractionLock, router, update],
+  );
+
+  const resumeSave = useCallback(
+    (slot: SaveSlot) => {
+      if (!acquireInteractionLock()) return;
+      const next = activateSaveSlot(currentProfile, slot);
+      if (next === currentProfile) {
+        setError(`There is no saved ${slot === "career" ? "Career" : "Single Season"} to resume.`);
+        return;
+      }
+      setError(null);
+      commitProfile(next);
+      router.push("/play");
+    },
+    [acquireInteractionLock, router],
   );
 
   const advanceYear = useCallback(() => {
@@ -290,6 +313,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       startSeason,
       startCareer,
       startTurnaround,
+      resumeSave,
       advanceYear,
       openJobOffers,
       acceptJob,
@@ -310,6 +334,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       startSeason,
       startCareer,
       startTurnaround,
+      resumeSave,
       advanceYear,
       openJobOffers,
       acceptJob,
