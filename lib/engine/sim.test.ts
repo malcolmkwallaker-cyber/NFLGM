@@ -28,6 +28,12 @@ describe("daily challenge", () => {
     }
   });
 
+  it("keeps the Daily bank labels honest", () => {
+    expect(DAILY_CHALLENGES.filter((challenge) => !challenge.fictional)).toHaveLength(33);
+    expect(DAILY_CHALLENGES.filter((challenge) => challenge.fictional)).toHaveLength(68);
+    expect(DAILY_CHALLENGES.filter((challenge) => challenge.fictional).every((challenge) => challenge.situation.includes("original fictional scenario"))).toBe(true);
+  });
+
   it("gives every player the same challenge on a date", () => {
     const a = challengeForDate(new Date("2026-10-16T15:00:00Z"));
     const b = challengeForDate(new Date("2026-10-16T23:30:00Z"));

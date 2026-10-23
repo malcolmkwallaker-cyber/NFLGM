@@ -89,7 +89,8 @@ export function HomeClient({
           result says so.
         </p>
         <p className="mt-2 text-xs text-muted-foreground">
-          {DAILY_CHALLENGES.length} real situations rotate every day. The Daily Challenge stays free and available.
+          {DAILY_CHALLENGES.filter((challenge) => !challenge.fictional).length} sourced historical decisions and{" "}
+          {DAILY_CHALLENGES.filter((challenge) => challenge.fictional).length} clearly labeled original fictional scenarios rotate daily. The Daily Challenge stays free and available.
         </p>
         <Button className="mt-4 !h-11" nativeButton={false} render={<Link href="/daily" />}>
           Make the call
