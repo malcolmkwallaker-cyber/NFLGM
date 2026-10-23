@@ -290,6 +290,7 @@ export interface DailyOption {
 
 export interface DailyChallenge {
   id: string;
+  fictional?: boolean;
   category: "Trade" | "Draft" | "Contract" | "Roster" | "Coach";
   year: number;
   team: string;
@@ -338,6 +339,8 @@ export interface Profile {
     streak: number;
     bestStreak: number;
     lastPlayed: string | null;
+    freezeTokens?: number;
+    frozenDates?: string[];
     results: DailyResult[];
   };
   active: "season" | "career" | null;

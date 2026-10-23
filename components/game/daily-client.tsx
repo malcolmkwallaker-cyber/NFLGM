@@ -105,6 +105,17 @@ export function DailyClient({
   }
 
   const recent = profile.daily.results.slice(-12);
+  const calendar = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(`${today}T12:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - (6 - index));
+    const key = date.toISOString().slice(0, 10);
+    return {
+      key,
+      label: date.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" }).slice(0, 1),
+      result: profile.daily.results.find((row) => row.date === key),
+      frozen: profile.daily.frozenDates?.includes(key) ?? false,
+    };
+  });
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -113,7 +124,7 @@ export function DailyClient({
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <Badge variant="outline">{challenge.category}</Badge>
           <Badge variant="secondary">
-            {challenge.year} {challenge.team}
+            {challenge.fictional ? "Fictional front office" : `${challenge.year} ${challenge.team}`}
           </Badge>
         </div>
         <h1 className="mt-3 font-display text-4xl leading-none tracking-wide sm:text-5xl">{challenge.title}</h1>
@@ -146,7 +157,7 @@ export function DailyClient({
               </span>
               {revealed && (show || actual) ? (
                 <span className="mt-2 block text-sm">
-                  {show ? `${GRADE_WORD[item.grade]}. ${item.why}` : "This is the call the real front office made."}
+                  {show ? `${GRADE_WORD[item.grade]}. ${item.why}` : challenge.fictional ? "This is the highest-scoring process call." : "This is the call the real front office made."}
                 </span>
               ) : null}
             </button>
@@ -165,7 +176,7 @@ export function DailyClient({
             <p data-testid="daily-result-verdict" className="font-display text-2xl tracking-wide" role="status">
               {option.grade === "green" ? "You got the call right." : "Not the best call this time."}
             </p>
-            <p className="mt-3 text-xs uppercase tracking-[0.16em] text-primary">What happened</p>
+            <p className="mt-3 text-xs uppercase tracking-[0.16em] text-primary">{challenge.fictional ? "Decision review" : "What happened"}</p>
             <p className="mt-2 text-sm leading-relaxed">{challenge.whatHappened}</p>
             <p className="mt-3 text-sm text-muted-foreground">
               This grade is hindsight. It scores how the move turned out, not whether it was the percentage play on the
@@ -201,6 +212,26 @@ export function DailyClient({
             : "No cards yet"}
         </p>
         <p className="mt-1 text-xs text-muted-foreground">{DAILY_CHALLENGES.length} challenges in the rotation. A new one at midnight UTC.</p>
+      </section>
+
+      <section className="rounded-xl border border-white/10 bg-card p-4" aria-label="Seven-day Daily calendar">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Last seven days</p>
+          <p className="text-xs text-muted-foreground">❄️ {profile.daily.freezeTokens ?? 0} available</p>
+        </div>
+        <div className="mt-3 grid grid-cols-7 gap-2">
+          {calendar.map((day) => (
+            <div key={day.key} className="rounded-lg border border-white/10 bg-black/20 p-2 text-center" title={day.key}>
+              <span className="block text-[10px] uppercase text-muted-foreground">{day.label}</span>
+              <span className="mt-1 block text-lg" aria-label={day.result ? `Played ${day.key}` : day.frozen ? `Streak freeze used ${day.key}; not played` : `Not played ${day.key}`}>
+                {day.result ? GRADE_EMOJI[day.result.grade] : day.frozen ? "❄️" : "·"}
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Earn one freeze after every seven completed challenges, up to two. A freeze automatically covers one missed day and is marked ❄️—not as a played result.
+        </p>
       </section>
 
       <Dialog open={showModes} onOpenChange={setShowModes}>

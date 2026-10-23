@@ -9,8 +9,15 @@ function Bar({ label, value, hint }: { label: string; value: number; hint?: stri
         <span>{label}</span>
         <span className="font-display text-sm tracking-wide text-foreground">{Math.round(value)}</span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+      <div
+        className="h-1.5 overflow-hidden rounded-full bg-white/10"
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(value)}
+      >
+        <div className={`h-full rounded-full ${tone} motion-safe:transition-[width] motion-safe:duration-300`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
       </div>
       {hint ? <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
     </div>

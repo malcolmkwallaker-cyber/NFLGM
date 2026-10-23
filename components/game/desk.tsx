@@ -372,7 +372,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button disabled={!affordable} data-testid={`choice-sign-${player.id}`} onClick={() => dispatch({ type: "sign", playerId: player.id })}>
-                {affordable ? (own ? "Re-sign" : "Sign") : `${money(player.cap - space)} over cap`}
+                {affordable ? (own ? "Re-sign" : "Sign") : `${own ? "Re-sign" : "Sign"}: ${money(player.cap - space)} over cap`}
               </Button>
               {own && !season.franchiseTagUsed ? (
                 <Button variant="outline" disabled={!tagAffordable} data-testid={`choice-tag-${player.id}`} onClick={() => dispatch({ type: "tag", playerId: player.id })}>
@@ -600,6 +600,10 @@ function Regular({
   const decision = season.activeDecision;
   const opp = matchup ? (matchup.home === season.teamId ? matchup.away : matchup.home) : null;
   const home = matchup?.home === season.teamId;
+  const recentGames = season.results
+    .filter((game) => game.round === "regular" && (game.home === season.teamId || game.away === season.teamId))
+    .slice(-4)
+    .reverse();
   return (
     <section className="space-y-3">
       {decision ? (
@@ -640,22 +644,34 @@ function Regular({
           </Button>
         </div>
       )}
-      <ul className="space-y-1 text-sm text-muted-foreground">
-        {season.results
-          .filter((game) => game.round === "regular" && (game.home === season.teamId || game.away === season.teamId))
-          .slice(-4)
-          .reverse()
-          .map((game) => (
-            <li key={`${game.week}-${game.home}`}>
-              Week {game.week}: {teamById(game.away, season.directory).abbr} {game.awayScore} @ {teamById(game.home, season.directory).abbr} {game.homeScore}
-            </li>
-          ))}
-      </ul>
-      {roster.some((player) => player.injured) ? (
-        <p className="text-xs text-red-300">
-          Out: {roster.filter((player) => player.injured).map((player) => player.name).join(", ")}
-        </p>
+      {recentGames.length ? (
+        <section aria-label="Recent scores">
+          <p className="mb-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">Recent scores</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {recentGames.map((game) => {
+              const yourScore = game.home === season.teamId ? game.homeScore : game.awayScore;
+              const theirScore = game.home === season.teamId ? game.awayScore : game.homeScore;
+              const opponentId = game.home === season.teamId ? game.away : game.home;
+              const won = yourScore > theirScore;
+              return (
+                <div key={`${game.week}-${game.home}`} className={`rounded-xl border p-3 ${won ? "border-emerald-400/30 bg-emerald-400/5" : "border-red-400/30 bg-red-400/5"}`}>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Week {game.week} · {won ? "Win" : "Loss"}</p>
+                  <p className="mt-1 font-display text-2xl tracking-wide">{yourScore}–{theirScore}</p>
+                  <p className="text-xs text-muted-foreground">{game.home === season.teamId ? "vs" : "at"} {teamLabel(teamById(opponentId, season.directory))}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       ) : null}
+      <section className="rounded-xl border border-white/10 bg-card p-3" aria-label="Injury report">
+        <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Injury report</p>
+        {roster.some((player) => player.injured) ? (
+          <ul className="mt-2 space-y-1 text-sm text-red-300">
+            {roster.filter((player) => player.injured).map((player) => <li key={player.id}>{player.pos} {player.name} · Out</li>)}
+          </ul>
+        ) : <p className="mt-2 text-sm text-emerald-300">No players currently listed out.</p>}
+      </section>
     </section>
   );
 }

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { advanceCareer, createCareer, summarize, takeJob, withJobOffers } from "@/lib/engine/career";
-import { challengeForDate, nextStreak, optionById, percentileFor } from "@/lib/engine/daily";
+import { advanceDailyProgress, challengeForDate, optionById, percentileFor } from "@/lib/engine/daily";
 import { applyAction, createSeason } from "@/lib/engine/season";
 import { writeWikipedia } from "@/lib/engine/wikipedia";
 import { freshProfile, loadProfile, saveProfile } from "@/lib/storage";
@@ -284,13 +284,22 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           percentile: percentileFor(challenge, optionId),
           echo: option.echo,
         };
-        const streak = nextStreak(prev.daily.lastPlayed, prev.daily.streak, today);
+        const progress = advanceDailyProgress({
+          lastPlayed: prev.daily.lastPlayed,
+          streak: prev.daily.streak,
+          freezeTokens: prev.daily.freezeTokens ?? 0,
+          frozenDates: prev.daily.frozenDates ?? [],
+          today,
+          completedBefore: prev.daily.results.length,
+        });
         return {
           ...prev,
           daily: {
-            streak,
-            bestStreak: Math.max(prev.daily.bestStreak, streak),
+            streak: progress.streak,
+            bestStreak: Math.max(prev.daily.bestStreak, progress.streak),
             lastPlayed: today,
+            freezeTokens: progress.freezeTokens,
+            frozenDates: progress.frozenDates,
             results: [...prev.daily.results, result].slice(-180),
           },
         };

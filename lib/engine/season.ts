@@ -1269,8 +1269,9 @@ function simulateMatch(state: SeasonState, home: string, away: string, key: stri
   const rng = makeRng(hashSeed(state.seed, state.year, key, home, away));
   const hr = teamRatings(state, home);
   const ar = teamRatings(state, away);
-  let homeScore = snapScore(expectedPoints(hr.off, ar.def) + 1.6 + (rng.next() - 0.5) * 10);
-  let awayScore = snapScore(expectedPoints(ar.off, hr.def) + (rng.next() - 0.5) * 10);
+  const variance = state.mode === "historical" ? 26 : 10;
+  let homeScore = snapScore(expectedPoints(hr.off, ar.def) + 1.6 + (rng.next() - 0.5) * variance);
+  let awayScore = snapScore(expectedPoints(ar.off, hr.def) + (rng.next() - 0.5) * variance);
   if (homeScore === awayScore) {
     const lean = 0.5 + (hr.off + hr.def - ar.off - ar.def) / 80;
     if (rng.next() < lean) homeScore += 3;

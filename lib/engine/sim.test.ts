@@ -3,7 +3,7 @@ import { DAILY_CHALLENGES } from "@/lib/data/daily-challenges";
 import { HISTORICAL } from "@/lib/data/historical";
 import { TEAMS } from "@/lib/data/teams";
 import { advanceCareer, createCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { challengeForDate, percentileFor, puzzleNumber } from "@/lib/engine/daily";
+import { advanceDailyProgress, challengeForDate, percentileFor, puzzleNumber } from "@/lib/engine/daily";
 import { interpretFreeText } from "@/lib/engine/keywords";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { applyAction, capSpace, createSeason, simulateUntil, standings } from "@/lib/engine/season";
@@ -11,8 +11,10 @@ import { writeWikipedia } from "@/lib/engine/wikipedia";
 import { dailyShareText, parseShare } from "@/lib/share";
 
 describe("daily challenge", () => {
-  it("has at least 30 challenges with one best answer", () => {
-    expect(DAILY_CHALLENGES.length).toBeGreaterThanOrEqual(30);
+  it("has at least 100 substantive challenges with one best answer", () => {
+    expect(DAILY_CHALLENGES.length).toBeGreaterThanOrEqual(100);
+    expect(new Set(DAILY_CHALLENGES.map((challenge) => challenge.id)).size).toBe(DAILY_CHALLENGES.length);
+    expect(new Set(DAILY_CHALLENGES.map((challenge) => challenge.title)).size).toBe(DAILY_CHALLENGES.length);
     for (const challenge of DAILY_CHALLENGES) {
       expect(challenge.options).toHaveLength(4);
       expect(challenge.options.filter((o) => o.grade === "green")).toHaveLength(1);
@@ -22,6 +24,7 @@ describe("daily challenge", () => {
       expect(challenge.options.some((o) => o.id === challenge.actualOptionId)).toBe(true);
       expect(percentileFor(challenge, challenge.options[0].id)).toBeGreaterThanOrEqual(0);
       expect(percentileFor(challenge, challenge.options[0].id)).toBeLessThanOrEqual(100);
+      expect(challenge.situation.length).toBeGreaterThan(100);
     }
   });
 
@@ -30,6 +33,25 @@ describe("daily challenge", () => {
     const b = challengeForDate(new Date("2026-10-16T23:30:00Z"));
     expect(a.challenge.id).toBe(b.challenge.id);
     expect(a.puzzle).toBe(puzzleNumber(new Date("2026-10-16T00:00:00Z")));
+  });
+
+  it("preserves the released 33-item calendar before expanding the rotation", () => {
+    const legacyDate = new Date("2026-10-23T12:00:00Z");
+    const legacyIndex = ((puzzleNumber(legacyDate) % 33) + 33) % 33;
+    expect(challengeForDate(legacyDate).challenge.id).toBe(DAILY_CHALLENGES[legacyIndex]?.id);
+    expect(challengeForDate(new Date("2026-10-24T12:00:00Z")).challenge.id).toBe(DAILY_CHALLENGES[33]?.id);
+  });
+
+  it("uses one earned freeze for exactly one missed day without inventing a result", () => {
+    const progress = advanceDailyProgress({ lastPlayed: "2026-10-21", streak: 6, freezeTokens: 1, frozenDates: [], today: "2026-10-23", completedBefore: 6 });
+    expect(progress).toEqual({ streak: 7, freezeTokens: 1, frozenDates: ["2026-10-22"] });
+  });
+
+  it("resets a streak after more than one missed day", () => {
+    const progress = advanceDailyProgress({ lastPlayed: "2026-10-20", streak: 8, freezeTokens: 2, frozenDates: [], today: "2026-10-23", completedBefore: 8 });
+    expect(progress.streak).toBe(1);
+    expect(progress.freezeTokens).toBe(2);
+    expect(progress.frozenDates).toEqual([]);
   });
 });
 
@@ -114,6 +136,16 @@ describe("season", () => {
       expect(done.grade.champ).toBe(true);
       expect(done.grade.wins).toBe(done.seasonLength);
     }
+  });
+
+  it("does not make undefeated the default 1985 Bears outcome", () => {
+    const rows = Array.from({ length: 50 }, (_, index) => {
+      const done = simulateUntil(createSeason({ teamId: "CHI", gmName: "Balance Test", seed: index + 1, mode: "historical", historicalId: "1985-bears" }), "recap");
+      return done.grade;
+    });
+    const averageWins = rows.reduce((sum, grade) => sum + (grade?.wins ?? 0), 0) / rows.length;
+    expect(averageWins).toBeLessThan(15);
+    expect(rows.filter((grade) => grade?.losses === 0).length).toBeLessThanOrEqual(8);
   });
 });
 

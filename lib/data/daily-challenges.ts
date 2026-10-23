@@ -1,12 +1,14 @@
 import type { DailyChallenge } from "@/lib/types";
+import { FICTIONAL_DAILY_CHALLENGES } from "@/lib/data/fictional-daily-challenges";
 
 /**
  * One shared decision a day. Grades use hindsight — how the move turned out —
  * and say so in the result. Append new challenges at the end. Puzzle dates are
- * `days since 2026-03-11`, modulo this list, so inserting in the middle shifts
- * the calendar. Append only.
+ * Dates through 2026-10-23 retain the original 33-item rotation. The expanded
+ * calendar begins with item 34 on 2026-10-24. Append only so released dates and
+ * saved results remain stable.
  */
-export const DAILY_CHALLENGES: DailyChallenge[] = [
+const HISTORICAL_DAILY_CHALLENGES: DailyChallenge[] = [
   {
     id: "walker-1989",
     category: "Trade",
@@ -667,4 +669,9 @@ export const DAILY_CHALLENGES: DailyChallenge[] = [
       { id: "receiver", label: "Draft a receiver and keep the bridge quarterback", detail: "The class is deep at skill. Do not force a quarterback.", grade: "red", score: 24, popularity: 0.12, why: "The position was the point of the pick. A receiver was a luxury the quarterback would have wanted later.", echo: "A skill-position GM" },
     ],
   },
+];
+
+export const DAILY_CHALLENGES: DailyChallenge[] = [
+  ...HISTORICAL_DAILY_CHALLENGES,
+  ...FICTIONAL_DAILY_CHALLENGES,
 ];

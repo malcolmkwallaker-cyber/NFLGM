@@ -10,7 +10,7 @@ export function freshProfile(name = "GM"): Profile {
     pro: false,
     email: "",
     settings: { experimentalNarrative: false },
-    daily: { streak: 0, bestStreak: 0, lastPlayed: null, results: [] },
+    daily: { streak: 0, bestStreak: 0, lastPlayed: null, freezeTokens: 0, frozenDates: [], results: [] },
     active: null,
     season: null,
     career: null,
@@ -33,6 +33,8 @@ export function loadProfile(): Profile {
 
 export function migrateProfile(profile: Profile): Profile {
   const next = structuredClone(profile);
+  next.daily.freezeTokens ??= 0;
+  next.daily.frozenDates ??= [];
   const seasons = [next.season, next.career?.season].filter((season) => season !== null && season !== undefined);
   for (const season of seasons) {
     season.restructuredIds ??= [];

@@ -163,7 +163,9 @@ describe("audit regressions", () => {
 
   it("offers expiring stars before the outside market and supports one franchise tag", () => {
     let state = createSeason({ teamId: "KC", gmName: "Retention Audit", seed: 230 });
-    const star = state.teams.KC.roster.slice().sort((a, b) => b.ovr - a.ovr)[0];
+    const star = state.teams.KC.roster.find((player) => player.name === "Patrick Mahomes");
+    expect(star).toBeTruthy();
+    if (!star) throw new Error("Patrick Mahomes is missing from the Kansas City roster fixture");
     star.years = 0;
     state = advanceTo(state, "fa");
 
