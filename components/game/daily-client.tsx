@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { GRADE_EMOJI, GRADE_WORD, fieldSize, optionById, rankFor } from "@/lib/engine/daily";
+import { GRADE_EMOJI, GRADE_WORD, optionById } from "@/lib/engine/daily";
 import { DAILY_CHALLENGES } from "@/lib/data/daily-challenges";
 import { dailyShareText } from "@/lib/share";
 import { useGame } from "@/components/profile";
@@ -171,19 +171,14 @@ export function DailyClient({
               This grade is hindsight. It scores how the move turned out, not whether it was the percentage play on the
               day. The call resembles {option.echo}.
             </p>
-            <p className="mt-3 font-display text-2xl tracking-wide">
-              Better than {result.percentile}% · rank {rankFor(result.percentile, today).toLocaleString()} of{" "}
-              {fieldSize(today).toLocaleString()}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              The field is modeled from how often each call gets made. There is no live server yet. Streak {profile.daily.streak}.
-            </p>
+            <p className="mt-3 font-display text-2xl tracking-wide">{GRADE_EMOJI[option.grade]} · Streak {profile.daily.streak}</p>
+            <p className="text-xs text-muted-foreground">This result and streak are saved on this device. No fake global rank is shown.</p>
           </section>
           <ShareCard
             kicker={`Daily #${puzzle} · ${challenge.category}`}
             title={GRADE_WORD[option.grade]}
             grade={option.grade}
-            line={`Better than ${result.percentile}% · streak ${profile.daily.streak}`}
+            line={`${GRADE_EMOJI[option.grade]} · streak ${profile.daily.streak}`}
             text={dailyShareText({
               puzzle,
               category: challenge.category,

@@ -32,7 +32,7 @@ export function ShareCard({
   return (
     <div data-testid="share-card" className="overflow-hidden rounded-xl border border-white/10 bg-[#101826]">
       <div className="border-b border-white/10 bg-primary px-4 py-2 font-display text-sm tracking-[0.18em] text-primary-foreground">
-        NFL GM CAREER
+        RUN THE ROSTER
       </div>
       <div className="space-y-3 px-4 py-4">
         <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{kicker}</p>

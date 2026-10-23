@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { capSpace } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
-import { enrichHeadlines } from "@/lib/narrative/provider";
 import { seasonShareText } from "@/lib/share";
 import { advancedLines, divisionTable, priorityLabel, standings, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, SeasonState, StaffRole } from "@/lib/types";
@@ -42,7 +41,6 @@ export function Desk() {
   const { season, ready, interactionLocked, error, clearError, dispatch, profile, advanceYear, openJobOffers, acceptJob, retire } = game;
   const [note, setNote] = useState("");
   const [shopId, setShopId] = useState("");
-  const [wire, setWire] = useState("");
 
   const cutIds = useMemo(() => {
     if (!season || season.phase !== "camp") return [];
@@ -81,22 +79,6 @@ export function Desk() {
   const keptQb = roster.some((player) => player.pos === "QB" && !cutIds.includes(player.id));
   const campOk = remaining >= 22 && remaining <= 26 && keptQb;
 
-  async function polish() {
-    if (wire === "Calling the wire…") return;
-    setWire("Calling the wire…");
-    const next = await enrichHeadlines(
-      live.headlines,
-      { team: team.abbr, phase: live.phase, year: live.year },
-      true,
-    );
-    const changed = JSON.stringify(next) !== JSON.stringify(live.headlines);
-    setWire(
-      changed
-        ? "The wire rewrote the headlines."
-        : "The wire is quiet. These headlines stay rule-based until a narrative key is configured.",
-    );
-  }
-
   return (
     <div className={`space-y-4 ${interactionLocked ? "pointer-events-none select-none" : ""}`} aria-busy={interactionLocked}>
       <section className="yard-lines overflow-hidden rounded-2xl border border-white/10 bg-card">
@@ -104,7 +86,7 @@ export function Desk() {
           <TeamMark team={team} size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-[11px] uppercase tracking-[0.18em] text-primary">
-              {season.historicalTitle ?? `${season.year} season`} · {season.mode}
+              {season.historicalTitle ? `${season.historicalTitle} · historical` : `${season.year} · ${season.mode}`}
             </p>
             <h1 data-testid="phase-title" className="font-display text-3xl leading-none tracking-wide sm:text-4xl">
               {PHASE_TITLE[season.phase]}
@@ -129,7 +111,7 @@ export function Desk() {
         </div>
       ) : null}
 
-      <Headlines season={season} onPolish={polish} wire={wire} />
+      <Headlines season={season} />
 
       {season.phase === "intro" ? <Intro season={season} note={note} setNote={setNote} /> : null}
       {season.phase === "staff" ? <Staff season={season} role={role} /> : null}
@@ -173,7 +155,7 @@ export function Desk() {
         />
       ) : null}
 
-      {season.phase !== "recap" && season.phase !== "fired" ? (
+      {(season.phase === "playoffs" || (season.phase === "regular" && season.week > 1)) ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => dispatch({ type: "sim", until: "playoffs" })}>
             Sim to the playoffs
@@ -218,15 +200,7 @@ export function Desk() {
   );
 }
 
-function Headlines({
-  season,
-  onPolish,
-  wire,
-}: {
-  season: SeasonState;
-  onPolish: () => void;
-  wire: string;
-}) {
+function Headlines({ season }: { season: SeasonState }) {
   return (
     <section className="grid gap-2 md:grid-cols-3">
       {season.headlines.map((headline) => (
@@ -235,12 +209,7 @@ function Headlines({
           <p className="mt-1 text-sm leading-snug">{headline.text}</p>
         </article>
       ))}
-      <div className="md:col-span-3">
-        <button type="button" className="text-xs uppercase tracking-wider text-muted-foreground underline-offset-2 hover:underline" onClick={onPolish}>
-          Ask the wire for a rewrite
-        </button>
-        {wire ? <p className="mt-1 text-xs text-muted-foreground">{wire}</p> : null}
-      </div>
+      <p className="text-xs text-muted-foreground md:col-span-3">Headlines are generated on this device from your decisions.</p>
     </section>
   );
 }
@@ -360,7 +329,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
           </div>
         ))}
       </div>
-      <Button className="!h-12 !px-4" data-testid="choice-hold" onClick={() => dispatch({ type: "cap", choice: "hold" })}>
+      <Button className="!h-12 !px-4" disabled={space < 0 && season.capMode === "hard"} data-testid="choice-hold" onClick={() => dispatch({ type: "cap", choice: "hold" })}>
         {space < 0 && season.capMode === "hard" ? "Still over the cap" : "Take this sheet into free agency"}
       </Button>
     </section>
@@ -376,16 +345,21 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
         <p className="text-sm text-muted-foreground">{money(space)} left</p>
       </div>
       <p className="text-sm text-muted-foreground">
-        {season.faWave < 3
-          ? "Other teams' expiring deals. Pass a wave and the board changes."
-          : "These are your own free agents. Leave them unsigned and they walk."}
+        {season.faWave === 1
+          ? "Your expiring players come first. Re-sign one, use your one franchise tag, or let him reach the market."
+          : "Outside free agents. The board includes an affordable option when the market has one."}
       </p>
       {season.faBoard.length === 0 ? (
         <p className="rounded-xl border border-dashed border-white/15 px-4 py-6 text-sm text-muted-foreground">
           The board is empty. Move the market along.
         </p>
       ) : (
-        season.faBoard.map((player) => (
+        season.faBoard.map((player) => {
+          const affordable = season.capMode !== "hard" || player.cap <= space + 0.05;
+          const own = player.origin === season.teamId;
+          const tagPrice = Math.round((player.cap / 0.95) * 1.08 * 10) / 10;
+          const tagAffordable = season.capMode !== "hard" || tagPrice <= space + 0.05;
+          return (
           <div key={player.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-card px-3 py-3">
             <div>
               <p className="font-medium">
@@ -396,14 +370,22 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 {player.origin && player.origin !== season.teamId ? ` · from ${player.origin}` : " · your own"}
               </p>
             </div>
-            <Button data-testid={`choice-sign-${player.id}`} onClick={() => dispatch({ type: "sign", playerId: player.id })}>
-              Sign
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={!affordable} data-testid={`choice-sign-${player.id}`} onClick={() => dispatch({ type: "sign", playerId: player.id })}>
+                {affordable ? (own ? "Re-sign" : "Sign") : `${money(player.cap - space)} over cap`}
+              </Button>
+              {own && !season.franchiseTagUsed ? (
+                <Button variant="outline" disabled={!tagAffordable} data-testid={`choice-tag-${player.id}`} onClick={() => dispatch({ type: "tag", playerId: player.id })}>
+                  {tagAffordable ? `Tag · ${money(tagPrice)}` : "Tag won’t fit"}
+                </Button>
+              ) : null}
+            </div>
           </div>
-        ))
+          );
+        })
       )}
       <Button variant="outline" className="!h-11" data-testid="choice-next-wave" onClick={() => dispatch({ type: "next-wave" })}>
-        {season.faWave < 3 ? "Next wave" : "Close free agency"}
+        {season.faWave === 1 ? "Open the outside market" : season.faWave < 3 ? "Next wave" : "Close free agency"}
       </Button>
       {season.walked.length ? <p className="text-xs text-muted-foreground">Already walked: {season.walked.join(", ")}</p> : null}
     </section>
@@ -508,6 +490,7 @@ function Draft({ season }: { season: SeasonState }) {
           <p className="mt-1 text-sm text-muted-foreground">
             About {season.pendingDraftTrade.slotsBack} slots in this round, plus a future pick.
           </p>
+          <p className="mt-2 text-xs text-amber-200">Answer this offer before selecting a prospect. The board is dimmed, not gone.</p>
           <div className="mt-3 flex gap-2">
             <Button data-testid="choice-trade-down" onClick={() => dispatch({ type: "draft-trade", accept: true })}>
               Trade down
@@ -540,6 +523,7 @@ function Draft({ season }: { season: SeasonState }) {
           </button>
         ))}
       </div>
+      <p className="text-xs text-muted-foreground">After your featured picks, the scouting staff fills later rounds by roster need. Every automatic selection appears in the draft log and camp roster.</p>
       {season.draftPicks.filter((made) => made.teamId === season.teamId && made.prospectName).length ? (
         <ul className="text-sm text-muted-foreground">
           {season.draftPicks
@@ -642,7 +626,7 @@ function Regular({
           <h2 className="mt-1 font-display text-4xl tracking-wide">
             {opp ? (
               <>
-                {home ? "vs" : "at"} {teamById(opp, season.directory).abbr}
+                {home ? "vs" : "at"} {teamLabel(teamById(opp, season.directory))}
               </>
             ) : (
               "Open date"
@@ -663,7 +647,7 @@ function Regular({
           .reverse()
           .map((game) => (
             <li key={`${game.week}-${game.home}`}>
-              Week {game.week}: {game.away} {game.awayScore} @ {game.home} {game.homeScore}
+              Week {game.week}: {teamById(game.away, season.directory).abbr} {game.awayScore} @ {teamById(game.home, season.directory).abbr} {game.homeScore}
             </li>
           ))}
       </ul>
@@ -726,6 +710,7 @@ function Recap({
   const grade = season.grade;
   const lines = advancedLines(season);
   const rows = standings(season).slice(0, 8);
+  const superBowl = season.results.find((game) => game.round === "superbowl");
   return (
     <section className="space-y-4">
       <div className="rounded-2xl border border-primary/40 bg-card p-5">
@@ -735,6 +720,16 @@ function Recap({
           {grade?.wins}-{grade?.losses} · {grade?.champ ? "Champion" : grade?.round}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{grade?.headline}</p>
+        {season.mode === "historical" ? (
+          <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-muted-foreground">
+            Historical goal: win the championship. Ultimate: finish undefeated and win it all. These are gameplay targets, not claims about the real season.
+          </p>
+        ) : null}
+        {superBowl ? (
+          <p className="mt-3 text-sm">
+            Super Bowl: {teamLabel(teamById(superBowl.away, season.directory))} {superBowl.awayScore} · {teamLabel(teamById(superBowl.home, season.directory))} {superBowl.homeScore}
+          </p>
+        ) : null}
         <p className="mt-3 text-sm">Best call: {grade?.best}</p>
         <p className="text-sm text-muted-foreground">The one that stuck: {grade?.worst}</p>
       </div>

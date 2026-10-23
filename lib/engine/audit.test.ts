@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, createSeason, ensureMinimumRoster, rolloverSeason, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
+import { applyAction, capSpace, createSeason, ensureMinimumRoster, payroll, rolloverSeason, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -151,12 +151,38 @@ describe("audit regressions", () => {
   it("uses a stable free-agent pool across waves", () => {
     let state = advanceTo(createSeason({ teamId: "KC", gmName: "FA Audit", seed: 23 }), "fa");
     expect(state.faPool?.length).toBeGreaterThanOrEqual(8);
-    const expectedWaveTwo = state.faPool?.slice(4, 8).map((player) => player.id);
     state.capMode = "payroll";
     const first = state.faBoard[0];
     state = applyAction(state, { type: "sign", playerId: first.id });
     state = applyAction(state, { type: "next-wave" });
-    expect(state.faBoard.map((player) => player.id)).toEqual(expectedWaveTwo);
+    const firstOutsideWave = state.faBoard.map((player) => player.id);
+    expect(firstOutsideWave).toEqual(state.faPool?.slice(0, 4).map((player) => player.id));
+    state = applyAction(state, { type: "next-wave" });
+    expect(state.faBoard.every((player) => !firstOutsideWave.includes(player.id))).toBe(true);
+  });
+
+  it("offers expiring stars before the outside market and supports one franchise tag", () => {
+    let state = createSeason({ teamId: "KC", gmName: "Retention Audit", seed: 230 });
+    const star = state.teams.KC.roster.slice().sort((a, b) => b.ovr - a.ovr)[0];
+    star.years = 0;
+    state = advanceTo(state, "fa");
+
+    expect(state.faWave).toBe(1);
+    expect(state.faBoard.some((player) => player.id === star.id)).toBe(true);
+    state.capMode = "payroll";
+    state = applyAction(state, { type: "tag", playerId: star.id });
+    expect(state.teams.KC.roster.find((player) => player.id === star.id)?.years).toBe(1);
+    expect(state.franchiseTagUsed).toBe(true);
+    expect(() => applyAction(state, { type: "tag", playerId: state.faBoard[0]?.id ?? "missing" })).toThrow();
+  });
+
+  it("surfaces an affordable outside free agent when one exists", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "Budget Audit", seed: 231 }), "fa");
+    state.capMode = "hard";
+    state.capLimit = payroll(yourRoster(state)) + state.deadMoney + 4;
+    state = applyAction(state, { type: "next-wave" });
+    const affordablePool = state.faPool?.some((player) => player.cap <= 4.05);
+    if (affordablePool) expect(state.faBoard.some((player) => player.cap <= capSpace(state) + 0.05)).toBe(true);
   });
 
   it("consumes current picks, prunes stale picks, and retains only future picks", () => {

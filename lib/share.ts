@@ -13,11 +13,11 @@ export function dailyShareText(input: {
   optionId: string;
 }): string {
   return [
-    "NFL GM CAREER",
+    "RUN THE ROSTER",
     `Daily #${input.puzzle} · ${input.category}`,
     GRADE_EMOJI[input.grade],
-    `${GRADE_WORD[input.grade]} · better than ${input.percentile}%`,
-    `Streak ${input.streak}`,
+    `${GRADE_WORD[input.grade]} · ${input.streak > 0 ? `🔥 ${input.streak}` : "streak starts tomorrow"}`,
+    "runtheroster.com",
     "",
     `NFLGM1|D|${input.date}|${input.challengeId}|${input.optionId}|${input.grade}|${input.percentile}|${input.streak}`,
   ].join("\n");
@@ -29,9 +29,10 @@ export function seasonShareText(state: SeasonState): string {
   const record = `${grade?.wins ?? 0}-${grade?.losses ?? 0}`;
   const round = grade?.champ ? "CHAMP" : (grade?.round ?? "missed").toUpperCase();
   return [
-    "NFL GM CAREER",
+    "RUN THE ROSTER",
     `${state.year} ${abbr} · ${record}`,
     `Grade ${grade?.letter ?? "—"} · ${round}`,
+    "runtheroster.com",
     "",
     `NFLGM1|S|${state.year}|${abbr}|${record}|${grade?.letter ?? "F"}|${round}|${grade?.score ?? 0}`,
   ].join("\n");

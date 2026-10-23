@@ -8,7 +8,7 @@ import { interpretFreeText } from "@/lib/engine/keywords";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { applyAction, capSpace, createSeason, simulateUntil, standings } from "@/lib/engine/season";
 import { writeWikipedia } from "@/lib/engine/wikipedia";
-import { parseShare } from "@/lib/share";
+import { dailyShareText, parseShare } from "@/lib/share";
 
 describe("daily challenge", () => {
   it("has at least 30 challenges with one best answer", () => {
@@ -110,6 +110,10 @@ describe("season", () => {
     const done = simulateUntil(state, "recap");
     expect(["recap", "fired"]).toContain(done.phase);
     expect(done.grade?.wins ?? 0).toBeGreaterThan(8);
+    if (done.grade?.letter === "A+") {
+      expect(done.grade.champ).toBe(true);
+      expect(done.grade.wins).toBe(done.seasonLength);
+    }
   });
 });
 
@@ -148,6 +152,15 @@ describe("text and shares", () => {
     expect(entry?.kind).toBe("daily");
     expect(entry?.score).toBe(81);
     expect(entry?.name).toBe("Sam");
+  });
+
+  it("shares a streak without inventing a global rank", () => {
+    const text = dailyShareText({ puzzle: 8, category: "Draft", grade: "green", percentile: 91, streak: 4, date: "2026-10-23", challengeId: "test", optionId: "pick" });
+    expect(text).toContain("RUN THE ROSTER");
+    expect(text).toContain("🔥 4");
+    expect(text).toContain("runtheroster.com");
+    expect(text).not.toContain("rank");
+    expect(text).not.toContain("better than");
   });
 });
 

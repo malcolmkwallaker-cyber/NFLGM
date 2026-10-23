@@ -16,7 +16,7 @@ const display = Barlow_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: "NFL GM Career",
+  title: "Run The Roster",
   description: "A daily front-office challenge and a season-long NFL general manager sim.",
 };
 

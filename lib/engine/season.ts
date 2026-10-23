@@ -184,6 +184,7 @@ export function createSeason(input: {
     futureDead: 0,
     extraPicks: [],
     restructuredIds: [],
+    franchiseTagUsed: false,
     faWave: 1,
     faBoard: [],
     faPool: [],
@@ -299,6 +300,8 @@ export function applyAction(state: SeasonState, action: Action): SeasonState {
       return doCap(next, action.choice, action.playerId);
     case "sign":
       return doSign(next, action.playerId);
+    case "tag":
+      return doTag(next, action.playerId);
     case "next-wave":
       return doNextWave(next);
     case "trade":
@@ -482,9 +485,10 @@ function openFreeAgency(state: SeasonState): SeasonState {
   state.phase = "fa";
   state.faWave = 1;
   state.faPool = freeAgentPool(state);
+  state.flags.faShown = "";
   state.faBoard = buildBoard(state, 1);
   state.headlines = makeHeadlines(state, "neutral", {
-    beat: "Free agency opens. The board is short on purpose. You cannot sign the whole league.",
+    beat: "Your expiring contracts come first. Re-sign a player, use one franchise tag, or let him reach the market.",
     national: "Every GM says they will be disciplined. The tape from March says otherwise.",
     analytics: `You enter with $${capSpace(state).toFixed(1)}M. Asking prices are estimates, not filings.`,
   });
@@ -503,17 +507,24 @@ function freeAgentPool(state: SeasonState): Player[] {
 }
 
 function buildBoard(state: SeasonState, wave: number): Player[] {
-  if (wave >= 3) {
+  if (wave === 1) {
     return yourRoster(state)
       .filter((p) => p.years <= 0)
       .sort((a, b) => b.ovr - a.ovr)
-      .slice(0, 4)
       .map((p) => ({ ...p, cap: Math.round(marketAsk(p) * 0.95 * 10) / 10, origin: state.teamId }));
   }
   const pool = state.faPool?.length ? state.faPool : freeAgentPool(state);
   state.faPool = pool;
-  const start = (wave - 1) * 4;
-  return pool.slice(start, start + 4);
+  const shown = new Set(String(state.flags.faShown ?? "").split(",").filter(Boolean));
+  const available = pool.filter((player) => !shown.has(player.id));
+  const board = available.slice(0, 4);
+  const space = capSpace(state);
+  const affordable = state.capMode === "hard" && !board.some((player) => player.cap <= space + 0.05)
+    ? available.slice(4).find((player) => player.cap <= space + 0.05)
+    : undefined;
+  const selected = affordable && board.length ? [...board.slice(0, -1), affordable] : board;
+  state.flags.faShown = [...shown, ...selected.map((player) => player.id)].join(",");
+  return selected;
 }
 
 function doSign(state: SeasonState, playerId: string): SeasonState {
@@ -548,6 +559,29 @@ function doSign(state: SeasonState, playerId: string): SeasonState {
   return state;
 }
 
+function doTag(state: SeasonState, playerId: string): SeasonState {
+  if (state.phase !== "fa" || state.faWave !== 1) throw new Error("The franchise-tag window is closed");
+  if (state.franchiseTagUsed) throw new Error("The franchise tag was already used this season");
+  const deal = state.faBoard.find((player) => player.id === playerId && player.origin === state.teamId);
+  if (!deal) throw new Error("Only your own expiring player can be tagged");
+  const tag = Math.round(marketAsk(deal) * 1.08 * 10) / 10;
+  if (state.capMode === "hard" && tag > capSpace(state) + 0.05) throw new Error("Not enough cap room for the franchise tag");
+  const player = yourRoster(state).find((candidate) => candidate.id === playerId);
+  if (!player) throw new Error("That player is no longer on your roster");
+  player.cap = tag;
+  player.years = 1;
+  state.franchiseTagUsed = true;
+  state.faBoard = state.faBoard.filter((candidate) => candidate.id !== playerId);
+  bump(state, 0, player.ovr >= 85 ? 2 : 0, -2);
+  pushDecision(state, "Free agency", `Tagged ${player.name}`, `Used the one-year franchise tag at $${tag.toFixed(1)}M.`, 0);
+  state.headlines = makeHeadlines(state, "neutral", {
+    beat: `${player.name} stays for one year on the franchise tag.`,
+    national: "The tag keeps the player. It does not settle the contract.",
+    analytics: `Tag charge $${tag.toFixed(1)}M. Space after the move: $${capSpace(state).toFixed(1)}M.`,
+  });
+  return state;
+}
+
 function payrollRipple(): Decision {
   return {
     id: "payroll-heat",
@@ -567,7 +601,7 @@ function doNextWave(state: SeasonState): SeasonState {
     state.faWave += 1;
     state.faBoard = buildBoard(state, state.faWave);
     state.headlines = makeHeadlines(state, "neutral", {
-      beat: state.faWave === 3 ? "Your own free agents are the last calls. Pass, and they walk." : "The next wave is thinner. The mistakes are cheaper, too.",
+      beat: state.faWave === 2 ? "Your unsigned players are now on the market. The first outside wave is on the board." : "The last outside wave is thinner. The mistakes are cheaper, too.",
       national: "The market always feels slower on day two. It is not kinder.",
       analytics: `Wave ${state.faWave}. Space $${capSpace(state).toFixed(1)}M.`,
     });
@@ -1529,11 +1563,15 @@ function buildGrade(state: SeasonState, fired: boolean) {
   const record = teamRecord(state, state.teamId);
   const round = exitRound(state);
   const champ = round === "champion";
-  let score = 60 + (record.wins - record.losses) * 1.55;
-  score += { missed: 0, wildcard: 4, divisional: 7, conference: 11, superbowl: 14, champion: 20 }[round];
+  const historical = state.mode === "historical";
+  let score = (historical ? 48 : 60) + (record.wins - record.losses) * (historical ? 1.25 : 1.55);
+  score += historical
+    ? { missed: 0, wildcard: 3, divisional: 5, conference: 8, superbowl: 12, champion: 18 }[round]
+    : { missed: 0, wildcard: 4, divisional: 7, conference: 11, superbowl: 14, champion: 20 }[round];
   score += (state.meters.owner - 60) / 8;
   score += (state.meters.locker - 60) / 12;
   score += (capHealth(state) - 55) / 12;
+  if (historical && (!champ || record.wins < state.seasonLength)) score = Math.min(score, 92);
   if (fired) score = Math.min(score, 47);
   score = Math.round(clamp(score, 20, 99));
   const swings = state.decisions.slice().sort((a, b) => b.swing - a.swing);
@@ -1678,6 +1716,7 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   next.faPool = [];
   next.faWave = 1;
   next.restructuredIds = [];
+  next.franchiseTagUsed = false;
   next.tradeOffers = [];
   next.shop = null;
   next.shopUsed = false;

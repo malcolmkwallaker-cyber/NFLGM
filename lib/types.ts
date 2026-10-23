@@ -220,6 +220,7 @@ export interface SeasonState {
   futureDead: number;
   extraPicks: { round: number; year: number }[];
   restructuredIds?: string[];
+  franchiseTagUsed?: boolean;
   faWave: number;
   faBoard: Player[];
   faPool?: Player[];
@@ -350,6 +351,7 @@ export type Action =
   | { type: "hire"; id: string }
   | { type: "cap"; choice: "restructure" | "cut" | "hold"; playerId?: string }
   | { type: "sign"; playerId: string }
+  | { type: "tag"; playerId: string }
   | { type: "next-wave" }
   | { type: "trade"; offerId: string; accept: boolean }
   | { type: "shop"; playerId: string }

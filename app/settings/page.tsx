@@ -51,6 +51,7 @@ export default function SettingsPage() {
       <Button
         variant="destructive"
         onClick={() => {
+          if (!window.confirm("Wipe every saved season, career, Daily result, and setting from this browser? This cannot be undone.")) return;
           const next = freshProfile(profile.name || "GM");
           update(() => next);
         }}

@@ -89,7 +89,7 @@ export default function LeaguesPage() {
           <textarea
             value={paste}
             onChange={(event) => setPaste(event.target.value)}
-            placeholder="Paste an NFL GM Career share card"
+            placeholder="Paste a Run The Roster share card"
             className="min-h-28 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
           />
           <Button variant="outline" className="!h-11" disabled={!code} onClick={addEntry}>

@@ -36,6 +36,7 @@ export function migrateProfile(profile: Profile): Profile {
   const seasons = [next.season, next.career?.season].filter((season) => season !== null && season !== undefined);
   for (const season of seasons) {
     season.restructuredIds ??= [];
+    season.franchiseTagUsed ??= false;
     season.faPool ??= [];
     if (season.phase !== "camp") continue;
     const addedToUser = ensureMinimumRoster(season, season.teamId);
