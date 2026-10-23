@@ -35,13 +35,37 @@ export function HomeClient({
             One real front-office decision every morning, then a full season if you want the chair: hire the staff,
             spend the cap, draft, and find out whether the owner still likes you in February.
           </p>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/daily" className={cn(buttonVariants(), "!h-12 !px-4")}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Link
+              href="/season"
+              data-testid="home-season-cta"
+              className="rounded-xl border border-primary/50 bg-primary/10 p-4 transition-colors hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <span className="text-[11px] uppercase tracking-[0.18em] text-primary">Season Mode</span>
+              <span className="mt-1 block font-display text-3xl tracking-wide">Run one full season</span>
+              <span className="mt-2 block text-sm text-muted-foreground">Hire, trade, draft, and chase the Super Bowl.</span>
+              <span className="mt-4 block text-sm font-medium text-primary">Play Single Season →</span>
+            </Link>
+            <Link
+              href="/career"
+              data-testid="home-career-cta"
+              className="rounded-xl border border-primary bg-primary p-4 text-primary-foreground transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <span className="text-[11px] uppercase tracking-[0.18em] opacity-75">Career GM · Free playtest</span>
+              <span className="mt-1 block font-display text-3xl tracking-wide">Build a dynasty</span>
+              <span className="mt-2 block text-sm opacity-80">Play year after year, survive firings, and leave a legacy.</span>
+              <span className="mt-4 block text-sm font-medium">Play Career Mode →</span>
+            </Link>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link href="/daily" data-testid="home-daily-cta" className={cn(buttonVariants({ variant: "outline" }), "!h-12 !px-4")}>
               Play Daily #{puzzle}
             </Link>
-            <Link href={season ? "/play" : "/season"} className={cn(buttonVariants({ variant: "outline" }), "!h-12 !px-4")}>
-              {season ? "Back to the desk" : "Take a team"}
-            </Link>
+            {season ? (
+              <Link href="/play" className={cn(buttonVariants({ variant: "ghost" }), "!h-12 !px-4")}>
+                Back to the active desk
+              </Link>
+            ) : null}
           </div>
           {ready ? (
             <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
@@ -52,24 +76,20 @@ export function HomeClient({
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-3">
-        <Mode
-          href="/daily"
-          kicker="Free · every day"
-          title="Daily GM Challenge"
-          body={`${DAILY_CHALLENGES.length} real situations. Same puzzle for everyone. A color grade, the real ending, and a share card.`}
-        />
+      <section className="grid gap-3 md:grid-cols-2">
         <Mode
           href="/season"
           kicker="Free · one season"
-          title="Offseason to the Super Bowl"
+          title="Single Season Mode"
           body="One team, one year. Owner, fans, locker room, and three outlets that will not stay quiet."
+          prominent
         />
         <Mode
           href="/career"
           kicker="Free · public playtest"
-          title="Career, history, leagues"
-          body="Multi-year file, famous teams, a Wikipedia page, and a private room where friends paste the same card."
+          title="Career GM Mode"
+          body="Play year after year, change jobs after a firing, build a résumé, and write your GM legacy."
+          prominent
         />
       </section>
 
@@ -85,6 +105,9 @@ export function HomeClient({
           {challenge.year} · {challenge.teamName}. Puzzle {puzzle} in the rotation. The grade is hindsight, and the
           result says so.
         </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {DAILY_CHALLENGES.length} real situations rotate every day. The Daily Challenge stays free and available.
+        </p>
         <Button className="mt-4 !h-11" nativeButton={false} render={<Link href="/daily" />}>
           Make the call
         </Button>
@@ -93,9 +116,27 @@ export function HomeClient({
   );
 }
 
-function Mode({ href, kicker, title, body }: { href: string; kicker: string; title: string; body: string }) {
+function Mode({
+  href,
+  kicker,
+  title,
+  body,
+  prominent = false,
+}: {
+  href: string;
+  kicker: string;
+  title: string;
+  body: string;
+  prominent?: boolean;
+}) {
   return (
-    <Link href={href} className="rounded-2xl border border-white/10 bg-card p-4 hover:border-primary/50">
+    <Link
+      href={href}
+      className={cn(
+        "rounded-2xl border bg-card p-5 hover:border-primary/60",
+        prominent ? "border-primary/30" : "border-white/10",
+      )}
+    >
       <p className="text-[11px] uppercase tracking-[0.16em] text-primary">{kicker}</p>
       <h2 className="mt-2 font-display text-2xl tracking-wide">{title}</h2>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
