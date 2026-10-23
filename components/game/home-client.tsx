@@ -20,6 +20,7 @@ export function HomeClient({
 }) {
   const { profile, ready, season } = useGame();
   const challenge = DAILY_CHALLENGES.find((item) => item.id === challengeId) ?? DAILY_CHALLENGES[0];
+  const dailyComplete = profile.daily.results.some((result) => result.date === day);
 
   return (
     <div className="space-y-8">
@@ -35,38 +36,37 @@ export function HomeClient({
             One real front-office decision every morning, then a full season if you want the chair: hire the staff,
             spend the cap, draft, and find out whether the owner still likes you in February.
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Link
+          <div className="grid gap-3 md:grid-cols-3">
+            <HomeMode
+              href="/daily"
+              testId="home-daily-cta"
+              kicker="Daily Challenge · Free"
+              title="Make today’s call"
+              body="One real front-office decision, an instant grade, and the story of what happened next."
+              action={dailyComplete ? "View today’s result →" : `Play Daily #${puzzle} →`}
+            />
+            <HomeMode
               href="/season"
-              data-testid="home-season-cta"
-              className="rounded-xl border border-primary/50 bg-primary/10 p-4 transition-colors hover:bg-primary/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
-              <span className="text-[11px] uppercase tracking-[0.18em] text-primary">Season Mode</span>
-              <span className="mt-1 block font-display text-3xl tracking-wide">Run one full season</span>
-              <span className="mt-2 block text-sm text-muted-foreground">Hire, trade, draft, and chase the Super Bowl.</span>
-              <span className="mt-4 block text-sm font-medium text-primary">Play Single Season →</span>
-            </Link>
-            <Link
+              testId="home-season-cta"
+              kicker="Single Season · Free"
+              title="Run one full season"
+              body="Hire, trade, draft, manage the locker room, and chase the Super Bowl."
+              action="Play Season Mode →"
+            />
+            <HomeMode
               href="/career"
-              data-testid="home-career-cta"
-              className="rounded-xl border border-primary bg-primary p-4 text-primary-foreground transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
-              <span className="text-[11px] uppercase tracking-[0.18em] opacity-75">Career GM · Free playtest</span>
-              <span className="mt-1 block font-display text-3xl tracking-wide">Build a dynasty</span>
-              <span className="mt-2 block text-sm opacity-80">Play year after year, survive firings, and leave a legacy.</span>
-              <span className="mt-4 block text-sm font-medium">Play Career Mode →</span>
-            </Link>
+              testId="home-career-cta"
+              kicker="Career GM · Free"
+              title="Build a dynasty"
+              body="Play year after year, survive firings, change teams, and leave a legacy."
+              action="Play Career Mode →"
+            />
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Link href="/daily" data-testid="home-daily-cta" className={cn(buttonVariants({ variant: "outline" }), "!h-12 !px-4")}>
-              Play Daily #{puzzle}
+          {season ? (
+            <Link href="/play" className={cn(buttonVariants({ variant: "outline" }), "!h-12 !px-4")}>
+              Back to the active desk
             </Link>
-            {season ? (
-              <Link href="/play" className={cn(buttonVariants({ variant: "ghost" }), "!h-12 !px-4")}>
-                Back to the active desk
-              </Link>
-            ) : null}
-          </div>
+          ) : null}
           {ready ? (
             <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
               Streak {profile.daily.streak} · best {profile.daily.bestStreak}
@@ -74,23 +74,6 @@ export function HomeClient({
             </p>
           ) : null}
         </div>
-      </section>
-
-      <section className="grid gap-3 md:grid-cols-2">
-        <Mode
-          href="/season"
-          kicker="Free · one season"
-          title="Single Season Mode"
-          body="One team, one year. Owner, fans, locker room, and three outlets that will not stay quiet."
-          prominent
-        />
-        <Mode
-          href="/career"
-          kicker="Free · public playtest"
-          title="Career GM Mode"
-          body="Play year after year, change jobs after a firing, build a résumé, and write your GM legacy."
-          prominent
-        />
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-card p-5">
@@ -116,30 +99,31 @@ export function HomeClient({
   );
 }
 
-function Mode({
+function HomeMode({
   href,
   kicker,
   title,
   body,
-  prominent = false,
+  action,
+  testId,
 }: {
   href: string;
   kicker: string;
   title: string;
   body: string;
-  prominent?: boolean;
+  action: string;
+  testId: string;
 }) {
   return (
     <Link
       href={href}
-      className={cn(
-        "rounded-2xl border bg-card p-5 hover:border-primary/60",
-        prominent ? "border-primary/30" : "border-white/10",
-      )}
+      data-testid={testId}
+      className="flex min-h-52 flex-col rounded-xl border border-primary/40 bg-black/20 p-4 transition-transform hover:-translate-y-0.5 hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
     >
-      <p className="text-[11px] uppercase tracking-[0.16em] text-primary">{kicker}</p>
-      <h2 className="mt-2 font-display text-2xl tracking-wide">{title}</h2>
-      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
+      <span className="text-[11px] uppercase tracking-[0.18em] text-primary">{kicker}</span>
+      <span className="mt-2 block font-display text-3xl tracking-wide">{title}</span>
+      <span className="mt-2 block text-sm leading-relaxed text-muted-foreground">{body}</span>
+      <span className="mt-auto block pt-5 text-sm font-medium text-primary">{action}</span>
     </Link>
   );
 }
