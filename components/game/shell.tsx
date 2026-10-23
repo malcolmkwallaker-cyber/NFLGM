@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useGame } from "@/components/profile";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "cn";
 
 const LINKS = [
@@ -18,7 +16,6 @@ const LINKS = [
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
-  const { profile, ready, setPro } = useGame();
 
   return (
     <div className="flex min-h-full flex-col">
@@ -42,19 +39,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2 md:ml-2">
-            <label className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <span className="hidden sm:inline">Pro preview</span>
-              <span className="sm:hidden">Pro</span>
-              <Switch
-                data-testid="pro-switch"
-                checked={ready && profile.pro}
-                disabled={!ready}
-                onCheckedChange={(on) => setPro(on)}
-                aria-label="Toggle Pro preview"
-              />
-            </label>
-          </div>
+          <p className="ml-auto text-[10px] uppercase tracking-[0.16em] text-primary md:ml-2">Free playtest</p>
         </div>
       </header>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-28 pt-5 md:max-w-5xl md:pb-12">{children}</main>
@@ -62,7 +47,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <p className="flex flex-wrap gap-3">
           <Link href="/stats" className="hover:text-foreground">Stats</Link>
           <Link href="/settings" className="hover:text-foreground">Settings</Link>
-          <Link href="/upgrade" className="hover:text-foreground">Pro · $6/mo</Link>
+          <Link href="/upgrade" className="hover:text-foreground">Playtest access</Link>
         </p>
         <p>
           NFL GM Career is an unofficial fan game. It is not affiliated with, endorsed by, or connected to the National
@@ -75,7 +60,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           { href: "/play", label: "Desk" },
           { href: "/season", label: "Season" },
           { href: "/career", label: "Career" },
-          { href: "/upgrade", label: "Pro" },
+          { href: "/historical", label: "History" },
         ].map((link) => (
           <Link
             key={link.href}

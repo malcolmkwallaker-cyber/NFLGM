@@ -4,18 +4,19 @@ import Link from "next/link";
 import { GRADE_EMOJI } from "@/lib/engine/daily";
 import { advancedLines } from "@/lib/engine/season";
 import { useGame } from "@/components/profile";
+import { hasFullAccess } from "@/lib/access";
 
 export default function StatsPage() {
   const { profile, ready, season } = useGame();
   if (!ready) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  const lines = season && profile.pro ? advancedLines(season) : null;
+  const lines = season && hasFullAccess(profile) ? advancedLines(season) : null;
 
   return (
     <div className="space-y-5">
       <header>
         <h1 className="font-display text-4xl tracking-wide">The file</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Daily grades are free. The deeper season sheet is Pro.
+          Daily grades and the deeper season sheet are open for public testing.
         </p>
       </header>
       <section className="rounded-2xl border border-white/10 bg-card p-4">
@@ -46,9 +47,9 @@ export default function StatsPage() {
         </section>
       ) : (
         <section className="rounded-2xl border border-primary/30 bg-primary/10 p-4 text-sm">
-          <p>Advanced lines open with Pro, once a season is on the desk.</p>
-          <Link href="/upgrade" className="mt-2 inline-block text-primary underline-offset-2 hover:underline">
-            See the $6 preview
+          <p>Start a season to open the advanced lines.</p>
+          <Link href="/season" className="mt-2 inline-block text-primary underline-offset-2 hover:underline">
+            Take a team
           </Link>
         </section>
       )}

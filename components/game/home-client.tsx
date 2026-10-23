@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
+import { FREE_TESTING_MODE } from "@/lib/access";
 
 export function HomeClient({
   day,
@@ -45,7 +46,7 @@ export function HomeClient({
           {ready ? (
             <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
               Streak {profile.daily.streak} · best {profile.daily.bestStreak}
-              {profile.pro ? " · Pro preview on" : " · Free"}
+              {FREE_TESTING_MODE ? " · Public playtest" : profile.pro ? " · Full access" : " · Free"}
             </p>
           ) : null}
         </div>
@@ -66,7 +67,7 @@ export function HomeClient({
         />
         <Mode
           href="/career"
-          kicker="Pro · $6/mo preview"
+          kicker="Free · public playtest"
           title="Career, history, leagues"
           body="Multi-year file, famous teams, a Wikipedia page, and a private room where friends paste the same card."
         />

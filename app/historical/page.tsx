@@ -7,7 +7,7 @@ import { useGame } from "@/components/profile";
 import { teamById } from "@/lib/data/teams";
 
 export default function HistoricalPage() {
-  const { startSeason, profile } = useGame();
+  const { startSeason } = useGame();
 
   return (
     <ProGate
@@ -45,7 +45,6 @@ export default function HistoricalPage() {
                 <span className="block font-display text-2xl tracking-wide">{pack.title}</span>
                 <span className="mt-1 block text-xs uppercase tracking-wider text-muted-foreground">
                   {pack.capMode === "hard" ? `Cap ${pack.capLimit}M` : `Payroll guide ${pack.capLimit}M`} · {pack.weeks} weeks
-                  {profile.pro ? "" : ""}
                 </span>
                 <span className="mt-2 block text-sm leading-relaxed text-muted-foreground">{pack.summary}</span>
               </span>

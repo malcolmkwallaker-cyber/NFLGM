@@ -1,6 +1,6 @@
 # NFL GM Career
 
-A playable first version of an NFL general manager sim. Football fans get one shared front-office decision every day, and they can take a team from the owner meeting through the Super Bowl. A Pro preview unlocks a multi-season career, historical teams, advanced lines, and private leagues.
+A playable first version of an NFL general manager sim. Football fans get one shared front-office decision every day, and they can take a team from the owner meeting through the Super Bowl. Public testing currently includes the multi-season career, historical teams, advanced lines, and private leagues for free.
 
 This is an unofficial fan game. It is not affiliated with, endorsed by, or connected to the National Football League or any team. The site uses abbreviations and colors, not logos.
 
@@ -18,7 +18,7 @@ The dev server listens on [http://127.0.0.1:43117](http://127.0.0.1:43117).
 
 `npm run build` writes a static site to `out/`. No Node server is required to play it. Any static host can serve that folder. `public/_redirects` is copied into `out/` so a host such as Netlify rewrites unknown paths to `index.html`.
 
-The save lives in `localStorage` under `nfl-gm-career-v1`. There is no account server. The header switch labeled **Pro preview** flips the paywall without a card. The upgrade page is a mock checkout: any 16 digits are accepted, then discarded. Nothing is charged.
+The save lives in `localStorage` under `nfl-gm-career-v1`. There is no account server. `lib/access.ts` explicitly enables free-testing mode without changing the stored Pro entitlement, so existing saves remain compatible and the future billing foundation stays isolated. No payment details are requested or charged.
 
 ## How a day works
 
@@ -26,7 +26,7 @@ The save lives in `localStorage` under `nfl-gm-career-v1`. There is no account s
 
 **Single season** (free) is one team, one year: owner meeting, four hires, cap, three waves of free agency, trades, a three-round draft, camp cuts, then a week-by-week season with injuries, a deadline, and locker-room calls. Owner confidence at 10 or below fires you. The schedule is a generated circle slate, so every team plays once a week. It is not the real NFL schedule.
 
-**Pro** adds:
+**Public playtest access** adds:
 
 - Career mode. After the recap, the next year ages players, expires deals, and raises the cap 5%. A firing offers three weaker teams. Retire and the game writes a GM Wikipedia page plus a Hall of Fame line.
 - Six historical starts: 1985 Bears, 1993 Cowboys, 1999 Rams, 2007 Patriots, 2013 Seahawks, 1989 49ers. Pre-cap years use a payroll guide. Cap years use that season's cap number. Opponent ratings are locked. Your roster uses real names.
@@ -79,7 +79,7 @@ The desk button "Ask the wire for a rewrite" calls `POST /api/narrative` and kee
 
 ## Accounts and payments, later
 
-The profile in `lib/storage.ts` is the whole account: name, Pro flag, daily results, one season, one career, leagues. A real login can store that same JSON on a user id. Pro should become a Stripe subscription (the $6 price is the intended one) instead of the mock form on `/upgrade` or the preview switch. League boards should move off paste-a-card and onto that same account.
+The profile in `lib/storage.ts` is the whole account: name, Pro flag, daily results, one season, one career, leagues. A real login can store that same JSON on a user id. The retained Pro flag can later be backed by a Stripe subscription (the $6 price is the intended one) after free-testing mode is turned off; there is no active checkout during the playtest. League boards should move off paste-a-card and onto that same account.
 
 ## What is done, and what is stubbed
 
@@ -90,7 +90,7 @@ Done:
 - Stakeholder meters, three fictional outlets, consequences that return as later decisions
 - Career rollover, job offers after a firing, legacy score, Hall of Fame line, Wikipedia page
 - Six historical teams
-- Pro gate with a mock upgrade and a testing switch
+- Explicit free-testing access control with the future Pro entitlement preserved in saves
 - Deterministic sim covered by `npm test`
 
 Stubbed or simplified:

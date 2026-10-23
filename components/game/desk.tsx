@@ -15,6 +15,7 @@ import { enrichHeadlines } from "@/lib/narrative/provider";
 import { seasonShareText } from "@/lib/share";
 import { advancedLines, divisionTable, priorityLabel, standings, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, SeasonState, StaffRole } from "@/lib/types";
+import { hasFullAccess } from "@/lib/access";
 
 const ROLES: StaffRole[] = ["hc", "oc", "dc", "scout"];
 
@@ -156,7 +157,7 @@ export function Desk() {
       {season.phase === "recap" ? (
         <Recap
           season={season}
-          pro={profile.pro}
+          fullAccess={hasFullAccess(profile)}
           career={profile.active === "career"}
           onNext={advanceYear}
           onRetire={retire}
@@ -711,13 +712,13 @@ function Playoffs({ season }: { season: SeasonState }) {
 
 function Recap({
   season,
-  pro,
+  fullAccess,
   career,
   onNext,
   onRetire,
 }: {
   season: SeasonState;
-  pro: boolean;
+  fullAccess: boolean;
   career: boolean;
   onNext: () => void;
   onRetire: () => void;
@@ -743,7 +744,7 @@ function Recap({
         line={`${grade?.wins ?? 0}-${grade?.losses ?? 0}`}
         text={seasonShareText(season)}
       />
-      {pro ? (
+      {fullAccess ? (
         <div className="rounded-xl border border-white/10 bg-card p-4 text-sm">
           <p className="text-xs uppercase tracking-[0.16em] text-primary">Advanced</p>
           <p className="mt-2">Pythagorean wins {lines.pythWins}</p>
@@ -755,11 +756,7 @@ function Recap({
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Pythagorean wins and the cap sheet live on Pro.{" "}
-          <Link href="/upgrade" className="text-primary underline-offset-2 hover:underline">
-            Preview the upgrade
-          </Link>
-          .
+          Start a new season to see the advanced lines.
         </p>
       )}
       <ul className="text-sm text-muted-foreground">

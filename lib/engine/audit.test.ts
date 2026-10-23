@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createCareer, takeJob } from "@/lib/engine/career";
+import { advanceCareer, createCareer, takeJob, withJobOffers } from "@/lib/engine/career";
 import { applyAction, createSeason, ensureMinimumRoster, rolloverSeason, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
+import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
 
 function advanceTo(state: SeasonState, phase: Phase): SeasonState {
   let current = state;
@@ -16,6 +17,44 @@ function advanceTo(state: SeasonState, phase: Phase): SeasonState {
 }
 
 describe("audit regressions", () => {
+  it("opens public testing for anonymous and existing free saves without changing entitlement data", () => {
+    const anonymous = freshProfile();
+    expect(FREE_TESTING_MODE).toBe(true);
+    expect(anonymous.pro).toBe(false);
+    expect(hasFullAccess(anonymous)).toBe(true);
+
+    const savedCareer = createCareer("Existing Save", "KC", 27);
+    savedCareer.season.phase = "recap";
+    savedCareer.season.grade = { letter: "B", score: 76, round: "divisional", champ: false, wins: 11, losses: 6, pf: 390, pa: 330, headline: "Kept the job", best: "Draft", worst: "Deadline" };
+    const existing = migrateProfile(JSON.parse(JSON.stringify({ ...anonymous, active: "career", career: savedCareer })));
+
+    expect(existing.pro).toBe(false);
+    expect(hasFullAccess(existing)).toBe(true);
+    if (!existing.career) throw new Error("Existing career save was lost");
+    const yearTwo = advanceCareer(existing.career);
+    expect(yearTwo.history).toHaveLength(1);
+    expect(yearTwo.season.year).toBe(savedCareer.season.year + 1);
+    expect(yearTwo.season.phase).toBe("intro");
+  });
+
+  it("lets an existing free career accept a fired-GM job in the next year", () => {
+    const savedCareer = createCareer("Fired Save", "KC", 28);
+    savedCareer.season.year = 2031;
+    savedCareer.season.phase = "fired";
+    savedCareer.season.grade = { letter: "F", score: 34, round: "missed", champ: false, wins: 3, losses: 14, pf: 220, pa: 430, headline: "Fired", best: "Draft", worst: "Record" };
+    const existing = migrateProfile(JSON.parse(JSON.stringify({ ...freshProfile(), active: "career", career: savedCareer })));
+
+    expect(hasFullAccess(existing)).toBe(true);
+    if (!existing.career) throw new Error("Existing fired career save was lost");
+    const offered = withJobOffers(existing.career);
+    expect(offered.jobOffers).toHaveLength(3);
+    const hired = takeJob(offered, offered.jobOffers[0].teamId);
+    expect(hired.season.year).toBe(2032);
+    expect(hired.season.phase).toBe("intro");
+    expect(hired.fired).toBe(1);
+    expect(hired.jobs).toBe(2);
+  });
+
   it("round-trips and resumes from every reachable gameplay phase", () => {
     const seen = new Set<Phase>();
     let last = createSeason({ teamId: "KC", gmName: "Save Audit", seed: 1, mode: "career" });

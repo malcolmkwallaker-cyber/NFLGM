@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
 export default function SettingsPage() {
-  const { profile, ready, update, setPro } = useGame();
+  const { profile, ready, update } = useGame();
   if (!ready) return <p className="text-sm text-muted-foreground">Loading the save…</p>;
 
   return (
@@ -27,13 +27,12 @@ export default function SettingsPage() {
           onChange={(event) => update((prev) => ({ ...prev, name: event.target.value.slice(0, 32) }))}
         />
       </label>
-      <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-4 py-3 text-sm">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm">
         <span>
-          <span className="block">Pro preview</span>
-          <span className="text-xs text-muted-foreground">Same switch as the header. For testing the gate.</span>
+          <span className="block">Public playtest access</span>
+          <span className="text-xs text-muted-foreground">Career mode and the full preview are open in this build.</span>
         </span>
-        <Switch checked={profile.pro} onCheckedChange={(on) => setPro(on)} aria-label="Pro preview" />
-      </label>
+      </div>
       <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-4 py-3 text-sm">
         <span>
           <span className="block">Experimental narrative hook</span>
