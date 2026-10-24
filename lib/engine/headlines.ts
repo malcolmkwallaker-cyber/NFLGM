@@ -27,11 +27,11 @@ export function makeHeadlines(
 export function resultHeadlines(state: SeasonState, won: boolean, score: string, opp: string, rng: Rng): Headline[] {
   const team = teamLabel(teamById(state.teamId, state.directory));
   const week = `Week ${state.week}: `;
-  const previous = new Set(state.headlines.map((headline) => headline.text));
+  const withoutWeek = (line: string) => line.replace(/^Week \d+:\s*/, "");
+  const previous = new Set(state.headlines.map((headline) => withoutWeek(headline.text)));
   const pickFresh = (lines: string[]) => {
-    const contextual = lines.map((line) => `${week}${line}`);
-    const fresh = contextual.filter((line) => !previous.has(line));
-    return rng.pick(fresh.length ? fresh : contextual);
+    const fresh = lines.filter((line) => !previous.has(line));
+    return `${week}${rng.pick(fresh.length ? fresh : lines)}`;
   };
   const beat = won
     ? pickFresh([
@@ -56,7 +56,15 @@ export function resultHeadlines(state: SeasonState, won: boolean, score: string,
         `${opp} didn't steal it. ${team} handed it over.`,
       ]);
   const analytics = won
-    ? `${week}game script favored the ${team}. The down-to-down profile was ahead of the final score, not behind it.`
-    : `${week}success rate sagged after halftime. The score flatters nobody on the ${team} sideline.`;
+    ? pickFresh([
+        `Game script favored the ${team}. The down-to-down profile was ahead of the final score, not behind it.`,
+        `${team} stayed ahead of schedule often enough to make the final margin hold.`,
+        `The efficiency line backs the result: ${team} created the cleaner high-leverage snaps.`,
+      ])
+    : pickFresh([
+        `Success rate sagged after halftime. The score flatters nobody on the ${team} sideline.`,
+        `${team} spent too many downs behind schedule and never recovered the leverage.`,
+        `The efficiency line matches the loss: ${team} lost too many high-leverage snaps.`,
+      ]);
   return makeHeadlines(state, won ? "positive" : "negative", { beat, national, analytics });
 }

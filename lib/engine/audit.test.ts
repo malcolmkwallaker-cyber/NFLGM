@@ -7,6 +7,8 @@ import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
 import { gmSubject, normalizeGmName, titledGmName } from "@/lib/gm-name";
 import { capHealth, marketAsk } from "@/lib/engine/cap";
 import { effectiveOvr } from "@/lib/engine/ratings";
+import { resultHeadlines } from "@/lib/engine/headlines";
+import { makeRng } from "@/lib/engine/rng";
 
 function advanceTo(state: SeasonState, phase: Phase): SeasonState {
   let current = state;
@@ -498,5 +500,22 @@ describe("audit regressions", () => {
     expect(missed).not.toBeNull();
     expect(missed?.headlines.some((headline) => headline.text.includes("Your season had already ended."))).toBe(true);
     expect(missed?.headlines.some((headline) => headline.text.includes("leave with the trophy"))).toBe(false);
+  });
+
+  it("does not repeat substantive result headlines in consecutive weeks after save reload", () => {
+    const state = createSeason({ teamId: "CHI", gmName: "Headline Audit", seed: 504, mode: "career" });
+    state.week = 4;
+    const first = resultHeadlines(state, true, "21-10", "GB", makeRng(77));
+    const reloaded = JSON.parse(JSON.stringify({ ...state, week: 5, headlines: first })) as SeasonState;
+    const second = resultHeadlines(reloaded, true, "21-10", "GB", makeRng(77));
+    const stripWeek = (line: string) => line.replace(/^Week \d+:\s*/, "");
+
+    expect(first.every((headline) => headline.text.startsWith("Week 4: "))).toBe(true);
+    expect(second.every((headline) => headline.text.startsWith("Week 5: "))).toBe(true);
+    for (const earlier of first) {
+      const later = second.find((headline) => headline.outlet === earlier.outlet);
+      expect(later).toBeTruthy();
+      expect(stripWeek(later?.text ?? "")).not.toBe(stripWeek(earlier.text));
+    }
   });
 });
