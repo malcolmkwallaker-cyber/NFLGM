@@ -1,5 +1,5 @@
 import { priorityLabel } from "@/lib/engine/season";
-import { hofStatus } from "@/lib/engine/career";
+import { articleFor } from "@/lib/format";
 import type { CareerState } from "@/lib/types";
 
 export function writeWikipedia(career: CareerState): string {
@@ -20,10 +20,12 @@ export function writeWikipedia(career: CareerState): string {
   const trouble = fired.length
     ? `The owner pulled the job ${fired.length} time${fired.length === 1 ? "" : "s"}, including ${fired.map((s) => `${s.year} ${s.teamName}`).join(", ")}.`
     : "The file does not include a firing.";
+  const bestHeadline = best?.headline.replace(/\bsuperbowl\b/gi, "Super Bowl").replace(/[.!?]+$/, "");
   const peak = best
-    ? `The strongest grade on file is a ${best.grade} in ${best.year} with the ${best.teamName} (${best.wins}-${best.losses}, ${best.headline}).`
+    ? `The strongest grade on file is ${articleFor(best.grade)} ${best.grade} in ${best.year} with the ${best.teamName} (${best.wins}-${best.losses}, ${bestHeadline}).`
     : "No completed season is on file.";
-  const legacy = `Legacy score ${career.legacy}. Career status: ${hofStatus(career)}.`;
+  const status = career.superBowls >= 2 || career.legacy >= 140 ? "Elite legacy" : career.superBowls >= 1 || career.legacy >= 80 ? "Strong legacy" : career.history.length ? "Building a file" : "No résumé yet";
+  const legacy = `Legacy score ${career.legacy}. Career status: ${status}.`;
   const style = career.season.owner
     ? `The last owner on the file, ${career.season.owner.name}, wanted ${priorityLabel(career.season.owner.priority).toLowerCase()}.`
     : "";

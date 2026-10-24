@@ -8,7 +8,7 @@ import { interpretFreeText } from "@/lib/engine/keywords";
 import { teamRatings } from "@/lib/engine/ratings";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { clamp, hashSeed, makeRng, shuffle } from "@/lib/engine/rng";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatPlayoffRound } from "@/lib/format";
 import { normalizeGmName } from "@/lib/gm-name";
 import type {
   Action,
@@ -139,6 +139,7 @@ export function createSeason(input: {
   const year = historical?.year ?? LEAGUE_YEAR;
   const seasonLength = historical?.weeks ?? 17;
   const ownerPriority = PRIORITIES[rng.int(PRIORITIES.length)] ?? "win";
+  const ownerName = OWNERS[rng.int(OWNERS.length)] ?? "Dana Crowe";
   const strength = teamRatings(
     {
       teamId,
@@ -173,12 +174,12 @@ export function createSeason(input: {
       locker: 66,
     },
     owner: {
-      name: OWNERS[rng.int(OWNERS.length)] ?? "Dana Crowe",
+      name: ownerName,
       priority: ownerPriority,
-      note: ownerNote(ownerPriority),
+      note: ownerNote(ownerPriority, year),
     },
     staff: {},
-    market: staffMarket(rng, historical?.legends ?? []),
+    market: staffMarket(rng, historical?.legends ?? [], [ownerName]),
     directory,
     teams,
     capLimit: historical?.capLimit ?? PROJECTED_CAP,
@@ -228,18 +229,21 @@ export function createSeason(input: {
   return state;
 }
 
-function ownerNote(priority: string): string {
+function ownerNote(priority: string, year: number, previous?: { wins: number; losses: number; round: PlayoffRound }): string {
+  const context = previous
+    ? ` After ${previous.wins}-${previous.losses} and a ${previous.round === "superbowl" ? "Super Bowl appearance" : previous.round === "champion" ? "championship" : `${formatPlayoffRound(previous.round)} finish`} in ${year - 1}, the ${year} brief is specific: `
+    : `The ${year} brief is clear: `;
   switch (priority) {
     case "win":
-      return "The owner wants a championship push this year, not a pamphlet about the future.";
+      return `${context}the owner wants a championship push, not a pamphlet about the future.`;
     case "youth":
-      return "The owner is done paying for other people's primes. Draft, develop, and do not rent veterans.";
+      return `${context}draft, develop, and stop paying for other people's primes.`;
     case "stars":
-      return "The owner wants a name the city already knows. Empty seats are the enemy.";
+      return `${context}bring in a name the city knows without hollowing out the roster.`;
     case "fiscal":
-      return "The owner will live with a quiet February. The cap sheet will not.";
+      return `${context}the cap sheet must stay credible even if February is quiet.`;
     default:
-      return "The owner cares how the locker room feels on Wednesday. Talent that poisons the week is not talent.";
+      return `${context}protect the locker room; talent that poisons the week is not talent.`;
   }
 }
 
@@ -337,9 +341,9 @@ export function applyAction(state: SeasonState, action: Action): SeasonState {
 }
 
 function bump(state: SeasonState, owner = 0, fans = 0, locker = 0) {
-  state.meters.owner = clamp(Math.round(state.meters.owner + owner), 0, 100);
+  state.meters.owner = clamp(Math.round(state.meters.owner + owner), 0, 96);
   state.meters.fans = clamp(Math.round(state.meters.fans + fans), 0, 100);
-  state.meters.locker = clamp(Math.round(state.meters.locker + locker), 0, 100);
+  state.meters.locker = clamp(Math.round(state.meters.locker + locker), 0, 96);
   if (state.meters.owner <= FIRING_THRESHOLD && state.phase !== "fired" && state.phase !== "recap") {
     fire(state, "Owner confidence collapsed. The chair is already someone else's problem.");
   }
@@ -503,9 +507,29 @@ function freeAgentPool(state: SeasonState): Player[] {
   const pool: Player[] = [];
   for (const [id, team] of Object.entries(state.teams)) {
     if (id === state.teamId) continue;
+    const departures = new Set<string>();
     for (const player of team.roster) {
-      if (player.years <= 0) pool.push({ ...player, origin: id, cap: Math.round(marketAsk(player) * 1.08 * 10) / 10 });
+      if (player.years > 0) continue;
+      const rng = makeRng(hashSeed(state.seed, state.year, "cpu-retention", id, player.id));
+      const elite = player.ovr >= 90;
+      const quarterbackPremium = player.pos === "QB" && player.ovr >= 82 ? 0.08 : 0;
+      const ageDiscount = player.age >= 33 ? 0.22 : player.age >= 31 ? 0.1 : 0;
+      const retentionChance = clamp(
+        (elite ? 0.9 : player.ovr >= 86 ? 0.76 : player.ovr >= 82 ? 0.58 : player.ovr >= 76 ? 0.3 : 0.12) + quarterbackPremium - ageDiscount,
+        0.08,
+        0.98,
+      );
+      if (rng.next() < retentionChance) {
+        player.cap = Math.round(marketAsk(player) * (elite ? 1.08 : 1) * 10) / 10;
+        player.years = player.age >= 33 ? 1 : 2 + rng.int(3);
+        continue;
+      }
+      const scarcity = 1.12 + Math.max(0, player.ovr - 82) * 0.018 + (player.pos === "QB" ? 0.1 : 0);
+      pool.push({ ...player, origin: id, cap: Math.round(marketAsk(player) * scarcity * 10) / 10 });
+      departures.add(player.id);
     }
+    if (departures.size) team.roster = team.roster.filter((player) => !departures.has(player.id));
+    ensureMinimumRoster(state, id);
   }
   return pool.sort((a, b) => b.ovr - a.ovr);
 }
@@ -621,7 +645,7 @@ function doNextWave(state: SeasonState): SeasonState {
   state.headlines = makeHeadlines(state, walking.length ? "negative" : "neutral", {
     beat: walking.length ? `${walking.map((p) => p.name).join(", ")} hit the market unsigned.` : "You kept the expiring names you meant to keep.",
     national: "The phones start. Three teams think you are a seller.",
-    analytics: "Trade values use a simple chart: player rating, age, and a draft-pick scale.",
+    analytics: "Trade values weigh rating, age, position, contract control, cap cost, and draft-pick value. Young franchise quarterbacks are protected.",
   });
   return state;
 }
@@ -637,10 +661,25 @@ function makeOffers(state: SeasonState): TradeOffer[] {
   const others = state.directory.filter((t) => t.id !== state.teamId);
   return candidates.map((player, index) => {
     const from = others[rng.int(others.length)] ?? others[0];
-    const fair = index === 0 ? "bargain" : index === 1 ? "fair" : "fleece";
-    const incomingPool = (state.teams[from.id]?.roster ?? []).filter((p) => p.pos === player.pos || p.ovr < player.ovr - 4);
-    const incoming = fair === "fleece" ? null : (incomingPool[0] ? { ...incomingPool[0] } : null);
-    const pickRound = fair === "bargain" ? 2 : fair === "fair" ? 3 : 5;
+    const targetFactor = index === 0 ? 1.08 : index === 1 ? 0.9 : 0.62;
+    const outgoingValue = playerTradeValue(player);
+    const pickRound = pickRoundForTradeValue(outgoingValue * (index === 0 ? 0.35 : index === 1 ? 0.28 : 0.2));
+    const pickValue = pickTradeValue(pickRound);
+    const sourceRoster = state.teams[from.id]?.roster ?? [];
+    const sourceQuarterbacks = sourceRoster.filter((candidate) => candidate.pos === "QB").sort((a, b) => b.ovr - a.ovr);
+    const incomingPool = sourceRoster
+      .filter((candidate) => candidate.pos === player.pos || candidate.ovr <= player.ovr - 4)
+      .filter((candidate) => {
+        const protectedYoungQuarterback = candidate.pos === "QB" && candidate.age <= 27 && candidate.ovr >= 82;
+        if (protectedYoungQuarterback && (player.pos !== "QB" || player.age > 27 || player.ovr < candidate.ovr - 2)) return false;
+        if (candidate.pos === "QB" && sourceQuarterbacks[0]?.id === candidate.id && sourceQuarterbacks.length <= 2) return false;
+        return playerTradeValue(candidate) + pickValue <= outgoingValue * targetFactor;
+      })
+      .sort((a, b) => playerTradeValue(b) - playerTradeValue(a));
+    const incoming = index === 2 ? null : incomingPool[0] ? { ...incomingPool[0] } : null;
+    const returnValue = pickValue + (incoming ? playerTradeValue(incoming) : 0);
+    const ratio = returnValue / Math.max(1, outgoingValue);
+    const fair: TradeOffer["fair"] = ratio >= 1.02 ? "bargain" : ratio >= 0.72 ? "fair" : "fleece";
     return {
       id: `offer-${player.id}`,
       fromTeamId: from.id,
@@ -658,6 +697,34 @@ function makeOffers(state: SeasonState): TradeOffer[] {
       fair,
     };
   });
+}
+
+const TRADE_POSITION_MULTIPLIER: Record<Pos, number> = {
+  QB: 1.65, EDGE: 1.18, WR: 1.08, CB: 1.02, OL: 1, DL: 0.96,
+  LB: 0.88, S: 0.84, TE: 0.78, RB: 0.65, K: 0.18,
+};
+
+export function playerTradeValue(player: Player): number {
+  const ageFactor = player.age <= 24 ? 1.2 : player.age <= 28 ? 1.08 : player.age <= 30 ? 0.94 : player.age <= 32 ? 0.76 : player.age <= 34 ? 0.54 : 0.34;
+  const controlFactor = player.years <= 0 ? 0.68 : player.years === 1 ? 0.86 : player.years >= 3 ? 1.1 : 1;
+  const market = Math.max(1, marketAsk(player));
+  const contractFactor = clamp(market / Math.max(1, player.cap), 0.72, 1.22);
+  const quality = Math.pow(Math.max(1, player.ovr - 58), 1.45);
+  return Math.round(quality * TRADE_POSITION_MULTIPLIER[player.pos] * ageFactor * controlFactor * contractFactor);
+}
+
+export function pickTradeValue(round: number): number {
+  return ({ 1: 82, 2: 48, 3: 29, 4: 18, 5: 11, 6: 7, 7: 4 } as Record<number, number>)[round] ?? 0;
+}
+
+function pickRoundForTradeValue(value: number): number {
+  if (value >= 82) return 1;
+  if (value >= 48) return 2;
+  if (value >= 29) return 3;
+  if (value >= 18) return 4;
+  if (value >= 11) return 5;
+  if (value >= 7) return 6;
+  return 7;
 }
 
 function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonState {
@@ -702,16 +769,17 @@ function doShop(state: SeasonState, playerId: string): SeasonState {
   if (!player) throw new Error("Not on the roster");
   const rng = makeRng(hashSeed(state.seed, "shop", playerId));
   const from = state.directory.filter((t) => t.id !== state.teamId)[rng.int(state.directory.length - 1)];
+  const pickRound = pickRoundForTradeValue(playerTradeValue(player) * 0.72);
   state.shop = {
     id: `shop-${player.id}`,
     fromTeamId: from?.id ?? "SF",
     wantId: player.id,
     wantName: player.name,
     incoming: null,
-    pickRound: player.ovr >= 85 ? 1 : player.ovr >= 78 ? 2 : 3,
+    pickRound,
     pickYear: state.year + 1,
-    blurb: `${from?.abbr ?? "A rival"} will give you a round ${player.ovr >= 85 ? 1 : player.ovr >= 78 ? 2 : 3} next year. No player coming back.`,
-    fair: player.ovr >= 86 ? "fleece" : "fair",
+    blurb: `${from?.abbr ?? "A rival"} will give you a round ${pickRound} next year. No player coming back. Age, position, contract control, and draft value all shape the return.`,
+    fair: pickTradeValue(pickRound) >= playerTradeValue(player) * 0.78 ? "fair" : "fleece",
   };
   state.shopUsed = true;
   return state;
@@ -974,13 +1042,43 @@ export function suggestedCuts(state: SeasonState): string[] {
   const roster = yourRoster(state);
   const extra = roster.length - 26;
   if (extra <= 0) return [];
-  const qbs = roster.filter((p) => p.pos === "QB").sort((a, b) => b.ovr - a.ovr);
-  const protect = new Set<string>([qbs[0]?.id ?? ""]);
-  return roster
-    .filter((p) => !protect.has(p.id))
-    .sort((a, b) => a.ovr - b.ovr || b.cap - a.cap)
-    .slice(0, extra)
-    .map((p) => p.id);
+  const minimums: Partial<Record<Pos, number>> = {
+    QB: 2, RB: 2, WR: 3, TE: 1, OL: 3,
+    DL: 2, EDGE: 2, LB: 2, CB: 3, S: 2, K: 1,
+  };
+  const keep = new Set<string>();
+  const keptByPosition = new Map<Pos, number>();
+  for (const [pos, minimum] of Object.entries(minimums) as [Pos, number][]) {
+    roster
+      .filter((player) => player.pos === pos)
+      .sort((a, b) => b.ovr - a.ovr || a.cap - b.cap)
+      .slice(0, minimum)
+      .forEach((player) => {
+        keep.add(player.id);
+        keptByPosition.set(pos, (keptByPosition.get(pos) ?? 0) + 1);
+      });
+  }
+  const target = Math.min(26, roster.length);
+  const depth = roster
+    .filter((player) => !keep.has(player.id))
+    .sort((a, b) => {
+      const value = (player: Player) => {
+        if (player.pos === "K" && (keptByPosition.get("K") ?? 0) >= 1) return -100;
+        const surplus = Math.max(0, (keptByPosition.get(player.pos) ?? 0) - (minimums[player.pos] ?? 0));
+        return player.ovr - surplus * 4 - player.cap * 0.03;
+      };
+      return value(b) - value(a);
+    });
+  for (const player of depth) {
+    if (keep.size >= target) break;
+    if (player.pos === "K" && (keptByPosition.get("K") ?? 0) >= 1) continue;
+    keep.add(player.id);
+    keptByPosition.set(player.pos, (keptByPosition.get(player.pos) ?? 0) + 1);
+  }
+  if (keep.size < target) {
+    roster.filter((player) => !keep.has(player.id)).slice(0, target - keep.size).forEach((player) => keep.add(player.id));
+  }
+  return roster.filter((player) => !keep.has(player.id)).map((player) => player.id);
 }
 
 function doCampSelection(state: SeasonState, cutIds: string[]): SeasonState {
@@ -1072,15 +1170,17 @@ function injuryDecision(state: SeasonState): Decision | null {
 
 function ownerCheckpoint(state: SeasonState): Decision {
   const record = teamRecord(state, state.teamId);
+  const comfortablyAhead = record.wins >= record.losses + 2;
+  const patienceOwner = state.owner.priority === "win" ? -2 : comfortablyAhead ? 1 : -1;
   return {
     id: "owner-check",
     kicker: "Midseason",
     title: `${state.owner.name} wants an answer`,
     body: `You are ${record.wins}-${record.losses}. The owner's priority is still ${priorityLabel(state.owner.priority).toLowerCase()}. This is the meeting that shows up in December if it goes badly.`,
     options: [
-      { id: "patience", label: "Ask for patience", detail: "The plan needs the second half.", owner: state.owner.priority === "win" ? -4 : 4, fans: -1, locker: 1, log: "Asked the owner for patience at midseason.", swing: state.owner.priority === "win" ? -3 : 3 },
-      { id: "push", label: "Promise a harder push", detail: "You will spend and you will chase wins.", owner: state.owner.priority === "win" ? 5 : -2, fans: 2, locker: 0, log: "Promised the owner a harder second half.", tag: "mod:0.4", swing: 2 },
-      { id: "standard", label: "Defend the standard, not the record", detail: "You will not torch the locker room to save a Tuesday.", owner: 1, fans: 0, locker: 3, log: "Defended the culture at the midseason meeting.", swing: 2 },
+      { id: "patience", label: "Ask for patience", detail: "The plan needs the second half.", owner: patienceOwner, fans: -1, locker: 1, log: "Asked the owner for patience at midseason.", swing: patienceOwner },
+      { id: "push", label: "Promise a harder push", detail: "You will spend and you will chase wins.", owner: state.owner.priority === "win" ? 2 : -1, fans: 2, locker: 0, log: "Promised the owner a harder second half.", tag: "mod:0.4", swing: 1 },
+      { id: "standard", label: "Defend the standard, not the record", detail: "You will not torch the locker room to save a Tuesday.", owner: 0, fans: 0, locker: 2, log: "Defended the culture at the midseason meeting.", swing: 1 },
     ],
   };
 }
@@ -1243,8 +1343,12 @@ function doPlayWeek(state: SeasonState): SeasonState {
         won,
       };
       const margin = yoursScore - oppScore;
-      bump(state, won ? 3 : -3, won ? 3 : -3, won ? 1 : -1);
-      if (margin >= 14) bump(state, 1, 2, 1);
+      const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
+      const weakQuarterback = !bestQuarterback || bestQuarterback.ovr < 70;
+      const unusedCap = state.capMode === "hard" && capSpace(state) >= 25;
+      const ownerDelta = won ? 1 : -2 - (weakQuarterback ? 1 : 0) - (unusedCap ? 1 : 0);
+      bump(state, ownerDelta, won ? 2 : -2, won ? 1 : -1);
+      if (margin >= 14) bump(state, 0, 1, 1);
       if (margin <= -14) bump(state, -1, -1, -1);
     }
   }
@@ -1264,7 +1368,7 @@ function expectedPoints(off: number, def: number): number {
   return clamp(15 + (off - def) * 0.58 + (off - 78) * 0.15, 8, 38);
 }
 
-const LADDER = [0, 3, 6, 7, 10, 13, 14, 17, 20, 21, 23, 24, 27, 28, 31, 34, 35, 38];
+const LADDER = [0, 3, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 40, 41, 42, 44, 45];
 
 function snapScore(n: number): number {
   let best = 0;
@@ -1283,9 +1387,10 @@ function simulateMatch(state: SeasonState, home: string, away: string, key: stri
   const rng = makeRng(hashSeed(state.seed, state.year, key, home, away));
   const hr = teamRatings(state, home);
   const ar = teamRatings(state, away);
-  const variance = state.mode === "historical" ? 26 : 10;
-  let homeScore = snapScore(expectedPoints(hr.off, ar.def) + 1.6 + (rng.next() - 0.5) * variance);
-  let awayScore = snapScore(expectedPoints(ar.off, hr.def) + (rng.next() - 0.5) * variance);
+  const variance = state.mode === "historical" ? 22 : 18;
+  const noise = () => (rng.next() + rng.next() + rng.next() - 1.5) * variance;
+  let homeScore = snapScore(expectedPoints(hr.off, ar.def) + 1.6 + noise());
+  let awayScore = snapScore(expectedPoints(ar.off, hr.def) + noise());
   if (homeScore === awayScore) {
     const lean = 0.5 + (hr.off + hr.def - ar.off - ar.def) / 80;
     if (rng.next() < lean) homeScore += 3;
@@ -1452,9 +1557,9 @@ function doPlayoff(state: SeasonState): SeasonState {
       bump(state, -2, -2, -1);
       playoff.userAlive = false;
       state.flags.exitRound = game.round;
-      state.log.push(`Season ended in the ${game.round}: ${played.homeScore}-${played.awayScore}.`);
+      state.log.push(`Season ended in the ${formatPlayoffRound(game.round)}: ${played.homeScore}-${played.awayScore}.`);
     }
-    if (state.teamId === winner) state.log.push(`Won the ${game.round} ${Math.max(played.homeScore, played.awayScore)}-${Math.min(played.homeScore, played.awayScore)}.`);
+    if (state.teamId === winner) state.log.push(`Won the ${formatPlayoffRound(game.round)} ${Math.max(played.homeScore, played.awayScore)}-${Math.min(played.homeScore, played.awayScore)}.`);
   }
   if (!playoff.userAlive) {
     simRemainingBracket(state);
@@ -1563,6 +1668,14 @@ function toRecap(state: SeasonState): SeasonState {
   if (!bestQuarterback || bestQuarterback.ovr < 70) {
     state.meters.owner = clamp(state.meters.owner - 8, 0, 100);
   }
+  if (record.wins <= 6) {
+    const performancePenalty = 6 + (6 - record.wins) * 2 + (state.owner.priority === "win" ? 3 : 0);
+    state.meters.owner = clamp(state.meters.owner - performancePenalty, 0, 100);
+  }
+  if (state.meters.owner <= FIRING_THRESHOLD) {
+    fire(state, `A ${record.wins}-${record.losses} finish, unresolved roster needs, and lost owner confidence ended the job.`);
+    return state;
+  }
   state.phase = "recap";
   state.grade = buildGrade(state, false);
   const champ = state.playoff?.champion;
@@ -1609,7 +1722,7 @@ function buildGrade(state: SeasonState, fired: boolean) {
       ? "The season ended in the owner's office."
       : round === "missed"
         ? `${record.wins}-${record.losses} and a quiet January.`
-        : `Out in the ${round}.`;
+        : `Out in the ${formatPlayoffRound(round)}.`;
   return {
     letter: letterFor(score),
     score,
@@ -1727,6 +1840,11 @@ export function divisionTable(state: SeasonState): StandingRow[] {
 
 export function rolloverSeason(state: SeasonState): SeasonState {
   const next = clone(state);
+  const previous = {
+    wins: state.grade?.wins ?? teamRecord(state, state.teamId).wins,
+    losses: state.grade?.losses ?? teamRecord(state, state.teamId).losses,
+    round: state.grade?.round ?? exitRound(state),
+  };
   const rng = makeRng(hashSeed(state.seed, "age", state.year + 1));
   next.year += 1;
   next.phase = "intro";
@@ -1786,6 +1904,7 @@ export function rolloverSeason(state: SeasonState): SeasonState {
     hashSeed(next.seed, next.year),
   );
   next.flags = { plan: state.flags.plan ?? "balance" };
+  next.owner.note = ownerNote(next.owner.priority, next.year, previous);
   next.log = [`${next.year}: ${next.owner.name} wants the plan again.`];
   next.headlines = makeHeadlines(next, "neutral", {
     beat: `Year ${next.year}. The owner already has a version of this meeting on the calendar.`,

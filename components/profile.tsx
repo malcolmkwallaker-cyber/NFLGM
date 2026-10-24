@@ -2,10 +2,9 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { advanceCareer, createCareer, summarize, takeJob, withJobOffers } from "@/lib/engine/career";
+import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
 import { advanceDailyProgress, challengeForDate, optionById } from "@/lib/engine/daily";
 import { applyAction, createSeason } from "@/lib/engine/season";
-import { writeWikipedia } from "@/lib/engine/wikipedia";
 import { freshProfile, loadProfile, saveProfile } from "@/lib/storage";
 import type { Action, DailyResult, Profile, SeasonState } from "@/lib/types";
 import {
@@ -261,28 +260,11 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const retire = useCallback(() => {
     if (!acquireInteractionLock()) return;
-    update((prev) => {
-      if (!prev.career) return prev;
-      let career = prev.career;
-      const phase = career.season.phase;
-      const already = career.history.some(
-        (row) => row.year === career.season.year && row.teamId === career.season.teamId,
-      );
-      if ((phase === "recap" || phase === "fired") && !already) {
-        const summary = summarize(career.season);
-        career = {
-          ...career,
-          legacy: career.legacy + summary.legacy,
-          superBowls: career.superBowls + (summary.champ ? 1 : 0),
-          fired: career.fired + (summary.fired ? 1 : 0),
-          history: [...career.history, summary],
-        };
-      }
-      const retired = { ...career, status: "retired" as const, wikipedia: "" };
-      retired.wikipedia = writeWikipedia(retired);
-      return { ...prev, career: retired };
-    });
-  }, [acquireInteractionLock, update]);
+    setError(null);
+    if (!currentProfile.career) return;
+    commitProfile({ ...currentProfile, career: retireCareer(currentProfile.career), active: "career" });
+    router.push("/career");
+  }, [acquireInteractionLock, router]);
 
   const playDaily = useCallback(
     (optionId: string, day: string) => {

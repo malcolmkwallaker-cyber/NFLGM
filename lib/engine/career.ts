@@ -3,6 +3,7 @@ import { teamRatings } from "@/lib/engine/ratings";
 import { createSeason, rolloverSeason } from "@/lib/engine/season";
 import type { CareerState, SeasonState, SeasonSummary } from "@/lib/types";
 import { normalizeGmName } from "@/lib/gm-name";
+import { writeWikipedia } from "@/lib/engine/wikipedia";
 
 export function legacyFor(summary: Pick<SeasonSummary, "wins" | "champ" | "round" | "fired" | "gradeScore">): number {
   let points = summary.wins;
@@ -53,6 +54,26 @@ export function createCareer(gmName: string, teamId: string, seed?: number): Car
     wikipedia: null,
     jobOffers: [],
   };
+}
+
+export function retireCareer(career: CareerState): CareerState {
+  if (career.status === "retired" && career.wikipedia) return career;
+  let next = career;
+  const phase = career.season.phase;
+  const already = career.history.some((row) => row.year === career.season.year && row.teamId === career.season.teamId);
+  if ((phase === "recap" || phase === "fired") && !already) {
+    const summary = summarize(career.season);
+    next = {
+      ...career,
+      legacy: career.legacy + summary.legacy,
+      superBowls: career.superBowls + (summary.champ ? 1 : 0),
+      fired: career.fired + (summary.fired ? 1 : 0),
+      history: [...career.history, summary],
+    };
+  }
+  const retired = { ...next, status: "retired" as const, wikipedia: "" };
+  retired.wikipedia = writeWikipedia(retired);
+  return retired;
 }
 
 export function advanceCareer(career: CareerState): CareerState {

@@ -15,7 +15,7 @@ import { seasonShareText } from "@/lib/share";
 import { advancedLines, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
-import { formatContractYears, formatMoney } from "@/lib/format";
+import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
 import { titledGmName } from "@/lib/gm-name";
 
 const ROLES: StaffRole[] = ["hc", "oc", "dc", "scout"];
@@ -370,7 +370,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
       <p className="text-sm text-muted-foreground">
         {season.faWave === 1
           ? "Your expiring players come first. Re-sign one, use your one franchise tag, or let him reach the market."
-          : "Outside free agents. The board includes an affordable option when the market has one."}
+          : "Outside free agents after CPU-team retention. Elite starters are scarce and carry market premiums; the board includes an affordable option when one exists."}
       </p>
       {!bestQuarterbackUnderContract || bestQuarterbackUnderContract.ovr < 70 ? (
         <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-amber-100">
@@ -746,7 +746,7 @@ function Playoffs({ season }: { season: SeasonState }) {
   const yours = playoff?.pending.find((game) => game.home === season.teamId || game.away === season.teamId);
   return (
     <section className="space-y-3 rounded-2xl border border-white/10 bg-card p-4">
-      <p className="text-xs uppercase tracking-[0.16em] text-primary">{playoff?.round}</p>
+      <p className="text-xs uppercase tracking-[0.16em] text-primary">{playoff ? formatPlayoffRound(playoff.round) : "Playoffs"}</p>
       <h2 className="font-display text-3xl tracking-wide">{playoff?.bye && !yours ? "You have the bye" : "The bracket is live"}</h2>
       <ul className="space-y-1 text-sm">
         {(playoff?.seeds.AFC ?? []).map((seed) => (
@@ -792,7 +792,7 @@ function Recap({
   const rows = standings(season).slice(0, 8);
   const superBowl = season.results.find((game) => game.round === "superbowl");
   const playedSuperBowl = Boolean(superBowl && (superBowl.home === season.teamId || superBowl.away === season.teamId));
-  const finish = grade?.champ ? "Champion" : grade?.round === "missed" ? "Missed playoffs" : grade?.round ?? "Season complete";
+  const finish = grade?.champ ? "Champion" : grade?.round === "missed" ? "Missed playoffs" : grade?.round ? formatPlayoffRound(grade.round) : "Season complete";
   const drivers = seasonDrivers(season);
   return (
     <section className="space-y-4">

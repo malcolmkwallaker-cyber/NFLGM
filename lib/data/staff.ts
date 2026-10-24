@@ -26,13 +26,14 @@ const POOL: StaffMember[] = [
   { id: "mckay", name: "Bill McKay", role: "scout", scheme: "Defense", leadership: 4, development: 2, aggression: 3, culture: 3, cost: 2, blurb: "A former coach. Great on fit, average on projection." },
 ];
 
-export function staffMarket(rng: Rng, legends: StaffMember[] = []): Record<StaffRole, StaffMember[]> {
+export function staffMarket(rng: Rng, legends: StaffMember[] = [], reservedNames: string[] = []): Record<StaffRole, StaffMember[]> {
   const roles: StaffRole[] = ["hc", "oc", "dc", "scout"];
   const market = {} as Record<StaffRole, StaffMember[]>;
+  const reservedSurnames = new Set(reservedNames.map((name) => name.trim().split(/\s+/).at(-1)?.toLowerCase()).filter(Boolean));
   for (const role of roles) {
     const legend = legends.find((s) => s.role === role);
     const pool = shuffle(
-      POOL.filter((s) => s.role === role && s.id !== legend?.id),
+      POOL.filter((s) => s.role === role && s.id !== legend?.id && !reservedSurnames.has(s.name.split(/\s+/).at(-1)?.toLowerCase())),
       rng,
     );
     const picked = pool.slice(0, legend ? 2 : 3);

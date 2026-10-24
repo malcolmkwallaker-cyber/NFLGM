@@ -201,6 +201,33 @@ describe("career", () => {
     expect(retrospective).toContain("2029");
     expect(retrospective).toContain("Morgan Lee");
   });
+
+  it("keeps a seeded two-season Giants career competitive without making perfection or job safety automatic", () => {
+    let completedSecondSeasons = 0;
+    let undefeatedSecondSeasons = 0;
+    let firings = 0;
+    for (let seed = 1; seed <= 40; seed += 1) {
+      let career = createCareer("Giants Regression", "NYG", seed);
+      career.season = simulateUntil(career.season, "recap");
+      if (career.season.phase === "fired") {
+        firings += 1;
+        continue;
+      }
+      career = advanceCareer(career);
+      expect(career.history).toHaveLength(1);
+      expect(career.season.year).toBe(2028);
+      career.season = simulateUntil(career.season, "recap");
+      if (career.season.phase === "fired") {
+        firings += 1;
+        continue;
+      }
+      completedSecondSeasons += 1;
+      if (career.season.grade?.losses === 0) undefeatedSecondSeasons += 1;
+    }
+    expect(completedSecondSeasons).toBeGreaterThan(30);
+    expect(undefeatedSecondSeasons).toBeLessThanOrEqual(2);
+    expect(firings).toBeGreaterThan(0);
+  }, 15_000);
 });
 
 describe("text and shares", () => {

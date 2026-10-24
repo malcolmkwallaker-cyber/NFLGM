@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { advanceCareer, createCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, capSpace, createSeason, ensureMinimumRoster, payroll, rolloverSeason, seasonDrivers, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
+import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
+import { applyAction, capSpace, createSeason, ensureMinimumRoster, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
 import { normalizeGmName, titledGmName } from "@/lib/gm-name";
+import { marketAsk } from "@/lib/engine/cap";
 
 function advanceTo(state: SeasonState, phase: Phase): SeasonState {
   let current = state;
@@ -136,6 +137,28 @@ describe("audit regressions", () => {
     expect(state.tradeOffers.every((offer) => Boolean(offer.incoming || offer.pickRound))).toBe(true);
   });
 
+  it("values age, position, contract control, and protects young franchise quarterbacks in trade calls", () => {
+    const base = createSeason({ teamId: "NYG", gmName: "Trade Value Audit", seed: 225 });
+    const winston = base.teams.NYG.roster.find((player) => player.name === "Jameis Winston");
+    const maye = base.teams.NE.roster.find((player) => player.name === "Drake Maye");
+    if (!winston || !maye) throw new Error("Quarterback trade fixtures missing");
+    expect(playerTradeValue(maye)).toBeGreaterThan(playerTradeValue(winston) * 2);
+
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const state = advanceTo(createSeason({ teamId: "NYG", gmName: "Trade Guard", seed }), "trade");
+      for (const offer of state.tradeOffers) {
+        const outgoing = state.teams.NYG.roster.find((player) => player.id === offer.wantId);
+        if (!outgoing || !offer.incoming) continue;
+        const protectedYoungQuarterback = offer.incoming.pos === "QB" && offer.incoming.age <= 27 && offer.incoming.ovr >= 82;
+        if (protectedYoungQuarterback) {
+          expect(outgoing.pos).toBe("QB");
+          expect(outgoing.age).toBeLessThanOrEqual(27);
+          expect(outgoing.ovr).toBeGreaterThanOrEqual(offer.incoming.ovr - 2);
+        }
+      }
+    }
+  });
+
   it("normalizes blank and already-titled GM names without duplicate labels", () => {
     expect(normalizeGmName("   ")).toBe("GM");
     expect(titledGmName("GM")).toBe("GM");
@@ -184,6 +207,24 @@ describe("audit regressions", () => {
     expect(new Set(state.teams.KC.roster.map((player) => player.id)).size).toBe(22);
   });
 
+  it("suggests balanced cuts instead of keeping redundant specialists over receivers", () => {
+    const state = createSeason({ teamId: "NYG", gmName: "Cut Balance", seed: 226 });
+    const roster = state.teams.NYG.roster;
+    roster.filter((player) => player.pos === "WR").forEach((player) => { player.ovr = 61; });
+    roster.push(
+      { id: "extra-k", name: "Second Kicker", pos: "K", ovr: 92, age: 25, cap: 1, years: 2, potential: 92, real: false },
+      { id: "extra-te-a", name: "Extra Tight End A", pos: "TE", ovr: 90, age: 25, cap: 2, years: 2, potential: 90, real: false },
+      { id: "extra-te-b", name: "Extra Tight End B", pos: "TE", ovr: 89, age: 25, cap: 2, years: 2, potential: 89, real: false },
+    );
+    while (roster.length < 32) roster.push({ id: `depth-wr-${roster.length}`, name: `Depth Receiver ${roster.length}`, pos: "WR", ovr: 60, age: 24, cap: 1, years: 2, potential: 64, real: false });
+    const cuts = new Set(suggestedCuts(state));
+    const kept = roster.filter((player) => !cuts.has(player.id));
+    expect(kept).toHaveLength(26);
+    expect(kept.filter((player) => player.pos === "K")).toHaveLength(1);
+    expect(kept.filter((player) => player.pos === "WR").length).toBeGreaterThanOrEqual(3);
+    expect(kept.some((player) => player.pos === "QB")).toBe(true);
+  });
+
   it("allows only one restructure per player per season", () => {
     const state = createSeason({ teamId: "KC", gmName: "Contract Audit", seed: 22 });
     state.phase = "cap";
@@ -216,6 +257,7 @@ describe("audit regressions", () => {
   it("uses a stable free-agent pool across waves", () => {
     let state = advanceTo(createSeason({ teamId: "KC", gmName: "FA Audit", seed: 23 }), "fa");
     expect(state.faPool?.length).toBeGreaterThanOrEqual(8);
+    expect((state.faPool ?? []).every((player) => !player.origin || !state.teams[player.origin]?.roster.some((candidate) => candidate.id === player.id))).toBe(true);
     state.capMode = "payroll";
     state = applyAction(state, { type: "next-wave" });
     const firstOutsideWave = state.faBoard.map((player) => player.id);
@@ -223,6 +265,95 @@ describe("audit regressions", () => {
     state = applyAction(state, { type: "sign", playerId: first.id });
     state = applyAction(state, { type: "next-wave" });
     expect(state.faBoard.every((player) => !firstOutsideWave.includes(player.id))).toBe(true);
+  });
+
+  it("makes elite outside free agents scarce and charges a market premium", () => {
+    let allThreeAvailable = 0;
+    for (let seed = 1; seed <= 50; seed += 1) {
+      let state = rolloverSeason(createSeason({ teamId: "NYG", gmName: "Scarcity Audit", seed, mode: "career" }));
+      state = advanceTo(state, "fa");
+      const eliteNames = new Set((state.faPool ?? []).filter((player) => ["Lamar Jackson", "Fred Warner", "Derrick Henry"].includes(player.name)).map((player) => player.name));
+      if (eliteNames.size === 3) allThreeAvailable += 1;
+      for (const player of state.faPool ?? []) {
+        if (player.ovr >= 90) expect(player.cap).toBeGreaterThanOrEqual(marketAsk({ ...player, cap: 0.9 }) * 1.1);
+      }
+    }
+    expect(allThreeAvailable).toBe(0);
+  });
+
+  it("keeps owner changes bounded and makes poor roster management a firing risk", () => {
+    let state = advanceTo(createSeason({ teamId: "NYG", gmName: "Meter Audit", seed: 227 }), "regular");
+    while (state.phase === "regular" && state.week < 9) {
+      const action = suggestAction(state);
+      if (!action) throw new Error("No regular-season action");
+      state = applyAction(state, action);
+    }
+    expect(state.activeDecision?.id).toBe("owner-check");
+    state.meters.owner = 80;
+    const afterPatience = applyAction(state, { type: "decide", choiceId: "patience" });
+    expect(afterPatience.meters.owner).toBeLessThanOrEqual(81);
+
+    const bad = createSeason({ teamId: "NYG", gmName: "Hot Seat Season", seed: 228, mode: "career" });
+    bad.phase = "regular";
+    bad.activeDecision = null;
+    bad.week = 17;
+    bad.meters.owner = 22;
+    bad.teams.NYG.roster = bad.teams.NYG.roster.filter((player) => player.pos !== "QB");
+    bad.capLimit = payroll(bad.teams.NYG.roster) + bad.deadMoney + 30;
+    bad.teamMod = -30;
+    for (const [teamId, team] of Object.entries(bad.teams)) {
+      if (teamId === "NYG") continue;
+      team.lockOff = 99;
+      team.lockDef = 99;
+    }
+    const finished = applyAction(bad, { type: "play-week" });
+    expect(["fired", "playoffs", "recap"]).toContain(finished.phase);
+    expect(finished.meters.owner).toBeLessThan(22);
+  });
+
+  it("varies score lines across seeded seasons without breaking deterministic replay", () => {
+    const seasons = Array.from({ length: 24 }, (_, index) => simulateUntil(createSeason({ teamId: "NYG", gmName: "Score Audit", seed: index + 400 }), "recap"));
+    const distinctCounts = seasons.map((season) => {
+      const scoreLines = season.results
+        .filter((result) => result.round === "regular" && (result.home === "NYG" || result.away === "NYG"))
+        .map((result) => `${result.homeScore}-${result.awayScore}`);
+      return new Set(scoreLines).size;
+    });
+    expect(distinctCounts.reduce((sum, count) => sum + count, 0) / distinctCounts.length).toBeGreaterThan(10);
+    const replayA = simulateUntil(createSeason({ teamId: "NYG", gmName: "Score Replay", seed: 499 }), "recap");
+    const replayB = simulateUntil(createSeason({ teamId: "NYG", gmName: "Score Replay", seed: 499 }), "recap");
+    expect(replayB.results).toEqual(replayA.results);
+  });
+
+  it("retires once, includes the completed year, and writes clean Super Bowl and A+ copy", () => {
+    const career = createCareer("Retire Audit", "NYG", 229);
+    career.season.phase = "recap";
+    career.season.grade = { letter: "A+", score: 96, round: "superbowl", champ: false, wins: 17, losses: 0, pf: 500, pa: 210, headline: "Out in the Super Bowl.", best: "Draft", worst: "Final" };
+    const retired = retireCareer(career);
+    const repeated = retireCareer(retired);
+    expect(retired.status).toBe("retired");
+    expect(retired.history).toHaveLength(1);
+    expect(retired.wikipedia).toContain("an A+");
+    expect(retired.wikipedia).toContain("Super Bowl");
+    expect(retired.wikipedia).not.toContain(".).");
+    expect(repeated).toEqual(retired);
+  });
+
+  it("writes a year-aware owner brief and avoids owner/staff surname collisions", () => {
+    for (let seed = 1; seed <= 50; seed += 1) {
+      const career = createCareer("Brief Audit", "NYG", seed);
+      const ownerSurname = career.season.owner.name.split(" ").at(-1);
+      const staffSurnames = Object.values(career.season.market).flat().map((member) => member.name.split(" ").at(-1));
+      expect(staffSurnames).not.toContain(ownerSurname);
+    }
+    const career = createCareer("Brief Audit", "NYG", 230);
+    const firstBrief = career.season.owner.note;
+    career.season.phase = "recap";
+    career.season.grade = { letter: "B", score: 75, round: "divisional", champ: false, wins: 11, losses: 6, pf: 400, pa: 330, headline: "Divisional finish", best: "Draft", worst: "Cap" };
+    const next = advanceCareer(career);
+    expect(next.season.owner.note).not.toBe(firstBrief);
+    expect(next.season.owner.note).toContain("2028");
+    expect(next.season.owner.note).toContain("11-6");
   });
 
   it("offers expiring stars before the outside market and supports one franchise tag", () => {

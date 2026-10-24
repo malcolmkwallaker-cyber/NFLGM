@@ -5,6 +5,7 @@ import { TeamPicker } from "@/components/game/team-picker";
 import { useGame } from "@/components/profile";
 import { hofStatus } from "@/lib/engine/career";
 import { Button } from "@/components/ui/button";
+import { formatPlayoffRound } from "@/lib/format";
 
 export default function CareerPage() {
   const { profile, ready, startCareer, resumeSave } = useGame();
@@ -36,7 +37,7 @@ export default function CareerPage() {
                   {row.year} {row.teamName}
                 </span>
                 <span className="mt-1 block text-muted-foreground">
-                  {row.wins}-{row.losses} · {row.champ ? "Champion" : row.round} · {row.grade}
+                  {row.wins}-{row.losses} · {row.champ ? "Champion" : formatPlayoffRound(row.round)} · {row.grade}
                   {row.fired ? " · fired" : ""} · legacy {row.legacy}
                 </span>
               </li>

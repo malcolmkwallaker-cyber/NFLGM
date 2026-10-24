@@ -5,6 +5,7 @@ import { useGame } from "@/components/profile";
 import { Button } from "@/components/ui/button";
 import { scoreHistoricTurnaround } from "@/lib/engine/historic-turnaround";
 import { useTodayTurnaround } from "@/components/game/use-today-turnaround";
+import { formatPlayoffRound } from "@/lib/format";
 
 export function TurnaroundClient() {
   const today = useTodayTurnaround();
@@ -59,7 +60,7 @@ export function TurnaroundClient() {
         <section className="rounded-xl border border-primary/30 bg-card p-5" data-testid="turnaround-result">
           <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Your simulated result</p>
           <p className="mt-2 font-display text-6xl leading-none tracking-wide">{score.total}</p>
-          <p className="mt-2 text-sm">{complete.grade.wins}-{complete.grade.losses} · {complete.grade.round} · grade {complete.grade.letter}</p>
+          <p className="mt-2 text-sm">{complete.grade.wins}-{complete.grade.losses} · {formatPlayoffRound(complete.grade.round)} · grade {complete.grade.letter}</p>
           <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
             400 base {signed(score.winImprovement)} normalized win improvement {signed(score.playoffBonus)} playoffs {signed(score.gradeAdjustment)} GM grade {signed(score.ownerAdjustment)} owner confidence.
           </p>
