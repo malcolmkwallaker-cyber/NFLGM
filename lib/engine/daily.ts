@@ -1,4 +1,5 @@
 import { DAILY_CHALLENGES } from "@/lib/data/daily-challenges";
+import { hashSeed } from "@/lib/engine/rng";
 import type { DailyChallenge, DailyOption, GradeColor } from "@/lib/types";
 
 export const DAILY_EPOCH = Date.UTC(2026, 2, 11);
@@ -27,6 +28,12 @@ export function challengeForDate(date = new Date()): { challenge: DailyChallenge
 
 export function optionById(challenge: DailyChallenge, optionId: string): DailyOption {
   return challenge.options.find((o) => o.id === optionId) ?? challenge.options[0];
+}
+
+export function dailyOptionOrder(challenge: DailyChallenge, day: string): DailyOption[] {
+  return challenge.options
+    .slice()
+    .sort((a, b) => hashSeed(day, challenge.id, a.id) - hashSeed(day, challenge.id, b.id));
 }
 
 export function percentileFor(challenge: DailyChallenge, optionId: string): number {

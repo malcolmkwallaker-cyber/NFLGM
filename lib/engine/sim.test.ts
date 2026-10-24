@@ -3,13 +3,13 @@ import { DAILY_CHALLENGES } from "@/lib/data/daily-challenges";
 import { HISTORICAL } from "@/lib/data/historical";
 import { TEAMS } from "@/lib/data/teams";
 import { advanceCareer, createCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advanceDailyProgress, challengeForDate, percentileFor, puzzleNumber } from "@/lib/engine/daily";
+import { advanceDailyProgress, challengeForDate, dailyOptionOrder, percentileFor, puzzleNumber } from "@/lib/engine/daily";
 import { interpretFreeText } from "@/lib/engine/keywords";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { applyAction, capSpace, createSeason, simulateUntil, standings } from "@/lib/engine/season";
 import { writeWikipedia } from "@/lib/engine/wikipedia";
 import { dailyShareText, parseShare } from "@/lib/share";
-import { formatMoney } from "@/lib/format";
+import { formatContractYears, formatMoney } from "@/lib/format";
 
 describe("daily challenge", () => {
   it("has at least 100 substantive challenges with one best answer", () => {
@@ -40,6 +40,15 @@ describe("daily challenge", () => {
     const b = challengeForDate(new Date("2026-10-16T23:30:00Z"));
     expect(a.challenge.id).toBe(b.challenge.id);
     expect(a.puzzle).toBe(puzzleNumber(new Date("2026-10-16T00:00:00Z")));
+  });
+
+  it("uses a deterministic date-based option order instead of a fixed best-answer slot", () => {
+    const challenge = DAILY_CHALLENGES[33];
+    const first = dailyOptionOrder(challenge, "2026-10-24").map((option) => option.id);
+    const replay = dailyOptionOrder(challenge, "2026-10-24").map((option) => option.id);
+    const laterOrders = ["2026-10-25", "2026-10-26", "2026-10-27"].map((day) => dailyOptionOrder(challenge, day).map((option) => option.id));
+    expect(replay).toEqual(first);
+    expect(laterOrders.some((order) => order.join("|") !== first.join("|"))).toBe(true);
   });
 
   it("preserves the released 33-item calendar before expanding the rotation", () => {
@@ -223,6 +232,12 @@ describe("text and shares", () => {
   it("formats negative cap space with the sign before the currency symbol", () => {
     expect(formatMoney(-9.7)).toBe("−$9.7M");
     expect(formatMoney(9.7)).toBe("$9.7M");
+  });
+
+  it("labels contract years grammatically", () => {
+    expect(formatContractYears(0)).toBe("Expiring");
+    expect(formatContractYears(1)).toBe("1 year left");
+    expect(formatContractYears(2)).toBe("2 years left");
   });
 });
 

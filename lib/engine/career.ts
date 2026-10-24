@@ -2,6 +2,7 @@ import { teamById, teamLabel } from "@/lib/data/teams";
 import { teamRatings } from "@/lib/engine/ratings";
 import { createSeason, rolloverSeason } from "@/lib/engine/season";
 import type { CareerState, SeasonState, SeasonSummary } from "@/lib/types";
+import { normalizeGmName } from "@/lib/gm-name";
 
 export function legacyFor(summary: Pick<SeasonSummary, "wins" | "champ" | "round" | "fired" | "gradeScore">): number {
   let points = summary.wins;
@@ -36,10 +37,11 @@ export function summarize(state: SeasonState): SeasonSummary {
 }
 
 export function createCareer(gmName: string, teamId: string, seed?: number): CareerState {
-  const season = createSeason({ gmName, teamId, seed, mode: "career" });
+  const normalizedName = normalizeGmName(gmName);
+  const season = createSeason({ gmName: normalizedName, teamId, seed, mode: "career" });
   return {
     id: season.id.replace("season", "career"),
-    gmName,
+    gmName: normalizedName,
     seed: season.seed,
     legacy: 0,
     jobs: 1,

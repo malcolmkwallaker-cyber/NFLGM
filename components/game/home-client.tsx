@@ -56,7 +56,7 @@ export function HomeClient({
             <HomeMode
               href="/daily"
               testId="home-daily-cta"
-              kicker="Daily Challenge · Free"
+              kicker="Mode 1 · Daily Challenge · Free"
               title="Make today’s call"
               body="One historical or original fictional decision, an instant grade, and a transparent review."
               action={dailyComplete ? "View today’s result →" : `Play Daily #${puzzle} →`}
@@ -64,7 +64,7 @@ export function HomeClient({
             <HomeMode
               href="/season"
               testId="home-season-cta"
-              kicker="Single Season · Free"
+              kicker="Mode 2 · Single Season · Free"
               title="Run one full season"
               body="Hire, trade, draft, manage the locker room, and chase the Super Bowl."
               action="Play Season Mode →"
@@ -72,7 +72,7 @@ export function HomeClient({
             <HomeMode
               href="/career"
               testId="home-career-cta"
-              kicker="Career GM · Free"
+              kicker="Mode 3 · Career GM · Free"
               title="Build a dynasty"
               body="Play year after year, survive firings, change teams, and leave a legacy."
               action="Play Career Mode →"

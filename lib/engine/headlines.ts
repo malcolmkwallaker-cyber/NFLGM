@@ -26,24 +26,26 @@ export function makeHeadlines(
 
 export function resultHeadlines(state: SeasonState, won: boolean, score: string, opp: string, rng: Rng): Headline[] {
   const team = teamLabel(teamById(state.teamId, state.directory));
+  const previous = new Set(state.headlines.map((headline) => headline.text));
+  const pickFresh = (lines: string[]) => rng.pick(lines.filter((line) => !previous.has(line)).length ? lines.filter((line) => !previous.has(line)) : lines);
   const beat = won
-    ? rng.pick([
+    ? pickFresh([
         `${team} take ${score} over ${opp}. The building exhaled.`,
         `${score}. ${team} looked like the roster the GM thought they were building.`,
         `${team} handle ${opp}, ${score}. Owner's box actually clapped.`,
       ])
-    : rng.pick([
+    : pickFresh([
         `${team} fall ${score} to ${opp}. The silence on the walk back said enough.`,
         `${score}. ${opp} dictated it, and ${team} never flipped the script.`,
         `A loss to ${opp}, ${score}. This one will be on the Monday tape for the wrong reasons.`,
       ]);
   const national = won
-    ? rng.pick([
+    ? pickFresh([
         `Is ${team} quietly a problem, or was ${opp} just soft?`,
         `${team} got the win. Let's see if they do it against someone that can tackle.`,
         `Credit where it's due: ${team} won a game they were supposed to sweat.`,
       ])
-    : rng.pick([
+    : pickFresh([
         `${team} are who we thought they were until they prove otherwise.`,
         `That's on the GM as much as the headset. The roster lost that game.`,
         `${opp} didn't steal it. ${team} handed it over.`,

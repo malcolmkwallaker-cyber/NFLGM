@@ -9,6 +9,7 @@ import { teamRatings } from "@/lib/engine/ratings";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { clamp, hashSeed, makeRng, shuffle } from "@/lib/engine/rng";
 import { formatMoney } from "@/lib/format";
+import { normalizeGmName } from "@/lib/gm-name";
 import type {
   Action,
   Choice,
@@ -156,7 +157,7 @@ export function createSeason(input: {
     id: uid("season", seed),
     seed,
     year,
-    gmName: input.gmName || "GM",
+    gmName: normalizeGmName(input.gmName),
     mode: input.mode ?? (historical ? "historical" : "season"),
     historicalId: historical?.id ?? null,
     historicalTitle: historical?.title ?? null,
@@ -639,7 +640,7 @@ function makeOffers(state: SeasonState): TradeOffer[] {
     const fair = index === 0 ? "bargain" : index === 1 ? "fair" : "fleece";
     const incomingPool = (state.teams[from.id]?.roster ?? []).filter((p) => p.pos === player.pos || p.ovr < player.ovr - 4);
     const incoming = fair === "fleece" ? null : (incomingPool[0] ? { ...incomingPool[0] } : null);
-    const pickRound = fair === "bargain" ? 2 : fair === "fair" ? 3 : null;
+    const pickRound = fair === "bargain" ? 2 : fair === "fair" ? 3 : 5;
     return {
       id: `offer-${player.id}`,
       fromTeamId: from.id,
@@ -960,7 +961,7 @@ function finishDraft(state: SeasonState) {
   }
   for (const team of Object.values(state.teams)) ensureMinimumRoster(state, team.id);
   state.phase = "camp";
-  state.campCutIds = suggestedCuts(state);
+  state.campCutIds = [];
   state.log.push(`Later rounds: ${late.join(", ")}.`);
   state.headlines = makeHeadlines(state, "neutral", {
     beat: `Camp opens with a roster that does not fit on the plane. You have to get to 26.`,
@@ -1554,6 +1555,14 @@ function fire(state: SeasonState, reason: string) {
 
 function toRecap(state: SeasonState): SeasonState {
   if (state.phase === "fired") return state;
+  const record = teamRecord(state, state.teamId);
+  const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
+  if (record.wins <= 6 && state.capMode === "hard" && capSpace(state) >= 25) {
+    state.meters.owner = clamp(state.meters.owner - 8, 0, 100);
+  }
+  if (!bestQuarterback || bestQuarterback.ovr < 70) {
+    state.meters.owner = clamp(state.meters.owner - 8, 0, 100);
+  }
   state.phase = "recap";
   state.grade = buildGrade(state, false);
   const champ = state.playoff?.champion;
@@ -1585,6 +1594,9 @@ function buildGrade(state: SeasonState, fired: boolean) {
   score += (state.meters.owner - 60) / 8;
   score += (state.meters.locker - 60) / 12;
   score += (capHealth(state) - 55) / 12;
+  const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
+  if (record.wins <= 6 && state.capMode === "hard" && capSpace(state) >= 25) score -= 8;
+  if (!bestQuarterback || bestQuarterback.ovr < 70) score -= 6;
   if (historical && (!champ || record.wins < state.seasonLength)) score = Math.min(score, 92);
   if (fired) score = Math.min(score, 47);
   score = Math.round(clamp(score, 20, 99));
@@ -1811,6 +1823,29 @@ export function ensureMinimumRoster(state: SeasonState, teamId: string): Player[
     state.log.push(`Emergency roster pool added ${added.length} player${added.length === 1 ? "" : "s"} before camp.`);
   }
   return added;
+}
+
+export function seasonDrivers(state: SeasonState): string[] {
+  const record = teamRecord(state, state.teamId);
+  const pointDifferential = record.pf - record.pa;
+  const roster = yourRoster(state);
+  const bestQuarterback = roster.filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
+  const injured = roster.filter((player) => player.injured).length;
+  const space = capSpace(state);
+  const drivers: string[] = [];
+
+  drivers.push(`Point differential: ${pointDifferential > 0 ? "+" : ""}${pointDifferential} across a ${record.wins}-${record.losses} record.`);
+  if (!bestQuarterback || bestQuarterback.ovr < 70) {
+    drivers.push(`Quarterback plan: ${bestQuarterback ? `${bestQuarterback.name} was the top remaining QB at ${bestQuarterback.ovr} overall` : "no quarterback remained on the roster"}.`);
+  } else {
+    drivers.push(`Quarterback plan: ${bestQuarterback.name} led the room at ${bestQuarterback.ovr} overall.`);
+  }
+  if (state.capMode === "hard") {
+    drivers.push(`Cap use: ${formatMoney(space)} remained at season end${record.wins <= 6 && space >= 25 ? " despite six or fewer wins" : ""}.`);
+  }
+  if (injured) drivers.push(`Availability: ${injured} roster player${injured === 1 ? " was" : "s were"} injured at the finish.`);
+  drivers.push(`Owner confidence finished at ${state.meters.owner}; locker-room confidence finished at ${state.meters.locker}.`);
+  return drivers.slice(0, 5);
 }
 
 export function advancedLines(state: SeasonState) {

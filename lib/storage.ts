@@ -1,12 +1,13 @@
 import type { Profile } from "@/lib/types";
 import { ensureMinimumRoster, suggestedCuts } from "@/lib/engine/season";
+import { normalizeGmName } from "@/lib/gm-name";
 
 export const STORAGE_KEY = "nfl-gm-career-v1";
 
 export function freshProfile(name = "GM"): Profile {
   return {
     version: 1,
-    name,
+    name: normalizeGmName(name),
     pro: false,
     email: "",
     settings: { experimentalNarrative: false, testerMode: false },
@@ -33,6 +34,12 @@ export function loadProfile(): Profile {
 
 export function migrateProfile(profile: Profile): Profile {
   const next = structuredClone(profile);
+  next.name = normalizeGmName(next.name);
+  if (next.season) next.season.gmName = normalizeGmName(next.season.gmName || next.name);
+  if (next.career) {
+    next.career.gmName = normalizeGmName(next.career.gmName || next.name);
+    next.career.season.gmName = normalizeGmName(next.career.season.gmName || next.career.gmName);
+  }
   next.settings = { ...freshProfile().settings, ...next.settings };
   next.daily.freezeTokens ??= 0;
   next.daily.frozenDates ??= [];

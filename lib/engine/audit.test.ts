@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, capSpace, createSeason, ensureMinimumRoster, payroll, rolloverSeason, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
+import { applyAction, capSpace, createSeason, ensureMinimumRoster, payroll, rolloverSeason, seasonDrivers, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
+import { normalizeGmName, titledGmName } from "@/lib/gm-name";
 
 function advanceTo(state: SeasonState, phase: Phase): SeasonState {
   let current = state;
@@ -118,6 +119,8 @@ describe("audit regressions", () => {
 
   it("assigns every CPU draft choice to the team that made the pick", () => {
     const state = advanceTo(createSeason({ teamId: "KC", gmName: "Draft Audit", seed: 18 }), "camp");
+    expect(state.campCutIds).toEqual([]);
+    expect(yourRoster(state).length).toBeGreaterThan(26);
     for (const pick of state.draftPicks) {
       expect(pick.prospectId).toBeTruthy();
       expect(state.teams[pick.teamId].roster.filter((player) => player.id === `draft-${pick.prospectId}`)).toHaveLength(1);
@@ -125,6 +128,32 @@ describe("audit regressions", () => {
     const laterRounds = state.draftPicks.filter((pick) => pick.teamId === state.teamId && pick.round >= 4);
     expect(laterRounds.map((pick) => pick.round)).toEqual([4, 5, 6, 7]);
     expect(laterRounds.every((pick) => pick.note === "Staff auto-pick")).toBe(true);
+  });
+
+  it("never offers a trade with an empty return", () => {
+    const state = advanceTo(createSeason({ teamId: "KC", gmName: "Return Audit", seed: 222 }), "trade");
+    expect(state.tradeOffers.length).toBeGreaterThan(0);
+    expect(state.tradeOffers.every((offer) => Boolean(offer.incoming || offer.pickRound))).toBe(true);
+  });
+
+  it("normalizes blank and already-titled GM names without duplicate labels", () => {
+    expect(normalizeGmName("   ")).toBe("GM");
+    expect(titledGmName("GM")).toBe("GM");
+    expect(titledGmName("GM Morgan")).toBe("GM Morgan");
+    expect(titledGmName("Morgan")).toBe("GM Morgan");
+    const migrated = migrateProfile({ ...freshProfile(), name: " ", season: createSeason({ teamId: "KC", gmName: " ", seed: 223 }) });
+    expect(migrated.name).toBe("GM");
+    expect(migrated.season?.gmName).toBe("GM");
+  });
+
+  it("explains weak quarterback and unused-cap season signals", () => {
+    const state = createSeason({ teamId: "KC", gmName: "Driver Audit", seed: 224 });
+    state.teams.KC.roster = state.teams.KC.roster.filter((player) => player.pos !== "QB");
+    state.teams.KC.roster.push({ id: "audit-qb", name: "Camp QB", pos: "QB", ovr: 62, age: 25, cap: 1, years: 1, potential: 64, real: false });
+    state.results = Array.from({ length: 17 }, (_, index) => ({ week: index + 1, home: "KC", away: "BUF", homeScore: index < 5 ? 21 : 10, awayScore: 24, played: true, round: "regular" as const }));
+    const drivers = seasonDrivers(state);
+    expect(drivers.some((line) => line.includes("top remaining QB at 62"))).toBe(true);
+    expect(drivers.some((line) => line.includes("Cap use:"))).toBe(true);
   });
 
   it("fires a GM when owner confidence reaches the visible threshold", () => {

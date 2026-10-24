@@ -4,7 +4,7 @@ type Spec = { category: DailyChallenge["category"]; title: string; situation: st
 
 const SPECS: Spec[] = [
   { category: "Trade", title: "The backup quarterback tax", situation: "Your starter is healthy, but a contender just lost its quarterback. They offer a future second for your capable backup, while your own roster has no experienced third option." },
-  { category: "Trade", title: "A star receiver wants out", situation: "A 29-year-old receiver has two expensive years left and has privately requested a trade. One bidder offers a late first; another offers a young guard and a third." },
+  { category: "Trade", title: "A star receiver wants out", situation: "A 29-year-old receiver has two expensive years left and has privately requested a trade. One bidder offers a late first; another offers a young guard and a third-round pick." },
   { category: "Trade", title: "Buy at 2–5 or sell", situation: "Your point differential is better than your 2–5 record, but the next four opponents are contenders. A veteran edge rusher is available for a third-round pick." },
   { category: "Trade", title: "The deadline rental", situation: "You lead the division and can rent an excellent corner for ten games. The price is a second, and his agent will not discuss an extension before the trade." },
   { category: "Trade", title: "Move the unhappy guard", situation: "Your best guard skipped voluntary work after extension talks stalled. A rebuilding club offers a younger tackle with lower ratings but three cheap years." },

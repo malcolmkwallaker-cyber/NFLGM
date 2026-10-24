@@ -12,10 +12,11 @@ import { capSpace } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, divisionTable, priorityLabel, standings, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
-import { formatMoney } from "@/lib/format";
+import { formatContractYears, formatMoney } from "@/lib/format";
+import { titledGmName } from "@/lib/gm-name";
 
 const ROLES: StaffRole[] = ["hc", "oc", "dc", "scout"];
 
@@ -98,7 +99,7 @@ export function Desk() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {teamLabel(team)} · {record.wins}-{record.losses}
-              {season.phase === "regular" ? ` · Week ${season.week}` : ""} · GM {season.gmName}
+              {season.phase === "regular" ? ` · Week ${season.week}` : ""} · {titledGmName(season.gmName)}
             </p>
           </div>
         </div>
@@ -139,11 +140,13 @@ export function Desk() {
           cutIds={cutIds}
           remaining={remaining}
           campOk={campOk}
+          keptQb={keptQb}
           onToggle={(id) => {
             const next = cutIds.includes(id) ? cutIds.filter((item) => item !== id) : [...cutIds, id];
             dispatch({ type: "camp-selection", cutIds: next });
           }}
           onSubmit={() => dispatch({ type: "camp", cutIds })}
+          onSuggest={() => dispatch({ type: "camp-selection", cutIds: suggestedCuts(season) })}
         />
       ) : null}
       {season.phase === "regular" ? <Regular season={season} matchup={matchup} roster={roster} /> : null}
@@ -189,7 +192,7 @@ export function Desk() {
                   {player.injured ? " · out" : ""}
                 </span>
                 <span className="text-muted-foreground">
-                  {player.ovr} · {money(player.cap)} · {player.years}y
+                  {player.ovr} · {money(player.cap)} · {formatContractYears(player.years)}
                 </span>
               </li>
             ))}
@@ -319,6 +322,11 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
         Limit {money(season.capLimit)}. Dead money {money(season.deadMoney)}. A restructure pushes money out. A cut creates more dead
         money and a headline.
       </p>
+      <p className="text-xs text-muted-foreground">
+        {season.capMode === "hard"
+          ? "Hard cap: you cannot advance while cap space is below $0. Restructure an active contract or release a player to create room."
+          : "Historical payroll guide: overspending is allowed, but the owner will penalize it."}
+      </p>
       <div className="space-y-2">
         {roster.slice(0, 8).map((player) => (
           <div key={player.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-card px-3 py-2">
@@ -327,7 +335,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
                 {player.pos} {player.name}
               </p>
               <p className="text-xs text-muted-foreground">
-                {player.ovr} ovr · {money(player.cap)} · {player.years} years left
+                {player.ovr} ovr · {money(player.cap)} · {formatContractYears(player.years)}
               </p>
             </div>
             <div className="flex gap-2">
@@ -350,6 +358,9 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
 
 function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
   const { dispatch } = useGame();
+  const bestQuarterbackUnderContract = yourRoster(season)
+    .filter((player) => player.pos === "QB" && player.years > 0)
+    .sort((a, b) => b.ovr - a.ovr)[0];
   return (
     <section className="space-y-3">
       <div className="flex items-end justify-between">
@@ -361,6 +372,13 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           ? "Your expiring players come first. Re-sign one, use your one franchise tag, or let him reach the market."
           : "Outside free agents. The board includes an affordable option when the market has one."}
       </p>
+      {!bestQuarterbackUnderContract || bestQuarterbackUnderContract.ovr < 70 ? (
+        <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-amber-100">
+          Quarterback warning: {bestQuarterbackUnderContract
+            ? `your best QB already under contract is ${bestQuarterbackUnderContract.name} at ${bestQuarterbackUnderContract.ovr} overall.`
+            : "you do not have a quarterback under contract."} Re-sign or tag an expiring QB now if the board offers one.
+        </p>
+      ) : null}
       {season.faBoard.length === 0 ? (
         <p className="rounded-xl border border-dashed border-white/15 px-4 py-6 text-sm text-muted-foreground">
           The board is empty. Move the market along.
@@ -427,14 +445,15 @@ function Trades({
       {season.tradeOffers.map((offer) => (
         <article key={offer.id} className="rounded-xl border border-white/10 bg-card p-4">
           <div className="flex items-center justify-between gap-2">
-            <p className="font-medium">{offer.fromTeamId} wants {offer.wantName}</p>
+            <p className="font-medium">{offer.fromTeamId} called about {offer.wantName}</p>
             <Badge variant={offer.fair === "fleece" ? "destructive" : "outline"}>{offer.fair}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{offer.blurb}</p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Back: {offer.incoming ? `${offer.incoming.name} (${offer.incoming.pos} ${offer.incoming.ovr})` : "no player"}
-            {offer.pickRound ? ` · ${offer.pickYear} round ${offer.pickRound}` : ""}
-          </p>
+          <dl className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
+            <div><dt className="inline text-foreground">You send:</dt> <dd className="inline">{offer.wantName}</dd></div>
+            <div><dt className="inline text-foreground">You receive:</dt> <dd className="inline">{offer.incoming ? `${offer.incoming.name} (${offer.incoming.pos} ${offer.incoming.ovr})` : "no player"}{offer.pickRound ? ` · ${offer.pickYear} round ${offer.pickRound}` : ""}</dd></div>
+          </dl>
+          {!offer.incoming ? <p className="mt-2 text-xs text-amber-200">No player comes back. This return is draft compensation only.</p> : null}
           <div className="mt-3 flex gap-2">
             <Button data-testid={`choice-accept-${offer.id}`} onClick={() => dispatch({ type: "trade", offerId: offer.id, accept: true })}>
               Accept
@@ -505,7 +524,7 @@ function Draft({ season }: { season: SeasonState }) {
         <article className="rounded-xl border border-primary/40 bg-card p-4">
           <p className="font-medium">{season.pendingDraftTrade.from} wants to move you back</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            About {season.pendingDraftTrade.slotsBack} slots in this round, plus a future pick.
+            About {season.pendingDraftTrade.slotsBack} slots in this round, plus a {season.year + 1} round {Math.min(3, (pick?.round ?? 1) + 1)} pick.
           </p>
           <p className="mt-2 text-xs text-amber-200">Answer this offer before selecting a prospect. The board is dimmed, not gone.</p>
           <div className="mt-3 flex gap-2">
@@ -517,6 +536,11 @@ function Draft({ season }: { season: SeasonState }) {
             </Button>
           </div>
         </article>
+      ) : null}
+      {season.extraPicks.length ? (
+        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
+          Extra picks owned: {season.extraPicks.map((extra) => `${extra.year} round ${extra.round}`).join(" · ")}
+        </p>
       ) : null}
       <div className="grid gap-2">
         {board.map((prospect) => (
@@ -562,16 +586,20 @@ function Camp({
   cutIds,
   remaining,
   campOk,
+  keptQb,
   onToggle,
   onSubmit,
+  onSuggest,
 }: {
   season: SeasonState;
   roster: Player[];
   cutIds: string[];
   remaining: number;
   campOk: boolean;
+  keptQb: boolean;
   onToggle: (id: string) => void;
   onSubmit: () => void;
+  onSuggest: () => void;
 }) {
   return (
     <section className="space-y-3">
@@ -580,6 +608,11 @@ function Camp({
         <p className={campOk ? "text-emerald-300" : "text-red-300"}>{remaining} kept</p>
       </div>
       <p className="text-sm text-muted-foreground">Check the players you are cutting. Land between 22 and 26, and keep a quarterback.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" onClick={onSuggest}>Select suggested cuts</Button>
+        <span className="text-xs text-muted-foreground">{cutIds.length ? `${cutIds.length} selected to cut` : "No cuts selected yet"}</span>
+      </div>
+      {!keptQb ? <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm">Keep at least one quarterback before opening the season.</p> : null}
       <section className="rounded-xl border border-white/10 bg-black/20 p-3" aria-label="Your draft class">
         <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Draft class added to camp</p>
         <ul className="mt-2 space-y-1 text-sm">
@@ -760,6 +793,7 @@ function Recap({
   const superBowl = season.results.find((game) => game.round === "superbowl");
   const playedSuperBowl = Boolean(superBowl && (superBowl.home === season.teamId || superBowl.away === season.teamId));
   const finish = grade?.champ ? "Champion" : grade?.round === "missed" ? "Missed playoffs" : grade?.round ?? "Season complete";
+  const drivers = seasonDrivers(season);
   return (
     <section className="space-y-4">
       <div className="rounded-2xl border border-primary/40 bg-card p-5">
@@ -781,6 +815,12 @@ function Recap({
         ) : null}
         <p className="mt-3 text-sm">Best call: {grade?.best}</p>
         <p className="text-sm text-muted-foreground">The one that stuck: {grade?.worst}</p>
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+          <p className="text-xs uppercase tracking-[0.16em] text-primary">Why the season ended this way</p>
+          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            {drivers.map((driver) => <li key={driver}>• {driver}</li>)}
+          </ul>
+        </div>
       </div>
       <ShareCard
         kicker={`${season.year} ${teamById(season.teamId, season.directory).abbr}`}

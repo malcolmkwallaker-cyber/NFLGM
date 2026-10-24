@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { GRADE_EMOJI, GRADE_WORD, optionById } from "@/lib/engine/daily";
+import { dailyOptionOrder, GRADE_EMOJI, GRADE_WORD, optionById } from "@/lib/engine/daily";
 import { DAILY_CHALLENGES } from "@/lib/data/daily-challenges";
 import { dailyShareText } from "@/lib/share";
 import { useGame } from "@/components/profile";
@@ -49,6 +49,10 @@ export function DailyClient({
   const saved = profile.daily.results.find((row) => row.date === today);
   const optionId = saved?.optionId ?? locked;
   const option = optionId ? optionById(challenge, optionId) : null;
+  const displayedOptions = dailyOptionOrder(challenge, today);
+  const bestAlternative = option
+    ? challenge.options.filter((item) => item.id !== option.id).sort((a, b) => b.score - a.score)[0]
+    : null;
   const revealed = Boolean(saved) || Boolean(locked && option);
   const result = profile.daily.results.find((row) => row.date === today);
   const promptId = result ? `${result.date}:${result.challengeId}:${result.optionId}` : null;
@@ -134,7 +138,7 @@ export function DailyClient({
       <p className="text-base font-medium">{challenge.question}</p>
 
       <div className="space-y-2">
-        {challenge.options.map((item) => {
+        {displayedOptions.map((item) => {
           const show = revealed && option?.id === item.id;
           const actual = revealed && item.id === challenge.actualOptionId;
           return (
@@ -179,9 +183,15 @@ export function DailyClient({
             <p className="mt-3 text-xs uppercase tracking-[0.16em] text-primary">{challenge.fictional ? "Decision review" : "What happened"}</p>
             <p className="mt-2 text-sm leading-relaxed">{challenge.whatHappened}</p>
             <p className="mt-3 text-sm text-muted-foreground">
-              This grade is hindsight. It scores how the move turned out, not whether it was the percentage play on the
-              day. The call resembles {option.echo}.
+              {challenge.fictional
+                ? `This grade scores the decision process described in this original fictional scenario. It is not a claim about a real event. The call resembles ${option.echo}.`
+                : `This grade is hindsight. It scores how the move turned out, not whether it was the percentage play on the day. The call resembles ${option.echo}.`}
             </p>
+            {bestAlternative ? (
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-muted-foreground">
+                <span className="text-foreground">Compare another path:</span> {bestAlternative.label} — {bestAlternative.why}
+              </p>
+            ) : null}
             <p className="mt-3 font-display text-2xl tracking-wide">{GRADE_EMOJI[option.grade]} · Streak {profile.daily.streak}</p>
             <p className="text-xs text-muted-foreground">This result and streak are saved on this device. No global rank is shown because scores are not uploaded.</p>
           </section>
@@ -256,7 +266,7 @@ export function DailyClient({
               render={<Link href="/season" data-testid="daily-mode-season" />}
             >
               <span>
-                <span className="block font-display text-xl tracking-wide">Play Single Season</span>
+                <span className="block font-display text-xl tracking-wide">Mode 2 · Single Season</span>
                 <span className="mt-1 block text-xs font-normal opacity-80">One team, one year, one shot at the title.</span>
               </span>
             </Button>
@@ -267,7 +277,7 @@ export function DailyClient({
               render={<Link href="/career" data-testid="daily-mode-career" />}
             >
               <span>
-                <span className="block font-display text-xl tracking-wide">Start Career GM</span>
+                <span className="block font-display text-xl tracking-wide">Mode 3 · Career GM</span>
                 <span className="mt-1 block text-xs font-normal text-muted-foreground">Keep the job, change teams, build a legacy.</span>
               </span>
             </Button>
