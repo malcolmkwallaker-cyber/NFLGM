@@ -254,7 +254,7 @@ export interface SeasonState {
   prospects: Prospect[];
   draftPicks: DraftPick[];
   draftCursor: number;
-  pendingDraftTrade: { offer: string; from: string; slotsBack: number } | null;
+  pendingDraftTrade: { offer: string; from: string; slotsBack: number; targetOverall?: number; fromTeamId?: string } | null;
   campCutIds: string[];
   schedule: ScheduledGame[];
   results: GameResult[];

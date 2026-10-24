@@ -8,7 +8,7 @@ import { ShareCard } from "@/components/game/share-card";
 import { TeamMark } from "@/components/game/team-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { capSpace } from "@/lib/engine/cap";
+import { capSpace, offerYears } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
@@ -117,6 +117,12 @@ export function Desk() {
         </div>
       ) : null}
 
+      {season.meters.owner <= 35 && season.phase !== "fired" && season.phase !== "recap" ? (
+        <p role="status" className="rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+          Hot seat: owner confidence is {season.meters.owner}. Another setback can trigger dismissal at 20.
+        </p>
+      ) : null}
+
       <Headlines season={season} />
 
       {profile.settings.testerMode ? (
@@ -189,7 +195,11 @@ export function Desk() {
               <li key={player.id} className="flex justify-between gap-3">
                 <span className={player.injured ? "text-red-300" : ""}>
                   {player.pos} {player.name}
-                  {player.injured ? " · out" : ""}
+                  {player.injured
+                    ? typeof season.flags[`return-${player.id}`] === "number"
+                      ? ` · out until Week ${season.flags[`return-${player.id}`]}`
+                      : " · out"
+                    : ""}
                 </span>
                 <span className="text-muted-foreground">
                   {player.ovr} · {money(player.cap)} · {formatContractYears(player.years)}
@@ -327,7 +337,9 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
           : "Historical payroll guide: overspending is allowed, but the owner will penalize it."}
       </p>
       <div className="space-y-2">
-        {roster.slice(0, 8).map((player) => (
+        {roster.slice(0, 8).map((player) => {
+          const alreadyRestructured = Boolean(season.restructuredIds?.includes(player.id));
+          return (
           <div key={player.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-card px-3 py-2">
             <div>
               <p className="text-sm font-medium">
@@ -338,15 +350,16 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" disabled={player.years <= 0} data-testid={`choice-re-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "restructure", playerId: player.id })}>
-                {player.years <= 0 ? "Expired — decide in free agency" : "Restructure"}
+              <Button variant="outline" disabled={player.years <= 0 || alreadyRestructured} data-testid={`choice-re-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "restructure", playerId: player.id })}>
+                {player.years <= 0 ? "Expired — decide in free agency" : alreadyRestructured ? "Already restructured" : "Restructure"}
               </Button>
               <Button variant="ghost" disabled={player.years <= 0} data-testid={`choice-cut-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "cut", playerId: player.id })}>
                 {player.years <= 0 ? "No active deal" : "Cut"}
               </Button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
       <Button className="!h-12 !px-4" disabled={space < 0 && season.capMode === "hard"} data-testid="choice-hold" onClick={() => dispatch({ type: "cap", choice: "hold" })}>
         {space < 0 && season.capMode === "hard" ? "Still over the cap" : "Take this sheet into free agency"}
@@ -403,7 +416,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 {player.pos} {player.name}
               </p>
               <p className="text-xs text-muted-foreground">
-                {player.ovr} ovr · age {player.age} · ask {money(player.cap)}
+                {player.ovr} ovr · age {player.age} · ask {money(player.cap)} / year · projected {formatContractYears(offerYears(player))}
                 {player.origin && player.origin !== season.teamId ? ` · from ${player.origin}` : " · your own"}
               </p>
             </div>
@@ -550,7 +563,7 @@ function Draft({ season }: { season: SeasonState }) {
         <article className="rounded-xl border border-primary/40 bg-card p-4">
           <p className="font-medium">{season.pendingDraftTrade.from} wants to move you back</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            About {season.pendingDraftTrade.slotsBack} slots in this round, plus a {season.year + 1} round {Math.min(3, (pick?.round ?? 1) + 1)} pick.
+            Move exactly {season.pendingDraftTrade.slotsBack} slot{season.pendingDraftTrade.slotsBack === 1 ? "" : "s"} in this round, plus a {season.year + 1} round {Math.min(3, (pick?.round ?? 1) + 1)} pick.
           </p>
           <p className="mt-2 text-xs text-amber-200">Answer this offer before selecting a prospect. The board is dimmed, not gone.</p>
           <div className="mt-3 flex gap-2">
@@ -696,6 +709,17 @@ function Regular({
     .reverse();
   return (
     <section className="space-y-3">
+      {season.shop ? (
+        <article className="rounded-2xl border border-primary/40 bg-card p-4" aria-label="Contract-year trade offer">
+          <p className="text-xs uppercase tracking-[0.16em] text-primary">Trade offer · no move yet</p>
+          <h2 className="mt-1 font-display text-2xl tracking-wide">{season.shop.fromTeamId} called about {season.shop.wantName}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{season.shop.blurb}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button data-testid="choice-contract-trade-accept" onClick={() => dispatch({ type: "shop-resolve", accept: true })}>Accept the offer</Button>
+            <Button data-testid="choice-contract-trade-decline" variant="outline" onClick={() => dispatch({ type: "shop-resolve", accept: false })}>Keep {season.shop.wantName}</Button>
+          </div>
+        </article>
+      ) : null}
       {decision ? (
         <div className="space-y-3 rounded-2xl border border-primary/30 bg-card p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-primary">{decision.kicker}</p>
@@ -760,7 +784,11 @@ function Regular({
           <ul className="mt-2 space-y-1 text-sm">
             {roster.filter((player) => player.injured || player.limited).map((player) => (
               <li key={player.id} className={player.injured ? "text-red-300" : "text-amber-200"}>
-                {player.pos} {player.name} · {player.injured ? "Out" : "Active, reduced effectiveness"}
+                {player.pos} {player.name} · {player.injured
+                  ? typeof season.flags[`return-${player.id}`] === "number"
+                    ? `Out · projected return Week ${season.flags[`return-${player.id}`]}`
+                    : "Out · return date unavailable"
+                  : "Active, reduced effectiveness"}
               </li>
             ))}
           </ul>
@@ -824,6 +852,7 @@ function Recap({
   const lines = advancedLines(season);
   const rows = standings(season).slice(0, 8);
   const superBowl = season.results.find((game) => game.round === "superbowl");
+  const playoffResults = season.results.filter((game) => ["wildcard", "divisional", "conference", "superbowl"].includes(game.round));
   const playedSuperBowl = Boolean(superBowl && (superBowl.home === season.teamId || superBowl.away === season.teamId));
   const finish = grade?.champ ? "Champion" : grade?.round === "missed" ? "Missed playoffs" : grade?.round ? formatPlayoffRound(grade.round) : "Season complete";
   const drivers = seasonDrivers(season);
@@ -848,6 +877,18 @@ function Recap({
           <p className="mt-3 text-sm">
             {playedSuperBowl ? "Your Super Bowl" : "League Super Bowl (your season was already over)"}: {teamLabel(teamById(superBowl.away, season.directory))} {superBowl.awayScore} · {teamLabel(teamById(superBowl.home, season.directory))} {superBowl.homeScore}
           </p>
+        ) : null}
+        {playoffResults.length ? (
+          <details className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+            <summary className="cursor-pointer text-sm">Recorded playoff results ({playoffResults.length})</summary>
+            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+              {playoffResults.map((game, index) => (
+                <li key={`${game.round}-${game.home}-${game.away}-${index}`}>
+                  {formatPlayoffRound(game.round as "wildcard" | "divisional" | "conference" | "superbowl")}: {teamById(game.away, season.directory).abbr} {game.awayScore} at {teamById(game.home, season.directory).abbr} {game.homeScore}
+                </li>
+              ))}
+            </ul>
+          </details>
         ) : null}
         <p className="mt-3 text-sm">Best call: {grade?.best}</p>
         <p className="text-sm text-muted-foreground">The one that stuck: {grade?.worst}</p>

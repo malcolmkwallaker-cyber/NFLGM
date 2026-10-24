@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useGame } from "@/components/profile";
 import { GRADE_EMOJI } from "@/lib/engine/daily";
-import { marketAsk } from "@/lib/engine/cap";
+import { marketAsk, salaryScale } from "@/lib/engine/cap";
 import { playerStatsRows } from "@/lib/engine/player-stats";
 import { advancedLines, standings, yourRoster } from "@/lib/engine/season";
 import { teamById, teamLabel } from "@/lib/data/teams";
@@ -92,8 +92,8 @@ function ContractPreview({ season }: { season: SeasonState }) {
     <p className="text-xs uppercase tracking-[0.16em] text-primary">Offseason preview</p><h2 className="mt-1 font-display text-2xl tracking-wide">Contracts to watch</h2>
     <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Projected status uses the game’s modeled contract years. Asking prices are estimates, not confirmed deals or historical salary facts.</p>
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
-      <ContractList title="Your re-sign decisions" empty="No user-roster contract expires after this season." rows={own.map((player) => ({ id: player.id, name: player.name, detail: `${player.pos} · ${player.ovr} overall · ${formatContractYears(player.years)} · projected ${formatMoney(marketAsk(player))}/yr` }))} />
-      <ContractList title="Potential outside targets" empty={season.flags.historicalRosterScenarioId ? "Historical opponents use team-level ratings, so no opponent-player free-agent projection is claimed for this mode." : "No modeled outside contract is currently projected to expire."} rows={targets.map(({ player, teamId }) => ({ id: `${teamId}-${player.id}`, name: player.name, detail: `${player.pos} · ${player.ovr} overall · ${teamById(teamId, season.directory).abbr} · projected ${formatMoney(marketAsk(player))}/yr` }))} />
+      <ContractList title="Your re-sign decisions" empty="No user-roster contract expires after this season." rows={own.map((player) => ({ id: player.id, name: player.name, detail: `${player.pos} · ${player.ovr} overall · ${formatContractYears(player.years)} · projected ${formatMoney(marketAsk(player, salaryScale(season.capLimit)))}/yr` }))} />
+      <ContractList title="Potential outside targets" empty={season.flags.historicalRosterScenarioId ? "Historical opponents use team-level ratings, so no opponent-player free-agent projection is claimed for this mode." : "No modeled outside contract is currently projected to expire."} rows={targets.map(({ player, teamId }) => ({ id: `${teamId}-${player.id}`, name: player.name, detail: `${player.pos} · ${player.ovr} overall · ${teamById(teamId, season.directory).abbr} · projected ${formatMoney(marketAsk(player, salaryScale(season.capLimit)))}/yr` }))} />
     </div>
   </section>;
 }

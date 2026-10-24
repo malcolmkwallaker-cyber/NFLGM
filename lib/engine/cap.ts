@@ -41,8 +41,14 @@ const MULT: Record<string, number> = {
   K: 0.22,
 };
 
-export function marketAsk(p: Player): number {
-  const built = Math.max(0.9, (p.ovr - 58) * 0.62 * (MULT[p.pos] ?? 0.8));
+export const BASE_CAP_LIMIT = 322;
+
+export function salaryScale(capLimit: number): number {
+  return Math.max(1, capLimit / BASE_CAP_LIMIT);
+}
+
+export function marketAsk(p: Player, scale = 1): number {
+  const built = Math.max(0.9, (p.ovr - 58) * 0.62 * (MULT[p.pos] ?? 0.8)) * scale;
   return Math.round(Math.max(p.cap * 0.9, built) * 10) / 10;
 }
 
