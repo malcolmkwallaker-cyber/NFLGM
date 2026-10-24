@@ -1,5 +1,19 @@
 # NFLGM career-mode audit
 
+## 2026-10-24 AFC East two-season report disposition
+
+Source: user-provided results from two Career seasons with Buffalo, Miami, New England, and the New York Jets. Audited against production baseline `04df41e8b8796e50b9ad387e3fbdc4e290396086` with deterministic cap traces and a 40-seed sample for each AFC East team (160 career starts, 320 total seasons).
+
+| Finding | Disposition |
+| --- | --- |
+| Own stars can be unaffordable in the first retention wave, followed by large unused room | Confirmed accounting/sequencing defect. Expired prior-contract charges were still included in cap space until unsigned players were removed after free agency closed. The baseline Jets trace counted $76.6M of expired charges, displayed −$13.1M initially, auto-restructured $16.8M into the future, and then rejected Garrett Wilson's $21.7M ask against only $3.7M of displayed room. The corrected trace excludes expired deals until renewed: $63.5M of opening room, no forced restructure, and Wilson's unchanged $21.7M market ask fits. Unsigned expirations walking no longer create a late phantom cap jump. |
+| Dallas repeatedly reaches the 2027 Super Bowl and Detroit repeatedly wins in 2028 | Not reproduced as a fixed or dominant outcome. Baseline sample: Dallas appeared in 9/160 2027 Super Bowls, Detroit won 7/160 2028 titles, and 30 different champions appeared across 320 seasons. The post-fix sample remained broad at 29 champions, with Dallas 11/160 and Detroit 8/160. Deterministic seeds intentionally replay the same result; varied seeds do not lock those teams in. |
+| Regular-season record barely shapes playoff outcomes | No bracket defect found. Record determines division winners, seed, bye, and home field; current roster strength, staff effects, injuries, and seeded matchup variance determine each game. Upsets remain intentional. The playoff screen now states that model directly. |
+| A 9–8 champion receives an A grade | Not treated as an arithmetic defect. The modern rubric starts at 60, adds 1.55 points per net regular-season win, adds 20 for a championship, then applies owner, locker-room, and cap adjustments. A sampled 9–8 champion remained an A rather than an A+. The recap now discloses the weighting and shows the exact regular-season and postseason contributions; the title bonus remains intentionally substantial. |
+| Super Bowl losing scores cluster near 9 | Confirmed distribution concern, not a fixed-score bug. Baseline average losing score was 14.96, but 98/320 (30.6%) were 10 or fewer. Modern postseason variance was narrowed while leaving regular-season and historical-mode variance unchanged; post-fix average was 16.59 and 61/320 (19.1%) were 10 or fewer. The same post-fix sample still produced 29 champions, preserving plausible upsets. |
+
+Regression coverage verifies that expired charges do not consume room, an expired contract cannot be cut or restructured as active, Garrett Wilson can be retained at the unchanged ask, cap room does not jump when other expirations walk, and a varied-seed playoff sample retains champion diversity without making scores at or below 10 the dominant result.
+
 ## 2026-10-24 QA report disposition
 
 Source report: Google Doc `1C-g5TmeyPncLHqkTaWHYoxMRWgMB_5YfjQuD_2FLeZ8`, created 2026-10-24 at 14:07 UTC. The report did not identify a commit or build, so every finding was checked against production baseline `b604ac3c505cc185e2fd2930b6e17a774d72550c`. Scoped repair commit: `70015e3`.

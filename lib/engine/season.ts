@@ -2,7 +2,7 @@ import rosterFile from "@/lib/data/rosters.json";
 import { TEAMS, teamById, teamLabel } from "@/lib/data/teams";
 import { historicalById } from "@/lib/data/historical";
 import { staffMarket } from "@/lib/data/staff";
-import { capHealth, capSpace, marketAsk, offerYears, payroll } from "@/lib/engine/cap";
+import { capHealth, capSpace, committedPayroll, marketAsk, offerYears, payroll } from "@/lib/engine/cap";
 import { makeHeadlines, resultHeadlines } from "@/lib/engine/headlines";
 import { recordUserPlayerStats } from "@/lib/engine/player-stats";
 import { interpretFreeText } from "@/lib/engine/keywords";
@@ -432,7 +432,7 @@ function openCap(state: SeasonState) {
   state.headlines = makeHeadlines(state, space >= 0 ? "neutral" : "negative", {
     beat: space >= 0 ? `The cap sheet has ${formatMoney(space)} of room before anyone is signed.` : `The cap sheet is ${formatMoney(space)}. Something has to give before free agency.`,
     national: "Cap day is not content. It is still how GMs get fired in March.",
-    analytics: `Charges ${payroll(yourRoster(state)).toFixed(1)} plus ${state.deadMoney.toFixed(1)} dead against a ${state.capLimit.toFixed(1)} ${state.capMode === "payroll" ? "payroll guide" : "cap"}.`,
+    analytics: `Under-contract charges ${committedPayroll(yourRoster(state)).toFixed(1)} plus ${state.deadMoney.toFixed(1)} dead against a ${state.capLimit.toFixed(1)} ${state.capMode === "payroll" ? "payroll guide" : "cap"}. Expired deals are not charged unless renewed.`,
   });
 }
 
@@ -447,8 +447,13 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     pushDecision(state, "Cap", "Stood pat", "Left the cap sheet alone.", 0);
     return openFreeAgency(state);
   }
-  const player = roster.find((p) => p.id === playerId) ?? biggestCap(choice === "restructure" ? roster.filter((candidate) => candidate.years > 0) : roster);
-  if (!player) throw new Error("No contract to touch");
+  const eligible = roster.filter((candidate) => candidate.years > 0);
+  const player = playerId ? eligible.find((p) => p.id === playerId) : biggestCap(eligible);
+  if (!player) {
+    const selected = playerId ? roster.find((candidate) => candidate.id === playerId) : undefined;
+    if (choice === "restructure" && selected?.years === 0) throw new Error("Expired contracts must be re-signed or tagged in free agency");
+    throw new Error(playerId ? "That player has no active contract to change" : "No contract to touch");
+  }
   if (choice === "restructure") {
     if (player.years <= 0) throw new Error("Expired contracts must be re-signed or tagged in free agency");
     if (state.restructuredIds?.includes(player.id)) throw new Error("That contract was already restructured this year");
@@ -1436,10 +1441,15 @@ function simulateMatch(state: SeasonState, home: string, away: string, key: stri
   const rng = makeRng(hashSeed(state.seed, state.year, key, home, away));
   const hr = teamRatings(state, home);
   const ar = teamRatings(state, away);
-  const variance = state.mode === "historical" ? 22 : 18;
+  const postseason = !key.startsWith("w");
+  const variance = state.mode === "historical" ? 22 : postseason ? 12 : 18;
   const noise = () => (rng.next() + rng.next() + rng.next() - 1.5) * variance;
   let homeScore = snapScore(expectedPoints(hr.off, ar.def) + 1.6 + noise());
   let awayScore = snapScore(expectedPoints(ar.off, hr.def) + noise());
+  if (postseason && state.mode !== "historical") {
+    homeScore = Math.max(3, homeScore);
+    awayScore = Math.max(3, awayScore);
+  }
   if (homeScore === awayScore) {
     const lean = 0.5 + (hr.off + hr.def - ar.off - ar.def) / 80;
     if (rng.next() < lean) homeScore += 3;
@@ -1758,9 +1768,7 @@ function buildGrade(state: SeasonState, fired: boolean) {
   const champ = round === "champion";
   const historical = state.mode === "historical";
   let score = (historical ? 48 : 60) + (record.wins - record.losses) * (historical ? 1.25 : 1.55);
-  score += historical
-    ? { missed: 0, wildcard: 3, divisional: 5, conference: 8, superbowl: 12, champion: 18 }[round]
-    : { missed: 0, wildcard: 4, divisional: 7, conference: 11, superbowl: 14, champion: 20 }[round];
+  score += postseasonGradeBonus(round, historical);
   score += (state.meters.owner - 60) / 8;
   score += (state.meters.locker - 60) / 12;
   score += (capHealth(state) - 55) / 12;
@@ -1793,6 +1801,12 @@ function buildGrade(state: SeasonState, fired: boolean) {
     best,
     worst,
   };
+}
+
+function postseasonGradeBonus(round: PlayoffRound, historical: boolean): number {
+  return historical
+    ? { missed: 0, wildcard: 3, divisional: 5, conference: 8, superbowl: 12, champion: 18 }[round]
+    : { missed: 0, wildcard: 4, divisional: 7, conference: 11, superbowl: 14, champion: 20 }[round];
 }
 
 function letterFor(score: number): string {
@@ -2020,6 +2034,9 @@ export function seasonDrivers(state: SeasonState): string[] {
   const drivers: string[] = [];
 
   drivers.push(`Point differential: ${pointDifferential > 0 ? "+" : ""}${pointDifferential} across a ${record.wins}-${record.losses} record.`);
+  const recordGrade = (record.wins - record.losses) * (state.mode === "historical" ? 1.25 : 1.55);
+  const playoffGrade = postseasonGradeBonus(exitRound(state), state.mode === "historical");
+  drivers.push(`Grade rubric: the regular-season record contributes ${recordGrade >= 0 ? "+" : ""}${recordGrade.toFixed(1)} and the playoff finish contributes +${playoffGrade}, before owner, locker-room, and cap adjustments.`);
   if (!bestQuarterback || bestQuarterback.ovr < 70) {
     drivers.push(`Quarterback plan: ${bestQuarterback ? `${bestQuarterback.name} was the top remaining QB at ${bestQuarterback.ovr} overall` : "no quarterback remained on the roster"}.`);
   } else {

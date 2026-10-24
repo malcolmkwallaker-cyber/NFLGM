@@ -323,7 +323,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
       </p>
       <p className="text-xs text-muted-foreground">
         {season.capMode === "hard"
-          ? "Hard cap: you cannot advance below $0. Current dead money clears at rollover; restructure money becomes next year's dead charge."
+          ? "Hard cap: only active contracts and current dead money count. Expired deals use no room until you re-sign or tag them. Current dead money clears at rollover; restructure money becomes next year's dead charge."
           : "Historical payroll guide: overspending is allowed, but the owner will penalize it."}
       </p>
       <div className="space-y-2">
@@ -341,8 +341,8 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
               <Button variant="outline" disabled={player.years <= 0} data-testid={`choice-re-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "restructure", playerId: player.id })}>
                 {player.years <= 0 ? "Expired — decide in free agency" : "Restructure"}
               </Button>
-              <Button variant="ghost" data-testid={`choice-cut-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "cut", playerId: player.id })}>
-                Cut
+              <Button variant="ghost" disabled={player.years <= 0} data-testid={`choice-cut-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "cut", playerId: player.id })}>
+                {player.years <= 0 ? "No active deal" : "Cut"}
               </Button>
             </div>
           </div>
@@ -374,6 +374,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
             : "Your expiring-player decisions are complete. Open the outside market when you are ready."
           : "Outside free agents after CPU-team retention. Elite starters are scarce and carry market premiums; the board includes an affordable option when one exists."}
       </p>
+      {season.faWave === 1 ? (
+        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
+          The room shown excludes expired prior contracts. Re-signing or tagging one adds the new charge immediately.
+        </p>
+      ) : null}
       {!bestQuarterbackUnderContract || bestQuarterbackUnderContract.ovr < 70 ? (
         <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-amber-100">
           Quarterback warning: {bestQuarterbackUnderContract
@@ -773,6 +778,9 @@ function Playoffs({ season }: { season: SeasonState }) {
     <section className="space-y-3 rounded-2xl border border-white/10 bg-card p-4">
       <p className="text-xs uppercase tracking-[0.16em] text-primary">{playoff ? formatPlayoffRound(playoff.round) : "Playoffs"}</p>
       <h2 className="font-display text-3xl tracking-wide">{playoff?.bye && !yours ? "You have the bye" : "The bracket is live"}</h2>
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        Regular-season records set seeds and home field. Current roster strength, staff effects, injuries, and deterministic game variance decide each matchup, so upsets remain possible.
+      </p>
       <ul className="space-y-1 text-sm">
         {(playoff?.seeds.AFC ?? []).map((seed) => (
           <li key={`A-${seed.teamId}`} className={seed.teamId === season.teamId ? "text-primary" : ""}>
@@ -828,6 +836,9 @@ function Recap({
           {grade?.wins}-{grade?.losses} · {finish}
         </p>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{grade?.headline}</p>
+        <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          The grade weighs regular-season record, playoff finish, owner confidence, locker room, and cap health. A championship carries a major bonus, but the record remains part of the score.
+        </p>
         {season.mode === "historical" ? (
           <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-muted-foreground">
             Historical goal: win the championship. Ultimate: finish undefeated and win it all. These are gameplay targets, not claims about the real season.

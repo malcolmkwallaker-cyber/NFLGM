@@ -5,8 +5,12 @@ export function payroll(roster: Player[]): number {
   return roster.reduce((sum, p) => sum + p.cap, 0);
 }
 
+export function committedPayroll(roster: Player[]): number {
+  return payroll(roster.filter((player) => player.years > 0));
+}
+
 export function capSpace(state: SeasonState, roster = state.teams[state.teamId]?.roster ?? []): number {
-  return Math.round((state.capLimit - payroll(roster) - state.deadMoney) * 10) / 10;
+  return Math.round((state.capLimit - committedPayroll(roster) - state.deadMoney) * 10) / 10;
 }
 
 export function capHealth(state: SeasonState): number {

@@ -5,7 +5,7 @@ import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
 import { gmSubject, normalizeGmName, titledGmName } from "@/lib/gm-name";
-import { capHealth, marketAsk } from "@/lib/engine/cap";
+import { capHealth, committedPayroll, marketAsk } from "@/lib/engine/cap";
 import { effectiveOvr } from "@/lib/engine/ratings";
 import { resultHeadlines } from "@/lib/engine/headlines";
 import { makeRng } from "@/lib/engine/rng";
@@ -398,6 +398,32 @@ describe("audit regressions", () => {
     expect(() => applyAction(state, { type: "tag", playerId: state.faBoard[0]?.id ?? "missing" })).toThrow();
   });
 
+  it("excludes expired prior contracts from room and preserves that room when unsigned players walk", () => {
+    let state = createSeason({ teamId: "NYJ", gmName: "Retention Cap Audit", seed: 1, mode: "career" });
+    const roster = yourRoster(state);
+    const expiredCharges = payroll(roster.filter((player) => player.years <= 0));
+    expect(expiredCharges).toBeGreaterThan(70);
+    expect(capSpace(state)).toBeCloseTo(state.capLimit - committedPayroll(roster) - state.deadMoney, 5);
+    expect(capSpace(state)).toBeGreaterThan(60);
+    const expired = roster.find((player) => player.name === "Garrett Wilson");
+    if (!expired) throw new Error("Garrett Wilson fixture missing");
+    state.phase = "cap";
+    expect(() => applyAction(state, { type: "cap", choice: "cut", playerId: expired.id })).toThrow("no active contract");
+
+    state = applyAction(state, { type: "cap", choice: "hold" });
+    expect(state.futureDead).toBe(0);
+    const offer = state.faBoard.find((player) => player.name === "Garrett Wilson");
+    if (!offer) throw new Error("Garrett Wilson retention offer missing");
+    expect(offer.cap).toBeLessThanOrEqual(capSpace(state));
+    state = applyAction(state, { type: "sign", playerId: offer.id });
+    expect(yourRoster(state).find((player) => player.id === offer.id)?.years).toBeGreaterThan(0);
+    const afterSigning = capSpace(state);
+    state = applyAction(state, { type: "next-wave" });
+    state = applyAction(state, { type: "next-wave" });
+    state = applyAction(state, { type: "next-wave" });
+    expect(capSpace(state)).toBe(afterSigning);
+  });
+
   it("surfaces an affordable outside free agent when one exists", () => {
     let state = advanceTo(createSeason({ teamId: "KC", gmName: "Budget Audit", seed: 231 }), "fa");
     state.capMode = "hard";
@@ -517,5 +543,21 @@ describe("audit regressions", () => {
       expect(later).toBeTruthy();
       expect(stripWeek(later?.text ?? "")).not.toBe(stripWeek(earlier.text));
     }
+  });
+
+  it("keeps modern playoff champions varied without clustering most losing scores at ten or fewer", () => {
+    const seasons = Array.from({ length: 20 }, (_, index) =>
+      simulateUntil(createSeason({ teamId: "NYJ", gmName: "Playoff Distribution Audit", seed: 600 + index, mode: "career" }), "recap"),
+    );
+    const champions = seasons.map((state) => state.playoff?.champion).filter(Boolean);
+    const losingScores = seasons.map((state) => {
+      const game = state.results.find((result) => result.round === "superbowl");
+      if (!game) throw new Error("Completed season has no Super Bowl");
+      return Math.min(game.homeScore, game.awayScore);
+    });
+
+    expect(new Set(champions).size).toBeGreaterThanOrEqual(6);
+    expect(losingScores.filter((score) => score <= 10).length).toBeLessThanOrEqual(6);
+    expect(losingScores.reduce((sum, score) => sum + score, 0) / losingScores.length).toBeGreaterThan(14);
   });
 });
