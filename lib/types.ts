@@ -109,6 +109,28 @@ export interface GameResult {
   awayScore: number;
 }
 
+export interface PlayerSeasonStats {
+  playerId: string;
+  games: number;
+  passAttempts: number;
+  completions: number;
+  passYards: number;
+  passTouchdowns: number;
+  interceptionsThrown: number;
+  rushAttempts: number;
+  rushYards: number;
+  rushTouchdowns: number;
+  targets: number;
+  receptions: number;
+  receivingYards: number;
+  receivingTouchdowns: number;
+  tackles: number;
+  sacks: number;
+  defensiveInterceptions: number;
+  fieldGoalsMade: number;
+  points: number;
+}
+
 export interface Headline {
   outlet: "beat" | "national" | "analytics";
   outletName: string;
@@ -235,6 +257,8 @@ export interface SeasonState {
   campCutIds: string[];
   schedule: ScheduledGame[];
   results: GameResult[];
+  playerStats?: Record<string, PlayerSeasonStats>;
+  statsTrackingStartedWeek?: number;
   decisions: { week: number; title: string; choice: string; log: string; swing: number }[];
   headlines: Headline[];
   activeDecision: Decision | null;

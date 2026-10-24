@@ -1,8 +1,10 @@
 import type { PlayoffRound } from "@/lib/types";
+import { historicalTurnaroundRoster } from "@/lib/data/historical-rosters";
 import { hashSeed } from "@/lib/engine/rng";
 import { createSeason } from "@/lib/engine/season";
+import { teamRatings } from "@/lib/engine/ratings";
 
-export const HISTORIC_TURNAROUND_RULES_VERSION = "historic-turnaround-v1";
+export const HISTORIC_TURNAROUND_RULES_VERSION = "historic-turnaround-v2-original-rosters";
 export const HISTORIC_TURNAROUND_EPOCH = Date.UTC(2026, 9, 23);
 
 export type HistoricTurnaroundScenario = {
@@ -45,12 +47,29 @@ export function createHistoricTurnaroundSeason(
   day: string,
 ) {
   const season = createSeason({ teamId: scenario.teamId, gmName, seed });
+  const definition = historicalTurnaroundRoster(scenario.id);
+  if (!definition) throw new Error(`No original roster is available for ${scenario.id}`);
+  const opponentRatings = Object.fromEntries(
+    Object.keys(season.teams)
+      .filter((teamId) => teamId !== scenario.teamId)
+      .map((teamId) => [teamId, teamRatings(season, teamId)]),
+  );
+  season.teams[scenario.teamId].roster = structuredClone(definition.roster);
+  for (const [teamId, ratings] of Object.entries(opponentRatings)) {
+    season.teams[teamId].roster = [];
+    season.teams[teamId].lockOff = ratings.off;
+    season.teams[teamId].lockDef = ratings.def;
+  }
   season.year = scenario.season;
   season.historicalTitle = scenario.title;
   season.flags.turnaroundScenarioId = scenario.id;
   season.flags.turnaroundDate = day;
   season.flags.turnaroundRulesVersion = HISTORIC_TURNAROUND_RULES_VERSION;
   season.flags.turnaroundSeed = seed;
+  season.flags.historicalRosterScenarioId = definition.scenarioId;
+  season.flags.historicalRosterConvention = definition.convention;
+  season.flags.historicalRosterSources = definition.sources.join("|");
+  season.flags.historicalValuesEstimated = true;
   return season;
 }
 

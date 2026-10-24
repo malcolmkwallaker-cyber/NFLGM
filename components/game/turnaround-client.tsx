@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { scoreHistoricTurnaround } from "@/lib/engine/historic-turnaround";
 import { useTodayTurnaround } from "@/components/game/use-today-turnaround";
 import { formatPlayoffRound } from "@/lib/format";
+import { historicalTurnaroundRoster } from "@/lib/data/historical-rosters";
 
 export function TurnaroundClient() {
   const today = useTodayTurnaround();
@@ -13,6 +14,7 @@ export function TurnaroundClient() {
   if (!today) return <p className="text-sm text-muted-foreground">Setting today’s turnaround…</p>;
 
   const { scenario, seed, challengeNumber, day } = today;
+  const rosterDefinition = historicalTurnaroundRoster(scenario.id);
   const savedSeason = profile.season;
   const isCurrent = savedSeason?.flags.turnaroundScenarioId === scenario.id && savedSeason.flags.turnaroundDate === day;
   const complete = isCurrent && savedSeason?.grade ? savedSeason : null;
@@ -44,16 +46,19 @@ export function TurnaroundClient() {
       </section>
 
       <section className="rounded-xl border border-amber-300/30 bg-amber-300/5 p-5 text-sm leading-relaxed">
-        <h2 className="font-display text-2xl tracking-wide">Historical-inspired simulation</h2>
+        <h2 className="font-display text-2xl tracking-wide">Original-team roster simulation</h2>
         <p className="mt-2 text-muted-foreground">
-          The record and outcome above describe the real {scenario.season} season. Your run uses the game’s current
-          generic roster model and modern 17-game rules—not an authentic {scenario.season} roster or schedule. Every
-          player gets the same scenario snapshot and seed today. Scoring normalizes the real {scenario.actualGames}-game
-          record to the simulated schedule.
+          The record and outcome above describe the real {scenario.season} season. Your featured team uses a compact
+          roster of real players from that team-year; positions are consolidated to fit the game. Ages, ratings,
+          potential, payroll and contract years are simulation estimates. Opponents remain team-level strength models, and the run
+          keeps the game’s modern 17-game schedule rather than recreating the historical schedule. Every player gets the
+          same scenario snapshot and seed today.
         </p>
+        {rosterDefinition ? <p className="mt-2 text-xs text-muted-foreground">Game roster: {rosterDefinition.roster.length} selected players from a sourced {rosterDefinition.sourceRosterCount}-name roster record{rosterDefinition.asOfDate ? ` dated ${rosterDefinition.asOfDate}` : ""}. {rosterDefinition.convention}</p> : null}
         <a className="mt-3 inline-block text-primary underline underline-offset-4" href={scenario.sources[0]} target="_blank" rel="noreferrer">
           View the season source
         </a>
+        {rosterDefinition?.sources[0] ? <a className="ml-4 mt-3 inline-block text-primary underline underline-offset-4" href={rosterDefinition.sources[0]} target="_blank" rel="noreferrer">View the roster source</a> : null}
       </section>
 
       {score !== null && complete?.grade ? (

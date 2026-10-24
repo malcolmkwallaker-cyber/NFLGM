@@ -7,7 +7,8 @@ import {
   type HistoricTurnaroundScenario,
 } from "@/lib/engine/historic-turnaround";
 import { HISTORIC_TURNAROUNDS } from "@/lib/data/historic-turnarounds";
-import { applyAction, createSeason, simulateUntil } from "@/lib/engine/season";
+import { HISTORICAL_TURNAROUND_ROSTERS } from "@/lib/data/historical-rosters";
+import { applyAction, simulateUntil } from "@/lib/engine/season";
 
 const verifiedFixture: HistoricTurnaroundScenario = {
   id: "synthetic-verified-fixture",
@@ -35,6 +36,34 @@ describe("historic turnaround challenge contract", () => {
     expect(season.historicalTitle).toBe("Detroit’s winless season");
     expect(season.seasonLength).toBe(17);
     expect(season.flags.turnaroundScenarioId).toBe("det-2008");
+    expect(season.flags.historicalRosterScenarioId).toBe("det-2008");
+    expect(season.teams.DET.roster.some((player) => player.name === "Calvin Johnson")).toBe(true);
+    expect(season.teams.DET.roster.some((player) => player.name === "Jared Goff")).toBe(false);
+  });
+
+  it("gives every verified turnaround an original compact roster without modern player leakage", () => {
+    expect(HISTORICAL_TURNAROUND_ROSTERS).toHaveLength(HISTORIC_TURNAROUNDS.length);
+    expect(HISTORICAL_TURNAROUND_ROSTERS.find((definition) => definition.scenarioId === "det-2008")?.sourceRosterCount).toBe(52);
+    const modernLeaks: Record<string, string[]> = {
+      "det-2008": ["Jared Goff"],
+      "cle-2017": ["Deshaun Watson", "Shedeur Sanders"],
+      "cle-2019": ["Deshaun Watson", "Shedeur Sanders"],
+      "tb-1976": ["Baker Mayfield"],
+      "phi-2011": ["Jalen Hurts"],
+      "dal-2010": ["Dak Prescott"],
+      "den-2022": ["Bo Nix"],
+      "hou-2013": ["C.J. Stroud"],
+    };
+    for (const scenario of HISTORIC_TURNAROUNDS) {
+      const season = createHistoricTurnaroundSeason(scenario, "Roster Audit", 91, "2026-10-24");
+      const roster = season.teams[scenario.teamId].roster;
+      expect(roster.length).toBeGreaterThanOrEqual(19);
+      expect(new Set(roster.map((player) => player.id)).size).toBe(roster.length);
+      expect(new Set(roster.map((player) => player.name)).size).toBe(roster.length);
+      expect(roster.every((player) => player.real && !(modernLeaks[scenario.id] ?? []).includes(player.name))).toBe(true);
+      expect(Object.entries(season.teams).filter(([teamId]) => teamId !== scenario.teamId).every(([, team]) => team.roster.length === 0 && Boolean(team.lockOff) && Boolean(team.lockDef))).toBe(true);
+      expect((JSON.parse(JSON.stringify(season)) as typeof season).teams[scenario.teamId].roster).toEqual(roster);
+    }
   });
   it("publishes only sourced season records with explicit game targets", () => {
     expect(HISTORIC_TURNAROUNDS).toHaveLength(8);
@@ -61,8 +90,8 @@ describe("historic turnaround challenge contract", () => {
 
   it("replays and resumes the same seeded simulation deterministically", () => {
     const { scenario, seed } = historicScenarioForDate(new Date("2026-10-23T12:00:00Z"), HISTORIC_TURNAROUNDS);
-    const first = createSeason({ teamId: scenario.teamId, gmName: "Replay GM", seed });
-    const replay = createSeason({ teamId: scenario.teamId, gmName: "Replay GM", seed });
+    const first = createHistoricTurnaroundSeason(scenario, "Replay GM", seed, "2026-10-23");
+    const replay = createHistoricTurnaroundSeason(scenario, "Replay GM", seed, "2026-10-23");
     expect(replay).toEqual(first);
 
     const progressed = applyAction(first, { type: "intro", choice: "embrace" });

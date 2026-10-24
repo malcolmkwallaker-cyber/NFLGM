@@ -82,6 +82,27 @@ describe("audit regressions", () => {
     );
   });
 
+  it("records deterministic user player statistics without inventing legacy-game lines", () => {
+    const first = simulateUntil(createSeason({ teamId: "KC", gmName: "Stats Audit", seed: 301 }), "recap");
+    const replay = simulateUntil(createSeason({ teamId: "KC", gmName: "Stats Audit", seed: 301 }), "recap");
+    expect(first.playerStats).toEqual(replay.playerStats);
+    expect(Object.keys(first.playerStats ?? {}).length).toBeGreaterThan(0);
+    const mahomes = first.teams.KC.roster.find((player) => player.name === "Patrick Mahomes");
+    expect(mahomes && first.playerStats?.[mahomes.id]?.passYards).toBeGreaterThan(0);
+    const userPoints = first.results.reduce((total, result) => total + (result.home === "KC" ? result.homeScore : result.away === "KC" ? result.awayScore : 0), 0);
+    const statLines = Object.values(first.playerStats ?? {});
+    expect(statLines.reduce((total, stats) => total + stats.points, 0)).toBe(userPoints);
+    expect(statLines.reduce((total, stats) => total + stats.passYards, 0)).toBe(statLines.reduce((total, stats) => total + stats.receivingYards, 0));
+
+    const legacy = advanceTo(createSeason({ teamId: "KC", gmName: "Legacy Stats", seed: 302 }), "regular");
+    delete legacy.playerStats;
+    delete legacy.statsTrackingStartedWeek;
+    legacy.results.push({ week: 0, round: "legacy", home: "KC", away: "BUF", homeScore: 20, awayScore: 17 });
+    const resumed = simulateUntil(legacy, "recap");
+    expect(resumed.results.some((result) => result.round === "legacy")).toBe(true);
+    expect(resumed.statsTrackingStartedWeek).toBeGreaterThanOrEqual(1);
+  });
+
   it("rejects repeated phase submissions without changing accepted state", () => {
     const intro = createSeason({ teamId: "KC", gmName: "Double Click", seed: 12 });
     const staff = applyAction(intro, { type: "intro", choice: "embrace" });

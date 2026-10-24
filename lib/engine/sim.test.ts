@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DAILY_CHALLENGES } from "@/lib/data/daily-challenges";
 import { HISTORICAL } from "@/lib/data/historical";
+import { CLASSIC_HISTORICAL_ROSTER_PROVENANCE } from "@/lib/data/historical-rosters";
 import { TEAMS } from "@/lib/data/teams";
 import { advanceCareer, createCareer, takeJob, withJobOffers } from "@/lib/engine/career";
 import { advanceDailyProgress, challengeForDate, dailyOptionOrder, percentileFor, puzzleNumber } from "@/lib/engine/daily";
@@ -276,6 +277,7 @@ describe("historical catalog", () => {
     expect(ids).toContain("2013-seahawks");
     for (const pack of HISTORICAL) {
       expect(pack.teams.some((t) => t.id === pack.teamId && (t.roster?.length ?? 0) > 15)).toBe(true);
+      expect(CLASSIC_HISTORICAL_ROSTER_PROVENANCE[pack.id]?.sources.every((source) => source.startsWith("https://"))).toBe(true);
       expect(pack.teams.find((team) => team.id === "RAM")?.abbr).not.toBe("RAM");
       expect(pack.teams.find((team) => team.id === "LARD")?.abbr).not.toBe("LARD");
     }

@@ -4,6 +4,7 @@ import { historicalById } from "@/lib/data/historical";
 import { staffMarket } from "@/lib/data/staff";
 import { capHealth, capSpace, marketAsk, offerYears, payroll } from "@/lib/engine/cap";
 import { makeHeadlines, resultHeadlines } from "@/lib/engine/headlines";
+import { recordUserPlayerStats } from "@/lib/engine/player-stats";
 import { interpretFreeText } from "@/lib/engine/keywords";
 import { teamRatings } from "@/lib/engine/ratings";
 import { buildSchedule } from "@/lib/engine/schedule";
@@ -207,6 +208,8 @@ export function createSeason(input: {
       seed,
     ),
     results: [],
+    playerStats: {},
+    statsTrackingStartedWeek: 1,
     decisions: [],
     headlines: [],
     activeDecision: null,
@@ -1330,7 +1333,9 @@ function doPlayWeek(state: SeasonState): SeasonState {
   let yours: { opp: string; score: string; won: boolean } | null = null;
   for (const game of games) {
     const played = simulateMatch(state, game.home, game.away, `w${state.week}`);
-    state.results.push({ week: state.week, round: "regular", ...played });
+    const result = { week: state.week, round: "regular", ...played };
+    state.results.push(result);
+    recordUserPlayerStats(state, result, `regular-${state.week}`);
     applyScore(state, played.home, played.away, played.homeScore, played.awayScore);
     if (game.home === state.teamId || game.away === state.teamId) {
       const won = game.home === state.teamId ? played.homeScore > played.awayScore : played.awayScore > played.homeScore;
@@ -1549,7 +1554,9 @@ function doPlayoff(state: SeasonState): SeasonState {
   const playoff = state.playoff;
   for (const game of playoff.pending) {
     const played = simulateMatch(state, game.home, game.away, game.id);
-    state.results.push({ week: 0, round: game.round, ...played });
+    const result = { week: 0, round: game.round, ...played };
+    state.results.push(result);
+    recordUserPlayerStats(state, result, game.id);
     const winner = played.homeScore > played.awayScore ? played.home : played.away;
     const loser = winner === played.home ? played.away : played.home;
     if (state.teamId === winner) bump(state, 6, 5, 2);
@@ -1637,7 +1644,9 @@ function simRemainingBracket(state: SeasonState) {
     for (const game of state.playoff.pending) {
       if (state.results.some((r) => r.round === game.round && r.home === game.home && r.away === game.away)) continue;
       const played = simulateMatch(state, game.home, game.away, game.id);
-      state.results.push({ week: 0, round: game.round, ...played });
+      const result = { week: 0, round: game.round, ...played };
+      state.results.push(result);
+      recordUserPlayerStats(state, result, game.id);
     }
     const before = state.playoff.round;
     advanceBracket(state);
@@ -1851,6 +1860,8 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   next.week = 1;
   next.staffStep = ROLES.length;
   next.results = [];
+  next.playerStats = {};
+  next.statsTrackingStartedWeek = 1;
   next.playoff = null;
   next.grade = null;
   next.firedReason = null;
