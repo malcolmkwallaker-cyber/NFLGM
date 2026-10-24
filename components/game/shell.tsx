@@ -63,6 +63,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Link href="/leaderboard" className="hover:text-foreground">Personal leaderboard</Link>
           <Link href="/settings" className="hover:text-foreground">Settings</Link>
           <Link href="/upgrade" className="hover:text-foreground">Playtest access</Link>
+          <Link href="/about" className="hover:text-foreground">About &amp; how to play</Link>
+          <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
+          <Link href="/contact" className="hover:text-foreground">Contact</Link>
         </p>
         <p>
           Run The Roster is an unofficial fan game. It is not affiliated with, endorsed by, or connected to the National

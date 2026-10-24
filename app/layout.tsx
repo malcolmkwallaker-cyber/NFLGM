@@ -18,6 +18,9 @@ const display = Barlow_Condensed({
 export const metadata: Metadata = {
   title: "Run The Roster",
   description: "A daily front-office challenge and a season-long NFL general manager sim.",
+  other: {
+    "google-adsense-account": "ca-pub-3524460167829862",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
