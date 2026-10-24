@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GRADE_EMOJI, GRADE_WORD } from "@/lib/engine/daily";
 import type { GradeColor } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -18,15 +18,40 @@ export function ShareCard({
   line: string;
   text: string;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copiedFor, setCopiedFor] = useState("");
+  const [codeCopiedFor, setCodeCopiedFor] = useState("");
   const [imageStatus, setImageStatus] = useState("");
+  const rows = text.split("\n");
+  const resultCode = rows.find((row) => row.startsWith("RTR1|") || row.startsWith("NFLGM1|")) ?? "";
+  const visibleText = rows.filter((row) => !row.startsWith("RTR1|") && !row.startsWith("NFLGM1|")).join("\n").trimEnd();
+  const copied = copiedFor === text;
+  const codeCopied = Boolean(resultCode) && codeCopiedFor === resultCode;
+
+  useEffect(() => {
+    if (!copied && !codeCopied) return;
+    const timer = window.setTimeout(() => {
+      setCopiedFor("");
+      setCodeCopiedFor("");
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [codeCopied, copied]);
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
+      await navigator.clipboard.writeText(visibleText);
+      setCopiedFor(text);
     } catch {
-      setCopied(false);
+      setCopiedFor("");
+    }
+  }
+
+  async function copyResultCode() {
+    if (!resultCode) return;
+    try {
+      await navigator.clipboard.writeText(resultCode);
+      setCodeCopiedFor(resultCode);
+    } catch {
+      setCodeCopiedFor("");
     }
   }
 
@@ -52,7 +77,7 @@ export function ShareCard({
     context.fillText(title, 54, 160);
     context.font = "30px sans-serif";
     context.fillStyle = "#c3ccda";
-    const lines = text.split("\n").filter((row) => row && !row.startsWith("RTR1|") && !row.startsWith("NFLGM1|"));
+    const lines = visibleText.split("\n").filter(Boolean);
     let y = 230;
     for (const row of lines.slice(0, 7)) {
       context.fillText(row.slice(0, 64), 54, y);
@@ -69,7 +94,7 @@ export function ShareCard({
     const file = new File([blob], "run-the-roster.png", { type: "image/png" });
     if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
       try {
-        await navigator.share({ title: "Run The Roster", text, files: [file] });
+        await navigator.share({ title: "Run The Roster", text: visibleText, files: [file] });
         setImageStatus("Shared");
         return;
       } catch (error) {
@@ -103,7 +128,7 @@ export function ShareCard({
         ) : null}
         <p className="text-sm text-foreground/90">{line}</p>
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
-          {text}
+          {visibleText}
         </pre>
         <div className="flex flex-wrap gap-2">
           <Button type="button" className="!h-11 !px-4" onClick={copy}>
@@ -112,7 +137,13 @@ export function ShareCard({
           <Button type="button" variant="outline" className="!h-11 !px-4" onClick={shareImage}>
             Share image
           </Button>
+          {resultCode ? (
+            <Button type="button" variant="ghost" className="!h-11 !px-4" onClick={copyResultCode}>
+              {codeCopied ? "Code copied" : "Copy result code"}
+            </Button>
+          ) : null}
         </div>
+        {resultCode ? <p className="text-xs text-muted-foreground">Result codes are only for manual on-device room import and are not shown in the normal share card.</p> : null}
         {imageStatus ? <p className="text-xs text-muted-foreground" role="status">{imageStatus}</p> : null}
       </div>
     </div>

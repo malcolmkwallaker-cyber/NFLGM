@@ -53,6 +53,7 @@ export interface Player {
   potential: number;
   real: boolean;
   injured?: boolean;
+  limited?: boolean;
   origin?: string;
   perceived?: number;
   drafted?: boolean;
@@ -240,7 +241,7 @@ export interface SeasonState {
   capMode: CapMode;
   deadMoney: number;
   futureDead: number;
-  extraPicks: { round: number; year: number }[];
+  extraPicks: { round: number; year: number; source?: string }[];
   restructuredIds?: string[];
   franchiseTagUsed?: boolean;
   faWave: number;

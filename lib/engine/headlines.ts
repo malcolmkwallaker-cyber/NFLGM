@@ -26,8 +26,13 @@ export function makeHeadlines(
 
 export function resultHeadlines(state: SeasonState, won: boolean, score: string, opp: string, rng: Rng): Headline[] {
   const team = teamLabel(teamById(state.teamId, state.directory));
+  const week = `Week ${state.week}: `;
   const previous = new Set(state.headlines.map((headline) => headline.text));
-  const pickFresh = (lines: string[]) => rng.pick(lines.filter((line) => !previous.has(line)).length ? lines.filter((line) => !previous.has(line)) : lines);
+  const pickFresh = (lines: string[]) => {
+    const contextual = lines.map((line) => `${week}${line}`);
+    const fresh = contextual.filter((line) => !previous.has(line));
+    return rng.pick(fresh.length ? fresh : contextual);
+  };
   const beat = won
     ? pickFresh([
         `${team} take ${score} over ${opp}. The building exhaled.`,
@@ -41,7 +46,7 @@ export function resultHeadlines(state: SeasonState, won: boolean, score: string,
       ]);
   const national = won
     ? pickFresh([
-        `Is ${team} quietly a problem, or was ${opp} just soft?`,
+        `Are the ${team} quietly a problem, or was ${opp} just soft?`,
         `${team} got the win. Let's see if they do it against someone that can tackle.`,
         `Credit where it's due: ${team} won a game they were supposed to sweat.`,
       ])
@@ -51,7 +56,7 @@ export function resultHeadlines(state: SeasonState, won: boolean, score: string,
         `${opp} didn't steal it. ${team} handed it over.`,
       ]);
   const analytics = won
-    ? `Game script favored ${team}. The down-to-down profile was ahead of the final score, not behind it.`
-    : `Success rate sagged after halftime. The score flatters nobody on the ${team} sideline.`;
+    ? `${week}game script favored the ${team}. The down-to-down profile was ahead of the final score, not behind it.`
+    : `${week}success rate sagged after halftime. The score flatters nobody on the ${team} sideline.`;
   return makeHeadlines(state, won ? "positive" : "negative", { beat, national, analytics });
 }

@@ -4,8 +4,9 @@ import { applyAction, capSpace, createSeason, ensureMinimumRoster, payroll, play
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
-import { normalizeGmName, titledGmName } from "@/lib/gm-name";
-import { marketAsk } from "@/lib/engine/cap";
+import { gmSubject, normalizeGmName, titledGmName } from "@/lib/gm-name";
+import { capHealth, marketAsk } from "@/lib/engine/cap";
+import { effectiveOvr } from "@/lib/engine/ratings";
 
 function advanceTo(state: SeasonState, phase: Phase): SeasonState {
   let current = state;
@@ -185,6 +186,7 @@ describe("audit regressions", () => {
     expect(titledGmName("GM")).toBe("GM");
     expect(titledGmName("GM Morgan")).toBe("GM Morgan");
     expect(titledGmName("Morgan")).toBe("GM Morgan");
+    expect(gmSubject(" ")).toBe("The GM");
     const migrated = migrateProfile({ ...freshProfile(), name: " ", season: createSeason({ teamId: "KC", gmName: " ", seed: 223 }) });
     expect(migrated.name).toBe("GM");
     expect(migrated.season?.gmName).toBe("GM");
@@ -407,11 +409,11 @@ describe("audit regressions", () => {
     let state = advanceTo(createSeason({ teamId: "KC", gmName: "Pick Audit", seed: 24 }), "trade");
     state.extraPicks = [
       { round: 1, year: state.year - 1 },
-      { round: 2, year: state.year },
+      { round: 2, year: state.year, source: "Draft-day trade with BUF" },
       { round: 3, year: state.year + 1 },
     ];
     state = applyAction(state, { type: "trade-done" });
-    expect(state.draftPicks.some((pick) => pick.note === "Acquired" && pick.round === 2)).toBe(true);
+    expect(state.draftPicks.some((pick) => pick.note === "Acquired · Draft-day trade with BUF" && pick.round === 2)).toBe(true);
     expect(state.extraPicks).toEqual([{ round: 3, year: state.year + 1 }]);
   });
 
@@ -445,5 +447,56 @@ describe("audit regressions", () => {
     expect(migrated.season.teams.KC.roster).toHaveLength(22);
     expect(migrated.season.teams.KC.roster.some((player) => player.pos === "QB")).toBe(true);
     expect(migrated.season.campCutIds).toEqual(suggestedCuts(migrated.season));
+  });
+
+  it("keeps a play-through injury active at reduced effectiveness until the game resolves", () => {
+    let state = advanceTo(createSeason({ teamId: "CHI", gmName: "Injury Audit", seed: 502, mode: "career" }), "regular");
+    while (state.week < 4) {
+      if (state.activeDecision) state = applyAction(state, { type: "decide", choiceId: state.activeDecision.options[0]?.id ?? "balanced" });
+      else state = applyAction(state, { type: "play-week" });
+    }
+    expect(state.activeDecision?.id).toBe("injury");
+    const play = state.activeDecision?.options.find((option) => option.id === "play");
+    const playerId = play?.tag?.slice("playhurt:".length);
+    if (!playerId) throw new Error("Play-through injury fixture missing");
+    state = applyAction(state, { type: "decide", choiceId: "play" });
+    const limited = yourRoster(state).find((player) => player.id === playerId);
+    expect(limited?.injured).not.toBe(true);
+    expect(limited?.limited).toBe(true);
+    expect(limited && effectiveOvr(limited)).toBeLessThan(limited?.ovr ?? 0);
+
+    state = JSON.parse(JSON.stringify(state)) as SeasonState;
+    state = applyAction(state, { type: "play-week" });
+    const resolved = yourRoster(state).find((player) => player.id === playerId);
+    expect(resolved?.limited).toBe(false);
+    expect(state.log.some((line) => line.includes("reduced effectiveness"))).toBe(true);
+  });
+
+  it("explains dead-money and owner-confidence rollover without losing pushed obligations", () => {
+    const state = createSeason({ teamId: "CHI", gmName: "Rollover Audit", seed: 503, mode: "career" });
+    state.deadMoney = 16.5;
+    state.futureDead = 9;
+    state.meters.owner = 32;
+    state.grade = { letter: "C", score: 62, round: "missed", champ: false, wins: 6, losses: 11, pf: 280, pa: 360, headline: "A difficult season", best: "Draft", worst: "Record" };
+    const next = rolloverSeason(state);
+    expect(next.deadMoney).toBe(9);
+    expect(next.futureDead).toBe(0);
+    expect(next.meters.owner).toBe(42);
+    expect(next.log.some((line) => line.includes("$16.5M") && line.includes("$9.0M"))).toBe(true);
+    expect(next.log.some((line) => line.includes("32 to 42"))).toBe(true);
+    expect(capHealth(next)).toBeLessThan(100);
+    expect(next.owner.note).toContain("missed the playoffs");
+    expect(next.owner.note).not.toContain("a Missed");
+  });
+
+  it("identifies the league champion without implying a missed-playoff team won the trophy", () => {
+    let missed: SeasonState | null = null;
+    for (let seed = 1; seed <= 30 && !missed; seed += 1) {
+      const completed = simulateUntil(createSeason({ teamId: "CHI", gmName: "Recap Audit", seed, mode: "career" }), "recap");
+      if (completed.phase === "recap" && completed.grade?.round === "missed" && completed.playoff?.champion) missed = completed;
+    }
+    expect(missed).not.toBeNull();
+    expect(missed?.headlines.some((headline) => headline.text.includes("Your season had already ended."))).toBe(true);
+    expect(missed?.headlines.some((headline) => headline.text.includes("leave with the trophy"))).toBe(false);
   });
 });

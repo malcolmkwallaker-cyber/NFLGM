@@ -1,5 +1,6 @@
-import { capHealth } from "@/lib/engine/cap";
+import { capHealth, capSpace } from "@/lib/engine/cap";
 import { FIRING_THRESHOLD } from "@/lib/engine/season";
+import { formatMoney } from "@/lib/format";
 import type { SeasonState } from "@/lib/types";
 
 function Bar({ label, value, hint }: { label: string; value: number; hint?: string }) {
@@ -27,12 +28,14 @@ function Bar({ label, value, hint }: { label: string; value: number; hint?: stri
 
 export function Meters({ season }: { season: SeasonState }) {
   const health = capHealth(season);
+  const space = capSpace(season);
+  const capHint = `${formatMoney(space)} room · ${formatMoney(season.deadMoney)} current dead${season.futureDead ? ` · ${formatMoney(season.futureDead)} pushed to next year` : ""}`;
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Bar label="Owner" value={season.meters.owner} hint={season.meters.owner <= 35 ? `Hot seat · fired at ${FIRING_THRESHOLD}` : `Fired at ${FIRING_THRESHOLD}`} />
       <Bar label="Fans" value={season.meters.fans} />
       <Bar label="Locker" value={season.meters.locker} />
-      <Bar label="Cap health" value={health} hint={season.capMode === "payroll" ? "Payroll guide" : "Hard cap"} />
+      <Bar label="Cap flexibility" value={health} hint={season.capMode === "payroll" ? `Payroll guide · ${capHint}` : capHint} />
     </div>
   );
 }

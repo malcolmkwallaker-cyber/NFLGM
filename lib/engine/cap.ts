@@ -11,7 +11,15 @@ export function capSpace(state: SeasonState, roster = state.teams[state.teamId]?
 
 export function capHealth(state: SeasonState): number {
   const space = capSpace(state);
-  const health = 58 + space * 1.15 - state.deadMoney * 0.4;
+  const limit = Math.max(1, state.capLimit);
+  const spaceRatio = space / limit;
+  const currentDeadRatio = state.deadMoney / limit;
+  const futureDeadRatio = state.futureDead / limit;
+  const health =
+    55 +
+    (spaceRatio >= 0 ? spaceRatio * 85 : spaceRatio * 180) -
+    currentDeadRatio * 70 -
+    futureDeadRatio * 30;
   return Math.round(clamp(health, 0, 100));
 }
 

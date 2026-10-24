@@ -30,6 +30,10 @@ const GRADE_CLASS: Record<GradeColor, string> = {
   red: "border-red-400/70 bg-red-400/10",
 };
 
+function naturalizeEcho(value: string): string {
+  return value.replace(/^(A|An|The)\s/, (article) => article.toLowerCase());
+}
+
 export function DailyClient({
   day,
   puzzle,
@@ -184,7 +188,7 @@ export function DailyClient({
             <p className="mt-2 text-sm leading-relaxed">{challenge.whatHappened}</p>
             <p className="mt-3 text-sm text-muted-foreground">
               {challenge.fictional
-                ? `This grade scores the decision process described in this original fictional scenario. It is not a claim about a real event. The call resembles ${option.echo}.`
+                ? `This grade scores the decision process described in this original fictional scenario. It is not a claim about a real event. The call resembles ${naturalizeEcho(option.echo)}.`
                 : `This grade is hindsight. It scores how the move turned out, not whether it was the percentage play on the day. The call resembles ${option.echo}.`}
             </p>
             {bestAlternative ? (

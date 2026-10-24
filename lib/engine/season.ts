@@ -10,7 +10,7 @@ import { teamRatings } from "@/lib/engine/ratings";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { clamp, hashSeed, makeRng, shuffle } from "@/lib/engine/rng";
 import { formatMoney, formatPlayoffRound } from "@/lib/format";
-import { normalizeGmName } from "@/lib/gm-name";
+import { gmSubject, normalizeGmName } from "@/lib/gm-name";
 import type {
   Action,
   Choice,
@@ -224,29 +224,39 @@ export function createSeason(input: {
 
   state.headlines = makeHeadlines(state, "neutral", {
     beat: `${teamLabel(teamById(teamId, directory))} have a new GM. ${state.owner.name} wants a ${priorityLabel(ownerPriority).toLowerCase()} plan.`,
-    national: `Another building, another binder. ${state.gmName} gets the chair.`,
+    national: `Another building, another binder. ${gmSubject(state.gmName)} gets the chair.`,
     analytics: `Inherited roster rates ${strength.off.toFixed(0)} on offense and ${strength.def.toFixed(0)} on defense before a single hire.`,
   });
-  state.log.push(`${state.gmName} is introduced as GM.`);
+  state.log.push(state.gmName === "GM" ? "The GM is introduced." : `${state.gmName} is introduced as GM.`);
   seedEraRipples(state);
   return state;
 }
 
 function ownerNote(priority: string, year: number, previous?: { wins: number; losses: number; round: PlayoffRound }): string {
+  const finish = previous
+    ? previous.round === "missed"
+      ? "missed the playoffs"
+      : previous.round === "champion"
+        ? "won the championship"
+        : previous.round === "superbowl"
+          ? "reached the Super Bowl"
+          : `exited in the ${formatPlayoffRound(previous.round)}`
+    : "";
   const context = previous
-    ? ` After ${previous.wins}-${previous.losses} and a ${previous.round === "superbowl" ? "Super Bowl appearance" : previous.round === "champion" ? "championship" : `${formatPlayoffRound(previous.round)} finish`} in ${year - 1}, the ${year} brief is specific: `
+    ? `After a ${previous.wins}-${previous.losses} season that ${finish} in ${year - 1}, the ${year} brief is specific: `
     : `The ${year} brief is clear: `;
+  const alternate = year % 2 === 0;
   switch (priority) {
     case "win":
-      return `${context}the owner wants a championship push, not a pamphlet about the future.`;
+      return `${context}${alternate ? "turn last year's lessons into a championship push." : "the owner wants a championship push, not a pamphlet about the future."}`;
     case "youth":
-      return `${context}draft, develop, and stop paying for other people's primes.`;
+      return `${context}${alternate ? "give young players real roles without abandoning the season." : "draft, develop, and stop paying for other people's primes."}`;
     case "stars":
-      return `${context}bring in a name the city knows without hollowing out the roster.`;
+      return `${context}${alternate ? "add a difference-maker the city recognizes and the cap can support." : "bring in a name the city knows without hollowing out the roster."}`;
     case "fiscal":
-      return `${context}the cap sheet must stay credible even if February is quiet.`;
+      return `${context}${alternate ? "create flexibility without leaving useful money idle." : "the cap sheet must stay credible even if February is quiet."}`;
     default:
-      return `${context}protect the locker room; talent that poisons the week is not talent.`;
+      return `${context}${alternate ? "make discipline and weekly buy-in visible, not ceremonial." : "protect the locker room; talent that poisons the week is not talent."}`;
   }
 }
 
@@ -382,7 +392,7 @@ function doIntro(state: SeasonState, choice: string, text?: string): SeasonState
   state.phase = state.staff.hc ? "cap" : "staff";
   state.headlines = makeHeadlines(state, state.meters.owner >= 70 ? "positive" : "negative", {
     beat: `${state.owner.name} leaves the meeting ${state.meters.owner >= 70 ? "nodding" : "already second-guessing"}.`,
-    national: `${state.gmName} just told the building what kind of GM this is going to be.`,
+    national: `${gmSubject(state.gmName)} just told the building what kind of GM this is going to be.`,
     analytics: `Owner confidence is ${state.meters.owner}. That is the only poll that can end the job.`,
   });
   if (state.phase === "cap") openCap(state);
@@ -409,7 +419,7 @@ function doHire(state: SeasonState, id: string): SeasonState {
   state.staffStep += 1;
   state.headlines = makeHeadlines(state, owner >= 0 ? "positive" : "negative", {
     beat: `${member.name} gets the ${role === "hc" ? "headset" : "office"}. ${member.blurb}`,
-    national: `${state.gmName} hires ${member.name}. ${member.legend ? "The city already knows the name." : "Nobody outside the building has a strong opinion yet."}`,
+    national: `${gmSubject(state.gmName)} hires ${member.name}. ${member.legend ? "The city already knows the name." : "Nobody outside the building has a strong opinion yet."}`,
     analytics: `${member.scheme} is the tell. Leadership ${member.leadership}/5, development ${member.development}/5.`,
   });
   if (state.staffStep >= ROLES.length) openCap(state);
@@ -584,7 +594,7 @@ function doSign(state: SeasonState, playerId: string): SeasonState {
   if (over) queueRipple(state, 3, payrollRipple());
   state.headlines = makeHeadlines(state, "positive", {
     beat: `${deal.name} is yours. $${ask.toFixed(1)}M a year, ${years} years on the sheet.`,
-    national: deal.ovr >= 88 ? `${state.gmName} just bought a headline.` : `${deal.name} is a fit, not a parade.`,
+    national: deal.ovr >= 88 ? `${gmSubject(state.gmName)} just bought a headline.` : `${deal.name} is a fit, not a parade.`,
     analytics: `Space after the deal: ${formatMoney(capSpace(state))}. ${over ? "The owner will read this number." : "The cap still closes."}`,
   });
   return state;
@@ -753,7 +763,13 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
     from.roster = from.roster.filter((p) => p.id !== offer.incoming?.id);
     roster.push({ ...offer.incoming, origin: offer.fromTeamId });
   }
-  if (offer.pickRound && offer.pickYear) state.extraPicks.push({ round: offer.pickRound, year: offer.pickYear });
+  if (offer.pickRound && offer.pickYear) {
+    state.extraPicks.push({
+      round: offer.pickRound,
+      year: offer.pickYear,
+      source: `Trade with ${teamById(offer.fromTeamId, state.directory).abbr}`,
+    });
+  }
   const swing = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
   bump(state, swing, offer.fair === "fleece" ? -3 : 0, sent.ovr >= 85 ? -2 : 0);
   const got = offer.incoming ? offer.incoming.name : offer.pickRound ? `a ${offer.pickYear} round ${offer.pickRound}` : "nothing you wanted";
@@ -860,9 +876,14 @@ function makeDraftOrder(state: SeasonState): DraftPick[] {
       overall += 1;
     });
     for (const extra of state.extraPicks.filter((p) => p.year === state.year && p.round === round)) {
-      picks.push({ round, slot: ranked.length + 1, overall, teamId: state.teamId, note: "Acquired" });
+      picks.push({
+        round,
+        slot: ranked.length + 1,
+        overall,
+        teamId: state.teamId,
+        note: extra.source ? `Acquired · ${extra.source}` : "Acquired in an earlier trade",
+      });
       overall += 1;
-      void extra;
     }
   }
   return picks;
@@ -958,8 +979,12 @@ function doDraftTrade(state: SeasonState, accept: boolean): SeasonState {
     const theirTeam = target.teamId;
     target.teamId = state.teamId;
     pick.teamId = theirTeam;
-    state.extraPicks.push({ round: Math.min(3, pick.round + 1), year: state.year + 1 });
-    pushDecision(state, "Draft", "Traded down", `Moved down in round ${pick.round} and added a future pick.`, 2);
+    state.extraPicks.push({
+      round: Math.min(3, pick.round + 1),
+      year: state.year + 1,
+      source: `Draft-day trade with ${offer.from}`,
+    });
+    pushDecision(state, "Draft", "Traded down", `Moved down in round ${pick.round} with ${offer.from} and added a future pick.`, 2);
   }
   advanceCpu(state);
   return state;
@@ -1261,7 +1286,10 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
     const id = choice.tag.slice("playhurt:".length);
     const rng = makeRng(hashSeed(state.seed, "hurt", id, state.week));
     const player = findPlayer(yourRoster(state), id);
-    if (player && rng.next() < 0.35) player.injured = true;
+    if (player) {
+      player.limited = true;
+      state.flags[`aggravate-${id}`] = rng.next() < 0.35;
+    }
   }
   if (choice.tag?.startsWith("sit:")) {
     const id = choice.tag.slice(4);
@@ -1284,7 +1312,7 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
     const player = roster.find((p) => p.id === id);
     if (player) {
       state.teams[state.teamId].roster = roster.filter((p) => p.id !== id);
-      state.extraPicks.push({ round: Number(roundRaw), year: state.year + 1 });
+      state.extraPicks.push({ round: Number(roundRaw), year: state.year + 1, source: `Deadline trade of ${player.name}` });
     }
   }
   if (choice.tag?.startsWith("extend:")) {
@@ -1299,7 +1327,7 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
     const id = choice.tag.slice("shopstar:".length);
     const player = findPlayer(yourRoster(state), id);
     if (player) {
-      state.extraPicks.push({ round: player.ovr >= 88 ? 2 : 3, year: state.year + 1 });
+      state.extraPicks.push({ round: player.ovr >= 88 ? 2 : 3, year: state.year + 1, source: `Contract-year trade of ${player.name}` });
       state.teams[state.teamId].roster = yourRoster(state).filter((p) => p.id !== id);
     }
   }
@@ -1307,7 +1335,7 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
   pushDecision(state, decision.title, choice.label, choice.log, choice.swing ?? choice.owner ?? 0);
   state.headlines = makeHeadlines(state, (choice.owner ?? 0) + (choice.fans ?? 0) >= 0 ? "positive" : "negative", {
     beat: choice.log,
-    national: `${state.gmName} made a call: ${choice.label}.`,
+    national: `${gmSubject(state.gmName)} made a call: ${choice.label}.`,
     analytics: `Owner ${state.meters.owner}, fans ${state.meters.fans}, locker ${state.meters.locker}.`,
   });
 }
@@ -1318,6 +1346,21 @@ function heal(state: SeasonState) {
     if (typeof back === "number" && state.week >= back) {
       player.injured = false;
       delete state.flags[`return-${player.id}`];
+    }
+  }
+}
+
+function resolveLimitedPlayers(state: SeasonState) {
+  for (const player of yourRoster(state).filter((candidate) => candidate.limited)) {
+    const aggravated = state.flags[`aggravate-${player.id}`] === true;
+    player.limited = false;
+    delete state.flags[`aggravate-${player.id}`];
+    if (aggravated) {
+      player.injured = true;
+      state.flags[`return-${player.id}`] = state.week + 3;
+      state.log.push(`${player.name} played at reduced effectiveness and aggravated the injury; projected return Week ${state.week + 3}.`);
+    } else {
+      state.log.push(`${player.name} played at reduced effectiveness and came through the week without an aggravation.`);
     }
   }
 }
@@ -1357,6 +1400,7 @@ function doPlayWeek(state: SeasonState): SeasonState {
       if (margin <= -14) bump(state, -1, -1, -1);
     }
   }
+  resolveLimitedPlayers(state);
   if (yours) {
     const rng = makeRng(hashSeed(state.seed, "hl", state.week));
     state.headlines = resultHeadlines(state, yours.won, yours.score, yours.opp, rng);
@@ -1661,7 +1705,7 @@ function fire(state: SeasonState, reason: string) {
   state.grade = buildGrade(state, true);
   state.headlines = makeHeadlines(state, "negative", {
     beat: `${state.owner.name} ends it. ${reason}`,
-    national: `${state.gmName} is out. The search will leak by dinner.`,
+    national: `${gmSubject(state.gmName)} is out. The search will leak by dinner.`,
     analytics: `Final owner confidence ${state.meters.owner}. Record ${teamRecord(state, state.teamId).wins}-${teamRecord(state, state.teamId).losses}.`,
   });
   state.log.push("Fired.");
@@ -1690,7 +1734,11 @@ function toRecap(state: SeasonState): SeasonState {
   const champ = state.playoff?.champion;
   state.headlines = makeHeadlines(state, state.grade.champ ? "positive" : "neutral", {
     beat: state.grade.champ ? "The building is still loud an hour after the game." : `Season over. ${state.grade.headline}`,
-    national: champ ? `${teamLabel(teamById(champ, state.directory))} leave with the trophy.` : "Someone else is booking the parade.",
+    national: champ
+      ? champ === state.teamId
+        ? `${teamLabel(teamById(champ, state.directory))} won the league title.`
+        : `League champion: ${teamLabel(teamById(champ, state.directory))}. Your season had already ended.`
+      : "The league title is still being decided; your season is over.",
     analytics: `GM grade ${state.grade.letter} (${state.grade.score}).`,
   });
   return state;
@@ -1849,6 +1897,8 @@ export function divisionTable(state: SeasonState): StandingRow[] {
 
 export function rolloverSeason(state: SeasonState): SeasonState {
   const next = clone(state);
+  const currentDeadCleared = state.deadMoney;
+  const pushedDeadBecomingCurrent = state.futureDead;
   const previous = {
     wins: state.grade?.wins ?? teamRecord(state, state.teamId).wins,
     losses: state.grade?.losses ?? teamRecord(state, state.teamId).losses,
@@ -1901,6 +1951,7 @@ export function rolloverSeason(state: SeasonState): SeasonState {
       player.age += 1;
       player.years -= 1;
       player.injured = false;
+      player.limited = false;
       if (player.age <= 25 && player.potential > player.ovr) player.ovr = Math.min(99, player.ovr + 1);
       else if (player.age >= 33) player.ovr = Math.max(60, player.ovr - 2);
       else if (player.age >= 30 && rng.next() > 0.55) player.ovr = Math.max(62, player.ovr - 1);
@@ -1916,11 +1967,15 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   );
   next.flags = { plan: state.flags.plan ?? "balance" };
   next.owner.note = ownerNote(next.owner.priority, next.year, previous);
-  next.log = [`${next.year}: ${next.owner.name} wants the plan again.`];
+  next.log = [
+    `${next.year}: ${next.owner.name} wants the plan again.`,
+    `Cap rollover: ${formatMoney(currentDeadCleared)} of prior current-year dead money cleared; ${formatMoney(pushedDeadBecomingCurrent)} of pushed money became this year's dead charge.`,
+    `Owner confidence moved from ${state.meters.owner} to ${next.meters.owner} in the offseason reset toward the league baseline.`,
+  ];
   next.headlines = makeHeadlines(next, "neutral", {
     beat: `Year ${next.year}. The owner already has a version of this meeting on the calendar.`,
-    national: `${next.gmName} is back. The roster is a year older and the cap moved.`,
-    analytics: `Cap is now $${next.capLimit.toFixed(1)}M. Dead money carried in: $${next.deadMoney.toFixed(1)}M.`,
+    national: `${gmSubject(next.gmName)} is back. The roster is a year older and the cap moved.`,
+    analytics: `Cap ${formatMoney(next.capLimit)}. Prior dead cleared ${formatMoney(currentDeadCleared)}; pushed money now charged ${formatMoney(next.deadMoney)}. Owner confidence reset ${state.meters.owner} → ${next.meters.owner}.`,
   });
   return next;
 }

@@ -4,7 +4,9 @@ import { clamp } from "@/lib/engine/rng";
 const OFF_POS: Pos[] = ["QB", "RB", "WR", "TE", "OL"];
 
 export function effectiveOvr(p: Player): number {
-  return p.injured ? Math.round(p.ovr * 0.72) : p.ovr;
+  if (p.injured) return Math.round(p.ovr * 0.72);
+  if (p.limited) return Math.round(p.ovr * 0.88);
+  return p.ovr;
 }
 
 function best(roster: Player[], pos: Pos, n: number): number {

@@ -26,7 +26,7 @@ export default function LeaguesPage() {
     };
     update((prev) => ({ ...prev, leagues: [league, ...prev.leagues].slice(0, 8) }));
     setCode(league.code);
-    setNote(`Room ${league.code} is on this device. Send friends the code and have them paste a share card.`);
+    setNote(`Room ${league.code} is on this device. Send friends the room code and have them use Copy result code on their finished card.`);
   }
 
   function addEntry() {
@@ -48,7 +48,7 @@ export default function LeaguesPage() {
   return (
     <ProGate
       title="On-device rooms"
-      body="Everyone runs the same Daily Challenge, or you compare season cards. Rooms do not sync: paste a friend's share card to add it to this browser only."
+      body="Everyone runs the same Daily Challenge, or you compare season cards. Rooms do not sync: paste a friend's explicit result code to add it to this browser only."
     >
       <div className="space-y-4">
         <h1 className="font-display text-4xl tracking-wide">A room for the group chat</h1>
@@ -89,7 +89,7 @@ export default function LeaguesPage() {
           <textarea
             value={paste}
             onChange={(event) => setPaste(event.target.value)}
-            placeholder="Paste a Run The Roster share card"
+            placeholder="Paste the RTR1 result code from Copy result code"
             className="min-h-28 w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
           />
           <Button variant="outline" className="!h-11" disabled={!code} onClick={addEntry}>

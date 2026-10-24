@@ -13,7 +13,7 @@ import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
 import { advancedLines, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
-import type { Phase, Player, SeasonState, StaffRole } from "@/lib/types";
+import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
 import { titledGmName } from "@/lib/gm-name";
@@ -255,9 +255,9 @@ function Intro({
       </label>
       <div className="grid gap-2">
         {[
-          ["embrace", "Embrace the brief", "You will run the year the owner asked for."],
-          ["balance", "Split the difference", "Wins, but not at any price."],
-          ["defy", "Push back", "You tell them the brief is wrong."],
+          ["embrace", "Embrace the brief", "Match the owner's stated plan. Owner confidence +8."],
+          ["balance", "Split the difference", "Wins, but not at any price. Owner confidence +2."],
+          ["defy", "Push back", "Tell the owner the brief is wrong. Owner confidence −6."],
         ].map(([id, label, detail]) => (
           <button
             key={id}
@@ -319,12 +319,11 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
         </p>
       </div>
       <p className="text-sm text-muted-foreground">
-        Limit {money(season.capLimit)}. Dead money {money(season.deadMoney)}. A restructure pushes money out. A cut creates more dead
-        money and a headline.
+        Limit {money(season.capLimit)}. Current-year dead money {money(season.deadMoney)}. Pushed into next year {money(season.futureDead)}.
       </p>
       <p className="text-xs text-muted-foreground">
         {season.capMode === "hard"
-          ? "Hard cap: you cannot advance while cap space is below $0. Restructure an active contract or release a player to create room."
+          ? "Hard cap: you cannot advance below $0. Current dead money clears at rollover; restructure money becomes next year's dead charge."
           : "Historical payroll guide: overspending is allowed, but the owner will penalize it."}
       </p>
       <div className="space-y-2">
@@ -358,6 +357,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
 
 function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
   const { dispatch } = useGame();
+  const remainingOwnExpiring = season.faBoard.filter((player) => player.origin === season.teamId).length;
   const bestQuarterbackUnderContract = yourRoster(season)
     .filter((player) => player.pos === "QB" && player.years > 0)
     .sort((a, b) => b.ovr - a.ovr)[0];
@@ -369,7 +369,9 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
       </div>
       <p className="text-sm text-muted-foreground">
         {season.faWave === 1
-          ? "Your expiring players come first. Re-sign one, use your one franchise tag, or let him reach the market."
+          ? remainingOwnExpiring > 0
+            ? `${remainingOwnExpiring} expiring player${remainingOwnExpiring === 1 ? "" : "s"} still need a decision. Re-sign, use your one franchise tag, or advance and let them reach the market.`
+            : "Your expiring-player decisions are complete. Open the outside market when you are ready."
           : "Outside free agents after CPU-team retention. Elite starters are scarce and carry market premiums; the board includes an affordable option when one exists."}
       </p>
       {!bestQuarterbackUnderContract || bestQuarterbackUnderContract.ovr < 70 ? (
@@ -507,10 +509,13 @@ function Trades({
 
 function Draft({ season }: { season: SeasonState }) {
   const { dispatch } = useGame();
+  const [position, setPosition] = useState<"ALL" | Pos>("ALL");
+  const [draftSort, setDraftSort] = useState<"grade" | "position">("grade");
   const pick = season.draftPicks[season.draftCursor];
   const board = season.prospects
     .filter((prospect) => prospect.perceived > 0 && !season.draftPicks.some((made) => made.prospectId === prospect.id))
-    .sort((a, b) => b.perceived - a.perceived)
+    .filter((prospect) => position === "ALL" || prospect.pos === position)
+    .sort((a, b) => draftSort === "position" ? a.pos.localeCompare(b.pos) || b.perceived - a.perceived : b.perceived - a.perceived)
     .slice(0, 8);
   return (
     <section className="space-y-3">
@@ -520,6 +525,22 @@ function Draft({ season }: { season: SeasonState }) {
       <p className="text-sm text-muted-foreground">
         You are looking at the scout card, not the truth. Camp will show what you actually drafted. Prospects in this class are fictional.
       </p>
+      <div className="flex flex-wrap gap-2 text-sm">
+        <label>
+          Position
+          <select className="ml-2 h-10 rounded-lg border border-white/10 bg-black/30 px-2" value={position} onChange={(event) => setPosition(event.target.value as "ALL" | Pos)}>
+            <option value="ALL">All</option>
+            {(["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K"] satisfies Pos[]).map((pos) => <option key={pos}>{pos}</option>)}
+          </select>
+        </label>
+        <label>
+          Sort
+          <select className="ml-2 h-10 rounded-lg border border-white/10 bg-black/30 px-2" value={draftSort} onChange={(event) => setDraftSort(event.target.value === "position" ? "position" : "grade")}>
+            <option value="grade">Scout grade</option>
+            <option value="position">Position</option>
+          </select>
+        </label>
+      </div>
       {season.pendingDraftTrade ? (
         <article className="rounded-xl border border-primary/40 bg-card p-4">
           <p className="font-medium">{season.pendingDraftTrade.from} wants to move you back</p>
@@ -539,7 +560,7 @@ function Draft({ season }: { season: SeasonState }) {
       ) : null}
       {season.extraPicks.length ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
-          Extra picks owned: {season.extraPicks.map((extra) => `${extra.year} round ${extra.round}`).join(" · ")}
+          Extra picks owned: {season.extraPicks.map((extra) => `${extra.year} round ${extra.round}${extra.source ? ` (${extra.source})` : " (earlier trade)"}`).join(" · ")}
         </p>
       ) : null}
       <div className="grid gap-2">
@@ -571,7 +592,7 @@ function Draft({ season }: { season: SeasonState }) {
             .filter((made) => made.prospectName && made.teamId === season.teamId)
             .map((made) => (
               <li key={`${made.round}-${made.overall}`}>
-                Round {made.round}: {made.prospectName}
+                Round {made.round}: {made.prospectName}{made.note ? ` · ${made.note}` : ""}
               </li>
             ))}
         </ul>
@@ -730,9 +751,13 @@ function Regular({
       ) : null}
       <section className="rounded-xl border border-white/10 bg-card p-3" aria-label="Injury report">
         <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Injury report</p>
-        {roster.some((player) => player.injured) ? (
-          <ul className="mt-2 space-y-1 text-sm text-red-300">
-            {roster.filter((player) => player.injured).map((player) => <li key={player.id}>{player.pos} {player.name} · Out</li>)}
+        {roster.some((player) => player.injured || player.limited) ? (
+          <ul className="mt-2 space-y-1 text-sm">
+            {roster.filter((player) => player.injured || player.limited).map((player) => (
+              <li key={player.id} className={player.injured ? "text-red-300" : "text-amber-200"}>
+                {player.pos} {player.name} · {player.injured ? "Out" : "Active, reduced effectiveness"}
+              </li>
+            ))}
           </ul>
         ) : <p className="mt-2 text-sm text-emerald-300">No players currently listed out.</p>}
       </section>
@@ -835,7 +860,7 @@ function Recap({
           <p>Point differential {lines.diff}</p>
           <p>Roster value {lines.rosterValue}</p>
           <p>
-            Cap space {money(lines.cap)} · dead {money(lines.dead)}
+            Cap space {money(lines.cap)} · current dead {money(lines.dead)} · pushed to next year {money(season.futureDead)}
           </p>
         </div>
       ) : (
