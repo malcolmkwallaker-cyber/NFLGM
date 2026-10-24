@@ -1,5 +1,28 @@
 # NFLGM career-mode audit
 
+## 2026-10-24 QA report disposition
+
+Source report: Google Doc `1C-g5TmeyPncLHqkTaWHYoxMRWgMB_5YfjQuD_2FLeZ8`, created 2026-10-24 at 14:07 UTC. The report did not identify a commit or build, so every finding was checked against production baseline `b604ac3c505cc185e2fd2930b6e17a774d72550c`. Scoped repair commit: `70015e3`.
+
+| ID | Disposition on `70015e3` |
+| --- | --- |
+| 1. Play-through injury shown as Out | Fixed. Choosing to play now keeps the player active at reduced effectiveness through that game. Any deterministic aggravation is resolved and explained after the result. The limited state survives save/reload. |
+| 2. Unexplained acquired draft pick | Fixed. Accepted player/pick trades, deadline deals, contract-year deals, and accepted draft-day trade-downs retain a source label through the draft log. Declining or closing an offer does not create a pick. Legacy source-less picks remain honestly labeled as earlier trades. |
+| 3. Dead-money transition | Accounting was already moving pushed money into the next season rather than deleting it. Fixed the visibility gap: cap, meter, recap, and rollover log now distinguish current dead money from next-year pushed obligations and explain the clearing/rollover amounts. |
+| 4. Blank GM name copy | Existing normalization already prevented `GM GM`; improved sentence grammar to use `The GM` when no personal name is supplied. Browser-tested through start and reload. |
+| 5. Missed-playoff trophy recap | Fixed. The recap names the league champion and explicitly says the user's season had already ended. |
+| 6. Unexplained Owner changes | No indiscriminate rebalance. Owner-meeting options now display their exact +8/+2/−6 effects, and the offseason reset records the previous and new values. Existing bounded firing and poor-season penalties remain covered by seeded tests. |
+| 7. Cap Health inconsistency | Fixed the presentation and calculation. `Cap flexibility` is normalized to the cap limit and incorporates cap room, current dead money, and next-year pushed money; exact dollar context appears beside the meter. |
+| 8. Draft filters/sort | Added modest position filtering and scout-grade/position sorting while retaining the focused eight-player board. |
+| 9. Repeated headlines and Bears grammar | Fixed. Weekly result headlines include the week for durable context, and Chicago Bears references use plural grammar. |
+| 10. Re-sign prompt, owner brief, copied state | Fixed dynamic remaining-player copy, grammatical/year-aware owner briefs, and result-specific copy status that clears after timeout, content change, or reload. |
+| 11. Daily grammar and visible internal code | Fixed the fictional archetype article/capitalization and removed `RTR1`/`NFLGM1` codes from the normal text, native share, and image. Manual room import remains available through an explicit `Copy result code` control. No mass Daily rewrite was made. |
+| 12. Elite free-agent affordability | Not reproduced on current main. The existing 50-seed regression found zero boards where Lamar Jackson, Fred Warner, and Derrick Henry were all simultaneously available, and it continues to enforce elite scarcity and market premiums. One reported career is insufficient evidence for another global balance change. |
+| 13. Stats and upcoming contracts | Already delivered and discoverable through the `Stats` link on Career, Desk, Daily, and footer navigation; no duplicate implementation. |
+| Playable playoff weeks | Deferred as the report's major feature idea and explicitly outside this maintenance scope. |
+
+Verification for this batch: 67/67 Vitest tests, ESLint, `tsc --noEmit`, static production export using Next's webpack builder with offline Google-font mocks, and isolated headless-Chrome checks at desktop and 400×742 mobile-equivalent viewport. Browser checks covered a blank-name Career start and reload, limited injury save/reload and game resolution, Daily normal-share privacy, explicit code export, copy-state reset, and Stats discoverability. No existing browser save was used.
+
 Date: 2026-10-22  
 Branch: `fix/training-camp-persistence`  
 Production baseline: `main` at `24787a4`  
