@@ -1,5 +1,22 @@
 # NFLGM career-mode audit
 
+## 2026-10-25 Daily #228 / Historical / Turnaround report disposition
+
+Source: Google Doc `1Jl6O5CMgerxLPNmqbhvPrROlnbgcW6RXUozpx-GRkvw` and matching Slack report posted 2026-10-25 at 14:12:57 UTC. The Drive document was created at 14:13:05, modified at 14:13:07, and claimed a 14:25 finish, so the coverage chronology is internally inconsistent. The report identifies footer build `dfb35ff` but supplies no screenshot or save. Findings were reproduced against exact production source `dfb35ffcb93a9fd56a93bf7071f9e7844a01c1c2` and treated as leads.
+
+| Finding | Disposition |
+| --- | --- |
+| Historical 2007 New England and 2019 Cleveland Turnaround outside free-agent boards are empty | Confirmed architecture gap. Historical opponents intentionally use aggregate ratings and no player rosters, leaving no expiring opponent players from which to build a market. Wave one can still be empty when the user's roster has no expiring deals; historical modes now receive two deterministic six-player outside waves of clearly labeled fictional, modeled candidates. The exact reported Cleveland seed was replayed through both waves and save/reload. Original rosters remain unchanged and no modern real players are imported. |
+| Cleveland unused cap received no visible quarterly review | Arithmetic was present but presentation was weak. In the exact reported seed with no free-agent spending, room moved from $116.9M to $110.4M and the ledger applied unused-cap penalties on losses in Weeks 4, 8, 12, and 16. The review applies only when at least 18% is unused and a loss lands in Week 4, 8, 12, 16, or the final week; wins do not receive the penalty. The regular-season screen now shows when that review is active and states the exact trigger. No broader penalty was added. |
+| An unanswered Week 10 deadline decision hides Play the week while simulation remains available | Confirmed interaction gap. A desk decision intentionally replaces the week action, but the screen did not explain that gate and the simulation controls remained enabled. The decision now says it must be resolved, and play/simulation controls consistently block with that explanation until a choice is made. |
+| Cleveland 2019 owner meeting says 2027 | Confirmed initialization-order bug. Turnaround creation changed the simulation year after the owner brief was generated. It now regenerates the brief for the sourced scenario year. |
+| Historical starting dead money is unexplained | Confirmed provenance gap. Historical cap screens now call the starting dead-money amount a modeled gameplay value rather than verified historical accounting. The values were not silently zeroed. |
+| Deadline trade value and meter effects are unclear | Confirmed presentation gap. Deadline copy now states whether the modeled return is near or below fair value and displays the exact owner, fan, and locker effects. All desk decisions now show meter before/after values in the analytics headline. |
+| Eliminated-team and fired recaps are thin or awkward | Confirmed bounded copy gap. League Super Bowl copy now names the user's actual exit instead of saying only that the season was already over. Fired screens retain the final line and add the same factual record, cap, quarterback, and meter drivers used by the normal recap. |
+| 15–2 Cleveland exit labeled Wild Card; high year-three cap | The round-label bug was not reproduced. In 100 varied Cleveland seeds, the sampled 15–2 first-game exits were correctly labeled Divisional; another 15–2 run reached the conference round and a 16–1 run reached the Super Bowl. The cap concern was addressed by the published `dfb35ff` balance release and is not being rebalanced again from this unseeded carryover alone. |
+
+Already-reported working items—camp-cut preview, offseason phone closure, build footer, recap explanation, recorded playoff list, and Daily—remain regression coverage. This pass does not activate ads, tracking, payments, cloud saves, or a backend.
+
 ## 2026-10-25 scripted 20-run follow-up disposition
 
 Source: user-provided summary of 20 Season runs and 20 three-season Career runs. The tester explicitly described scripted clicks, did not provide a build identifier, and asked that the observations be treated as leads rather than hand-verified findings. Findings were checked against production baseline `e8b287bf916a4d7b6dcdf2008e8b47a22786a8e2`.
@@ -21,7 +38,7 @@ Source: user-provided summary of 20 Season runs and 20 three-season Career runs.
 
 The current build also contains all earlier QA disposition records below. This follow-up does not activate ads, tracking, cloud saves, payments, or a backend.
 
-### Local balance follow-up — tested, not published
+### Balance follow-up — published as `dfb35ff`
 
 The local branch was compared with production `07f0f8a` using 50 deterministic Seattle seeds for an optimized retention/acquisition strategy and 50 for a deliberate minimal-move strategy, up to three years each. The optimized path entered the regular season with average room of $45.4M in year two and $33.1M in year three; the minimal path retained $115.7M and $244.9M respectively, preserving a meaningful consequence for refusing to build the roster. Expanded boards exposed more mid-tier choices while stronger CPU retention reduced outside 88+ signings from 205 to 181 across comparable completed seasons. No Seattle threepeat occurred in either baseline or follow-up samples.
 
@@ -29,7 +46,7 @@ For owner confidence, 44 follow-up Seattle seasons ending 10–7 lost 11.3 point
 
 A 16-career optimized long-run sample across Seattle, the Jets, Kansas City, and Atlanta completed 320 seasons with no engine failures. The maximum user title streak was five, all 32 teams won at least one title, and the most frequent champion was Kansas City at 54/320. The optimized user won 117/320 titles, so strong play remains highly successful and broader difficulty remains a product-tuning consideration. Year-20 user cap room ranged from −$0.8M to $97.0M. This sample is evidence against a permanent locked dynasty, not proof of perfect parity.
 
-No score variance, playoff seeding, grade formula, existing contract charge, save key, entitlement, advertising, or network behavior changed in this local follow-up. Publication remains pending explicit approval.
+No score variance, playoff seeding, grade formula, existing contract charge, save key, entitlement, advertising, or network behavior changed in this balance follow-up.
 
 ## 2026-10-24 all-team and 20-year report disposition
 

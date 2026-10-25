@@ -277,6 +277,16 @@ describe("audit regressions", () => {
     expect(next.restructuredIds).toEqual([]);
   });
 
+  it("explains the owner effect of a restructure in the decision headline", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "Restructure Copy", seed: 1221 }), "cap");
+    const player = yourRoster(state).filter((candidate) => candidate.years > 0).sort((a, b) => b.cap - a.cap)[0];
+    if (!player) throw new Error("No active contract fixture");
+    const before = state.meters.owner;
+    state = applyAction(state, { type: "cap", choice: "restructure", playerId: player.id });
+    expect(state.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain(`Owner confidence ${before}`);
+    expect(state.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain(String(state.meters.owner));
+  });
+
   it("asks for explicit acceptance after listening to contract-year trade calls", () => {
     let state = advanceTo(createSeason({ teamId: "DAL", gmName: "Listen Audit", seed: 1227 }), "regular");
     for (let guard = 0; guard < 20 && state.activeDecision?.id !== "extension"; guard += 1) {
@@ -787,7 +797,8 @@ describe("audit regressions", () => {
       if (completed.phase === "recap" && completed.grade?.round === "missed" && completed.playoff?.champion) missed = completed;
     }
     expect(missed).not.toBeNull();
-    expect(missed?.headlines.some((headline) => headline.text.includes("Your season had already ended."))).toBe(true);
+    expect(missed?.headlines.some((headline) => headline.text.includes("missed the playoffs."))).toBe(true);
+    expect(missed?.headlines.some((headline) => headline.text.includes("Your season had already ended."))).toBe(false);
     expect(missed?.headlines.some((headline) => headline.text.includes("leave with the trophy"))).toBe(false);
   });
 

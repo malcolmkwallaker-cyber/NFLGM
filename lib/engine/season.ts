@@ -260,7 +260,7 @@ export function createSeason(input: {
   return state;
 }
 
-function ownerNote(priority: string, year: number, previous?: { wins: number; losses: number; round: PlayoffRound }): string {
+export function ownerNote(priority: string, year: number, previous?: { wins: number; losses: number; round: PlayoffRound }): string {
   const finish = previous
     ? previous.round === "missed"
       ? "missed the playoffs"
@@ -490,12 +490,14 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     state.futureDead = Math.round((state.futureDead + saved) * 10) / 10;
     persistActiveCapLiabilities(state);
     state.restructuredIds = [...(state.restructuredIds ?? []), player.id];
-    bump(state, state.owner.priority === "fiscal" ? -1 : 1, 0, -1);
-    pushDecision(state, "Cap", `Restructured ${player.name}`, `Restructured ${player.name}, saving $${saved.toFixed(1)}M now and pushing it forward.`, -1);
+    const ownerBefore = state.meters.owner;
+    const ownerDelta = state.owner.priority === "fiscal" ? -1 : 1;
+    bump(state, ownerDelta, 0, -1);
+    pushDecision(state, "Cap", `Restructured ${player.name}`, `Restructured ${player.name}, saving $${saved.toFixed(1)}M now and pushing it forward. Owner ${formatSigned(ownerDelta)}.`, ownerDelta);
     state.headlines = makeHeadlines(state, "neutral", {
       beat: `${player.name}'s number drops this year. The bill does not disappear.`,
       national: "A restructure is not a savings plan. It is a calendar.",
-      analytics: `About ${formatMoney(saved)} moved into future dead money. Space is now ${formatMoney(capSpace(state))}.`,
+      analytics: `About ${formatMoney(saved)} moved into future dead money. Space is now ${formatMoney(capSpace(state))}. Owner confidence ${ownerBefore} → ${state.meters.owner} (${formatSigned(ownerDelta)}); locker ${formatSigned(-1)}.`,
     });
     return state;
   }
@@ -578,6 +580,32 @@ function freeAgentPool(state: SeasonState): Player[] {
     }
     if (departures.size) team.roster = team.roster.filter((player) => !departures.has(player.id));
     ensureMinimumRoster(state, id);
+  }
+  const historicalMarket = Boolean(state.historicalId || state.flags.historicalRosterScenarioId);
+  if (historicalMarket && pool.length < OUTSIDE_BOARD_SIZE * 2) {
+    const rng = makeRng(hashSeed(state.seed, state.year, "modeled-historical-market"));
+    const scenario = String(state.flags.historicalRosterScenarioId ?? state.historicalId ?? "historical");
+    const needed = OUTSIDE_BOARD_SIZE * 2 - pool.length;
+    for (let index = 0; index < needed; index += 1) {
+      const pos = POS_CYCLE[(pool.length + index) % POS_CYCLE.length] ?? "LB";
+      const ovr = 68 + rng.int(16);
+      const age = 24 + rng.int(10);
+      const player: Player = {
+        id: `modeled-historical-fa-${scenario}-${state.year}-${index}`,
+        name: `${FIRSTS[rng.int(FIRSTS.length)]} ${LASTS[rng.int(LASTS.length)]}`,
+        pos,
+        ovr,
+        age,
+        cap: 0,
+        years: 0,
+        potential: Math.min(88, ovr + (age <= 26 ? 3 : 1)),
+        real: false,
+        drafted: false,
+        origin: "modeled-historical-market",
+      };
+      player.cap = Math.round(marketAsk(player, salaryScale(state.capLimit)) * 1.08 * 10) / 10;
+      pool.push(player);
+    }
   }
   return pool.sort((a, b) => b.ovr - a.ovr);
 }
@@ -1380,10 +1408,10 @@ function deadlineDecision(state: SeasonState): Decision | null {
     id: "deadline",
     kicker: "Trade deadline",
     title: `${from?.abbr ?? "A rival"} calls about ${player.name}`,
-    body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. After today the phones are props.`,
+    body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. The game's age, position, contract, and pick-value model rates this return ${pickTradeValue(round) >= playerTradeValue(player) * 0.78 ? "near fair value" : "below fair value"}. After today the phones are props.`,
     options: [
-      { id: "keep", label: `Keep ${player.name}`, detail: "You are trying to win the games on the schedule.", owner: 1, fans: 2, locker: 2, log: `Kept ${player.name} through the deadline.`, swing: 2 },
-      { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: "Take the pick and the cap.", owner: state.owner.priority === "youth" ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
+      { id: "keep", label: `Keep ${player.name}`, detail: "You are trying to win the games on the schedule. Owner +1, fans +2, locker +2.", owner: 1, fans: 2, locker: 2, log: `Kept ${player.name} through the deadline.`, swing: 2 },
+      { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: `Take the pick and the cap. Owner ${state.owner.priority === "youth" ? "+4" : "−2"}, fans −3, locker −2.`, owner: state.owner.priority === "youth" ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
     ],
   };
 }
@@ -1436,6 +1464,7 @@ function doDecide(state: SeasonState, choiceId: string): SeasonState {
 }
 
 function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
+  const beforeMeters = { ...state.meters };
   if (choice.identity) state.identity = choice.identity as Identity;
   if (choice.tag?.startsWith("mod:")) state.teamMod += Number(choice.tag.slice(4));
   if (choice.tag?.startsWith("playhurt:")) {
@@ -1506,8 +1535,12 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
   state.headlines = makeHeadlines(state, (choice.owner ?? 0) + (choice.fans ?? 0) >= 0 ? "positive" : "negative", {
     beat: choice.log,
     national: `${gmSubject(state.gmName)} made a call: ${choice.label}.`,
-    analytics: `Owner ${state.meters.owner}, fans ${state.meters.fans}, locker ${state.meters.locker}.`,
+    analytics: `Owner ${beforeMeters.owner} → ${state.meters.owner} (${formatSigned(choice.owner ?? 0)}), fans ${beforeMeters.fans} → ${state.meters.fans} (${formatSigned(choice.fans ?? 0)}), locker ${beforeMeters.locker} → ${state.meters.locker} (${formatSigned(choice.locker ?? 0)}).`,
   });
+}
+
+function formatSigned(value: number): string {
+  return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
 }
 
 function heal(state: SeasonState) {
@@ -1947,7 +1980,11 @@ function toRecap(state: SeasonState): SeasonState {
         ? `${teamLabel(teamById(champ, state.directory))} won the league title.`
         : state.grade.round === "superbowl"
           ? `${teamLabel(teamById(state.teamId, state.directory))} finished as Super Bowl runner-up to ${teamLabel(teamById(champ, state.directory))}.`
-          : `League champion: ${teamLabel(teamById(champ, state.directory))}. Your season had already ended.`
+          : `League champion: ${teamLabel(teamById(champ, state.directory))}. ${
+              state.grade.round === "missed"
+                ? `${teamLabel(teamById(state.teamId, state.directory))} missed the playoffs.`
+                : `${teamLabel(teamById(state.teamId, state.directory))}'s run ended in the ${state.grade.round === "wildcard" ? "Wild Card" : state.grade.round} round.`
+            }`
       : "The league title is still being decided; your season is over.",
     analytics: `GM grade ${state.grade.letter} (${state.grade.score}).`,
   });

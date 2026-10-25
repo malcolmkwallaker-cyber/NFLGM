@@ -1,7 +1,7 @@
 import type { PlayoffRound } from "@/lib/types";
 import { historicalTurnaroundRoster } from "@/lib/data/historical-rosters";
 import { hashSeed } from "@/lib/engine/rng";
-import { createSeason } from "@/lib/engine/season";
+import { createSeason, ownerNote } from "@/lib/engine/season";
 import { teamRatings } from "@/lib/engine/ratings";
 
 export const HISTORIC_TURNAROUND_RULES_VERSION = "historic-turnaround-v2-original-rosters";
@@ -61,6 +61,7 @@ export function createHistoricTurnaroundSeason(
     season.teams[teamId].lockDef = ratings.def;
   }
   season.year = scenario.season;
+  season.owner.note = ownerNote(season.owner.priority, scenario.season);
   season.historicalTitle = scenario.title;
   season.flags.turnaroundScenarioId = scenario.id;
   season.flags.turnaroundDate = day;

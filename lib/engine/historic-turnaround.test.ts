@@ -8,7 +8,18 @@ import {
 } from "@/lib/engine/historic-turnaround";
 import { HISTORIC_TURNAROUNDS } from "@/lib/data/historic-turnarounds";
 import { HISTORICAL_TURNAROUND_ROSTERS } from "@/lib/data/historical-rosters";
-import { applyAction, simulateUntil } from "@/lib/engine/season";
+import { applyAction, createSeason, simulateUntil, suggestAction } from "@/lib/engine/season";
+
+function advanceToFreeAgency(initial: ReturnType<typeof createSeason>) {
+  let season = initial;
+  for (let guard = 0; guard < 30 && season.phase !== "fa"; guard += 1) {
+    const action = suggestAction(season);
+    if (!action) throw new Error(`No action available in ${season.phase}`);
+    season = applyAction(season, action);
+  }
+  expect(season.phase).toBe("fa");
+  return season;
+}
 
 const verifiedFixture: HistoricTurnaroundScenario = {
   id: "synthetic-verified-fixture",
@@ -64,6 +75,46 @@ describe("historic turnaround challenge contract", () => {
       expect(Object.entries(season.teams).filter(([teamId]) => teamId !== scenario.teamId).every(([, team]) => team.roster.length === 0 && Boolean(team.lockOff) && Boolean(team.lockDef))).toBe(true);
       expect((JSON.parse(JSON.stringify(season)) as typeof season).teams[scenario.teamId].roster).toEqual(roster);
     }
+  });
+
+  it("provides deterministic fictional outside markets without leaking modern players into historical modes", () => {
+    const cle = HISTORIC_TURNAROUNDS.find((item) => item.id === "cle-2019");
+    if (!cle) throw new Error("Cleveland fixture missing");
+    const starts = [
+      createSeason({ teamId: "NE", gmName: "Historical Market", seed: 2007, mode: "historical", historicalId: "2007-patriots" }),
+      createHistoricTurnaroundSeason(cle, "Turnaround Market", 2455793462, "2026-10-25"),
+    ];
+    for (const initial of starts) {
+      let season = advanceToFreeAgency(initial);
+      expect(season.owner.note).toContain(String(season.year));
+      season = applyAction(season, { type: "next-wave" });
+      const firstWave = season.faBoard;
+      expect(firstWave).toHaveLength(6);
+      expect(firstWave.every((player) => !player.real && player.origin === "modeled-historical-market")).toBe(true);
+      const reloaded = JSON.parse(JSON.stringify(season)) as typeof season;
+      expect(reloaded.faBoard).toEqual(firstWave);
+      season = applyAction(reloaded, { type: "next-wave" });
+      expect(season.faBoard).toHaveLength(6);
+      expect(season.faBoard.every((player) => !firstWave.some((first) => first.id === player.id))).toBe(true);
+    }
+  });
+
+  it("makes the historical deadline gate and its meter effects explicit", () => {
+    let season = createSeason({ teamId: "NE", gmName: "Deadline Audit", seed: 2007, mode: "historical", historicalId: "2007-patriots" });
+    for (let guard = 0; guard < 160; guard += 1) {
+      if (season.phase === "regular" && season.activeDecision?.id === "deadline") break;
+      const action = suggestAction(season);
+      if (!action) throw new Error(`No action available in ${season.phase}`);
+      season = applyAction(season, action);
+    }
+    expect(season.phase).toBe("regular");
+    expect(season.activeDecision?.id).toBe("deadline");
+    expect(season.activeDecision?.body).toMatch(/near fair value|below fair value/);
+    expect(season.activeDecision?.options.every((option) => option.detail.includes("Owner"))).toBe(true);
+    const before = season.meters.owner;
+    season = applyAction(season, { type: "decide", choiceId: "keep" });
+    const analytics = season.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+    expect(analytics).toContain(`Owner ${before} → ${season.meters.owner}`);
   });
   it("publishes only sourced season records with explicit game targets", () => {
     expect(HISTORIC_TURNAROUNDS).toHaveLength(8);

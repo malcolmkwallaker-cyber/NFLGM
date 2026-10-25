@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -178,11 +178,11 @@ export function Desk() {
 
       {(season.phase === "playoffs" || (season.phase === "regular" && season.week > 1)) ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={Boolean(season.shop)} onClick={() => dispatch({ type: "sim", until: "playoffs" })}>
-            {season.shop ? "Review trade offer first" : "Sim to the playoffs"}
+          <Button variant="outline" disabled={Boolean(season.shop || season.activeDecision)} onClick={() => dispatch({ type: "sim", until: "playoffs" })}>
+            {season.shop ? "Review trade offer first" : season.activeDecision ? "Resolve the desk decision first" : "Sim to the playoffs"}
           </Button>
-          <Button variant="ghost" disabled={Boolean(season.shop)} onClick={() => dispatch({ type: "sim", until: "recap" })}>
-            {season.shop ? "Review trade offer first" : "Finish the year"}
+          <Button variant="ghost" disabled={Boolean(season.shop || season.activeDecision)} onClick={() => dispatch({ type: "sim", until: "recap" })}>
+            {season.shop ? "Review trade offer first" : season.activeDecision ? "Resolve the desk decision first" : "Finish the year"}
           </Button>
         </div>
       ) : null}
@@ -333,6 +333,11 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
       <p className="text-sm text-muted-foreground">
         Limit {money(season.capLimit)}. Current-year dead money {money(season.deadMoney)}. Pushed into next year {money(season.futureDead)}.
       </p>
+      {season.mode === "historical" || season.flags.historicalRosterScenarioId ? (
+        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
+          Starting dead money is a modeled scenario value for gameplay. It is not presented as the team&apos;s verified historical accounting.
+        </p>
+      ) : null}
       <p className="text-xs text-muted-foreground">
         {season.capMode === "hard"
           ? "Hard cap: only active contracts and current dead money count. Expired deals use no room until you re-sign or tag them. Current dead money clears at rollover; restructure money becomes next year's dead charge."
@@ -408,7 +413,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
       ) : null}
       {season.faBoard.length === 0 ? (
         <p className="rounded-xl border border-dashed border-white/15 px-4 py-6 text-sm text-muted-foreground">
-          The board is empty. Move the market along.
+          {season.faWave === 1 ? "No expiring contracts require a decision. Open the outside market." : "No players remain in this modeled market wave. Move the market along."}
         </p>
       ) : (
         season.faBoard.map((player) => {
@@ -424,7 +429,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
               </p>
               <p className="text-xs text-muted-foreground">
                 {player.ovr} ovr · age {player.age} · ask {money(player.cap)} / year · projected {formatContractYears(offerYears(player))}
-                {player.origin && player.origin !== season.teamId ? ` · from ${player.origin}` : " · your own"}
+                {own ? " · your own" : player.origin === "modeled-historical-market" ? " · modeled historical market" : player.origin ? ` · from ${player.origin}` : " · modeled open market"}
                 {player.age >= 31 ? " · veteran-adjusted annual ask" : ""}
               </p>
               {own && player.ovr >= 76 ? <p className="mt-1 text-xs text-primary">Core retention candidate</p> : null}
@@ -446,6 +451,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
       {season.faWave > 1 && season.capMode === "hard" && season.faBoard.length > 0 && season.faBoard.every((player) => player.cap > space + 0.05) ? (
         <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-muted-foreground">
           No offer in this wave fits your remaining cap space. Advance the market, or continue without another signing.
+        </p>
+      ) : null}
+      {season.faWave > 1 && (season.mode === "historical" || season.flags.historicalRosterScenarioId) ? (
+        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
+          Outside free agents in historical modes are fictional, deterministic gameplay candidates. They are not claimed as players from the original season.
         </p>
       ) : null}
       <Button variant="outline" className="!h-11" data-testid="choice-next-wave" onClick={() => dispatch({ type: "next-wave" })}>
@@ -751,6 +761,7 @@ function Regular({
               <span className="mt-1 block text-sm text-muted-foreground">{option.detail}</span>
             </button>
           ))}
+          <p role="status" className="text-xs text-muted-foreground">Resolve this desk decision before playing or simming ahead.</p>
         </div>
       ) : (
         <div className="rounded-2xl border border-white/10 bg-card p-4">
@@ -772,6 +783,11 @@ function Regular({
           </Button>
         </div>
       )}
+      {unusedCapUnderReview(season) ? (
+        <p role="status" className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-xs text-amber-100">
+          Owner cap review active: at least 18% of the cap is unused. A loss in Week 4, 8, 12, 16, or the final week adds a one-point owner penalty; wins are not penalized.
+        </p>
+      ) : null}
       {recentGames.length ? (
         <section aria-label="Recent scores">
           <p className="mb-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">Recent scores</p>
@@ -869,6 +885,7 @@ function Recap({
   const playoffResults = season.results.filter((game) => ["wildcard", "divisional", "conference", "superbowl"].includes(game.round));
   const playedSuperBowl = Boolean(superBowl && (superBowl.home === season.teamId || superBowl.away === season.teamId));
   const finish = grade?.champ ? "Champion" : grade?.round === "missed" ? "Missed playoffs" : grade?.round ? formatPlayoffRound(grade.round) : "Season complete";
+  const eliminatedFinish = grade?.round === "missed" ? "You missed the playoffs" : grade?.round ? `Your run ended in the ${formatPlayoffRound(grade.round)}` : "Your season was complete";
   const drivers = seasonDrivers(season);
   return (
     <section className="space-y-4">
@@ -889,7 +906,7 @@ function Recap({
         ) : null}
         {superBowl ? (
           <p className="mt-3 text-sm">
-            {playedSuperBowl ? "Your Super Bowl" : "League Super Bowl (your season was already over)"}: {teamLabel(teamById(superBowl.away, season.directory))} {superBowl.awayScore} · {teamLabel(teamById(superBowl.home, season.directory))} {superBowl.homeScore}
+            {playedSuperBowl ? "Your Super Bowl" : `League Super Bowl (${eliminatedFinish.toLowerCase()})`}: {teamLabel(teamById(superBowl.away, season.directory))} {superBowl.awayScore} · {teamLabel(teamById(superBowl.home, season.directory))} {superBowl.homeScore}
           </p>
         ) : null}
         {playoffResults.length ? (
@@ -972,6 +989,7 @@ function Fired({
   onJob: (teamId: string) => void;
   onRetire: () => void;
 }) {
+  const drivers = seasonDrivers(season);
   return (
     <section className="space-y-3 rounded-2xl border border-red-400/40 bg-card p-5">
       <p className="text-xs uppercase tracking-[0.18em] text-red-300">The owner pulled the chair</p>
@@ -980,6 +998,12 @@ function Fired({
       <p className="text-sm">
         Final line: {season.grade?.wins ?? 0}-{season.grade?.losses ?? 0}. Grade {season.grade?.letter ?? "F"}.
       </p>
+      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+        <p className="text-xs uppercase tracking-[0.16em] text-red-200">Why the job ended</p>
+        <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+          {drivers.map((driver) => <li key={driver}>• {driver}</li>)}
+        </ul>
+      </div>
       {career && career.status === "active" ? (
         <div className="space-y-2">
           {career.jobOffers.length === 0 ? (
