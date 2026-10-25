@@ -8,7 +8,7 @@ import { ShareCard } from "@/components/game/share-card";
 import { TeamMark } from "@/components/game/team-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { capSpace, offerYears } from "@/lib/engine/cap";
+import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
@@ -320,6 +320,8 @@ function Staff({ season, role }: { season: SeasonState; role: StaffRole }) {
 function Cap({ season, roster, space }: { season: SeasonState; roster: Player[]; space: number }) {
   const { dispatch } = useGame();
   const label = season.capMode === "payroll" ? "payroll room" : "cap space";
+  const expiring = roster.filter((player) => player.years <= 0);
+  const modeledRetention = Math.round(expiring.reduce((total, player) => total + marketAsk(player, salaryScale(season.capLimit)) * 0.95, 0) * 10) / 10;
   return (
     <section className="space-y-3">
       <div className="flex items-end justify-between gap-3">
@@ -336,6 +338,11 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
           ? "Hard cap: only active contracts and current dead money count. Expired deals use no room until you re-sign or tag them. Current dead money clears at rollover; restructure money becomes next year's dead charge."
           : "Historical payroll guide: overspending is allowed, but the owner will penalize it."}
       </p>
+      {season.capMode === "hard" && expiring.length ? (
+        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
+          Opening room excludes {expiring.length} expired contract{expiring.length === 1 ? "" : "s"}. Retaining all of them at modeled asks would use about {money(modeledRetention)}; you will choose those deals in the next step.
+        </p>
+      ) : null}
       <div className="space-y-2">
         {roster.slice(0, 8).map((player) => {
           const alreadyRestructured = Boolean(season.restructuredIds?.includes(player.id));
@@ -385,7 +392,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           ? remainingOwnExpiring > 0
             ? `${remainingOwnExpiring} expiring player${remainingOwnExpiring === 1 ? "" : "s"} still need a decision. Re-sign, use your one franchise tag, or advance and let them reach the market.`
             : "Your expiring-player decisions are complete. Open the outside market when you are ready."
-          : "Outside free agents after CPU-team retention. Elite starters are scarce and carry market premiums; the board includes an affordable option when one exists."}
+          : "Up to six outside free agents after CPU-team retention. Elite starters are scarce and carry market premiums; the board includes an affordable option when one exists."}
       </p>
       {season.faWave === 1 ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
@@ -418,7 +425,9 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
               <p className="text-xs text-muted-foreground">
                 {player.ovr} ovr · age {player.age} · ask {money(player.cap)} / year · projected {formatContractYears(offerYears(player))}
                 {player.origin && player.origin !== season.teamId ? ` · from ${player.origin}` : " · your own"}
+                {player.age >= 31 ? " · veteran-adjusted annual ask" : ""}
               </p>
+              {own && player.ovr >= 76 ? <p className="mt-1 text-xs text-primary">Core retention candidate</p> : null}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button disabled={!affordable} data-testid={`choice-sign-${player.id}`} onClick={() => dispatch({ type: "sign", playerId: player.id })}>

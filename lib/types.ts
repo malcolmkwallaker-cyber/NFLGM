@@ -250,6 +250,8 @@ export interface SeasonState {
   faPool?: Player[];
   walked: string[];
   tradeOffers: TradeOffer[];
+  recentTradeTargets?: string[];
+  recentTradeTeams?: string[];
   shop: TradeOffer | null;
   shopUsed: boolean;
   prospects: Prospect[];

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
+import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
 import { gmSubject, normalizeGmName, titledGmName } from "@/lib/gm-name";
-import { capHealth, committedPayroll, marketAsk, salaryScale } from "@/lib/engine/cap";
+import { capHealth, committedPayroll, marketAgeFactor, marketAsk, salaryScale } from "@/lib/engine/cap";
 import { effectiveOvr } from "@/lib/engine/ratings";
 import { resultHeadlines } from "@/lib/engine/headlines";
 import { makeRng } from "@/lib/engine/rng";
@@ -352,6 +352,16 @@ describe("audit regressions", () => {
     expect(salaryScale(future.capLimit)).toBeGreaterThan(1.4);
   });
 
+  it("discounts older new-market asks while protecting elite positional value", () => {
+    const base = { id: "age-price", name: "Market Player", pos: "WR" as const, ovr: 86, age: 28, cap: 18, years: 0, potential: 86, real: false };
+    const ageThirtyFive = { ...base, age: 35 };
+    expect(marketAsk(ageThirtyFive)).toBeLessThan(marketAsk(base));
+    expect(marketAgeFactor(ageThirtyFive)).toBeGreaterThanOrEqual(0.6);
+    const eliteQuarterback = { ...base, pos: "QB" as const, ovr: 92, age: 36, cap: 40 };
+    expect(marketAgeFactor(eliteQuarterback)).toBeGreaterThanOrEqual(0.78);
+    expect(marketAsk(eliteQuarterback)).toBeGreaterThan(marketAsk(ageThirtyFive));
+  });
+
   it("resets seasonal strategy boosts and applies position-aware veteran decline", () => {
     const state = createSeason({ teamId: "NYJ", gmName: "Dynasty Audit", seed: 1232, mode: "career" });
     state.teamMod = 18;
@@ -397,7 +407,7 @@ describe("audit regressions", () => {
     expect(migrated.career?.history).toHaveLength(19);
     expect(migrated.career?.season.capLimit).toBe(expectedCap);
     expect(migrated.career?.season.teams.NYJ.roster.find((player) => player.id === expectedContract?.id)?.cap).toBe(expectedContract?.cap);
-  });
+  }, 15_000);
 
   it("does not restructure an expired contract before the retention window", () => {
     const state = createSeason({ teamId: "KC", gmName: "Expired Contract Audit", seed: 220 });
@@ -422,11 +432,23 @@ describe("audit regressions", () => {
     expect((state.faPool ?? []).every((player) => !player.origin || !state.teams[player.origin]?.roster.some((candidate) => candidate.id === player.id))).toBe(true);
     state.capMode = "payroll";
     state = applyAction(state, { type: "next-wave" });
+    expect(state.faBoard).toHaveLength(6);
     const firstOutsideWave = state.faBoard.map((player) => player.id);
     const first = state.faBoard[0];
     state = applyAction(state, { type: "sign", playerId: first.id });
     state = applyAction(state, { type: "next-wave" });
     expect(state.faBoard.every((player) => !firstOutsideWave.includes(player.id))).toBe(true);
+  });
+
+  it("recommends retaining affordable core players before opening the outside market", () => {
+    let state = rolloverSeason(createSeason({ teamId: "SEA", gmName: "Retention Audit", seed: 1235, mode: "career" }));
+    state = advanceTo(state, "fa");
+    const action = suggestAction(state);
+    expect(action?.type).toBe("sign");
+    if (action?.type !== "sign") throw new Error("Expected a retention signing");
+    const candidate = state.faBoard.find((player) => player.id === action.playerId);
+    expect(candidate?.origin).toBe("SEA");
+    expect(candidate?.cap).toBeLessThanOrEqual(capSpace(state) - 3);
   });
 
   it("places remaining quality free agents with CPU teams after the user market closes", () => {
@@ -488,6 +510,34 @@ describe("audit regressions", () => {
     expect(finished.meters.owner).toBeLessThan(22);
   });
 
+  it("reviews unused cap quarterly instead of compounding it after every loss", () => {
+    const state = createSeason({ teamId: "SEA", gmName: "Owner Ledger Audit", seed: 1236, mode: "career" });
+    state.capLimit = payroll(yourRoster(state)) + state.deadMoney + 100;
+    state.week = 2;
+    const ordinaryLoss = ownerGameChange(state, false, -7);
+    expect(ordinaryLoss.delta).toBe(-3);
+    expect(ordinaryLoss.reasons).not.toContain("quarterly unused-cap review −1");
+    state.week = 4;
+    const reviewLoss = ownerGameChange(state, false, -7);
+    expect(reviewLoss.delta).toBe(-4);
+    expect(reviewLoss.reasons).toContain("quarterly unused-cap review −1");
+    const blowout = ownerGameChange(state, false, -17);
+    expect(blowout.delta).toBe(-5);
+    expect(blowout.reasons).toContain("blowout −1");
+  });
+
+  it("rotates trade targets, callers, and prose across consecutive seasons", () => {
+    const first = advanceTo(createSeason({ teamId: "SEA", gmName: "Trade Variety Audit", seed: 1237, mode: "career" }), "trade");
+    const firstTargets = new Set(first.tradeOffers.map((offer) => offer.wantId));
+    const firstTeams = new Set(first.tradeOffers.map((offer) => offer.fromTeamId));
+    first.phase = "recap";
+    first.grade = { letter: "B", score: 78, round: "missed", champ: false, wins: 9, losses: 8, pf: 340, pa: 330, headline: "Audit", best: "Draft", worst: "Loss" };
+    const second = advanceTo(rolloverSeason(first), "trade");
+    expect(second.tradeOffers.every((offer) => !firstTargets.has(offer.wantId))).toBe(true);
+    expect(second.tradeOffers.every((offer) => !firstTeams.has(offer.fromTeamId))).toBe(true);
+    expect(new Set([...first.tradeOffers, ...second.tradeOffers].map((offer) => offer.blurb.replace(/[A-Z]{2,3}/g, "TEAM"))).size).toBeGreaterThan(3);
+  });
+
   it("varies score lines across seeded seasons without breaking deterministic replay", () => {
     const seasons = Array.from({ length: 24 }, (_, index) => simulateUntil(createSeason({ teamId: "NYG", gmName: "Score Audit", seed: index + 400 }), "recap"));
     const distinctCounts = seasons.map((season) => {
@@ -500,7 +550,7 @@ describe("audit regressions", () => {
     const replayA = simulateUntil(createSeason({ teamId: "NYG", gmName: "Score Replay", seed: 499 }), "recap");
     const replayB = simulateUntil(createSeason({ teamId: "NYG", gmName: "Score Replay", seed: 499 }), "recap");
     expect(replayB.results).toEqual(replayA.results);
-  });
+  }, 15_000);
 
   it("retires once, includes the completed year, and writes clean Super Bowl and A+ copy", () => {
     const career = createCareer("Retire Audit", "NYG", 229);

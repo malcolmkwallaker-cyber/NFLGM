@@ -40,6 +40,8 @@ export const LEAGUE_YEAR = 2027;
 export const PROJECTED_CAP = 322;
 export const MIN_ROSTER = 22;
 export const FIRING_THRESHOLD = 20;
+const OUTSIDE_BOARD_SIZE = 6;
+const UNUSED_CAP_REVIEW_RATIO = 0.18;
 
 const OWNERS = [
   "Dana Crowe",
@@ -561,7 +563,7 @@ function freeAgentPool(state: SeasonState): Player[] {
       const quarterbackPremium = player.pos === "QB" && player.ovr >= 82 ? 0.08 : 0;
       const ageDiscount = player.age >= 33 ? 0.22 : player.age >= 31 ? 0.1 : 0;
       const retentionChance = clamp(
-        (elite ? 0.9 : player.ovr >= 86 ? 0.76 : player.ovr >= 82 ? 0.58 : player.ovr >= 76 ? 0.3 : 0.12) + quarterbackPremium - ageDiscount,
+        (elite ? 0.92 : player.ovr >= 86 ? 0.82 : player.ovr >= 82 ? 0.7 : player.ovr >= 76 ? 0.52 : player.ovr >= 70 ? 0.3 : 0.14) + quarterbackPremium - ageDiscount,
         0.08,
         0.98,
       );
@@ -591,10 +593,10 @@ function buildBoard(state: SeasonState, wave: number): Player[] {
   state.faPool = pool;
   const shown = new Set(String(state.flags.faShown ?? "").split(",").filter(Boolean));
   const available = pool.filter((player) => !shown.has(player.id));
-  const board = available.slice(0, 4);
+  const board = available.slice(0, OUTSIDE_BOARD_SIZE);
   const space = capSpace(state);
   const affordable = state.capMode === "hard" && !board.some((player) => player.cap <= space + 0.05)
-    ? available.slice(4).find((player) => player.cap <= space + 0.05)
+    ? available.slice(OUTSIDE_BOARD_SIZE).find((player) => player.cap <= space + 0.05)
     : undefined;
   const selected = affordable && board.length ? [...board.slice(0, -1), affordable] : board;
   state.flags.faShown = [...shown, ...selected.map((player) => player.id)].join(",");
@@ -735,13 +737,33 @@ function makeOffers(state: SeasonState): TradeOffer[] {
   const rng = makeRng(hashSeed(state.seed, "trades", state.year));
   const roster = yourRoster(state).filter((p) => p.pos !== "K");
   const qbs = roster.filter((p) => p.pos === "QB");
-  const candidates = shuffle(
-    roster.filter((p) => p.ovr >= 74 && p.ovr <= 90 && (p.pos !== "QB" || qbs.length > 1)),
-    rng,
-  ).slice(0, 3);
+  const eligible = roster.filter((p) => p.ovr >= 74 && p.ovr <= 90 && (p.pos !== "QB" || qbs.length > 1));
+  const recentTargets = new Set(state.recentTradeTargets ?? []);
+  const freshTargets = shuffle(eligible.filter((player) => !recentTargets.has(player.id)), rng);
+  const fallbackTargets = shuffle(eligible.filter((player) => recentTargets.has(player.id)), rng);
+  const candidates = [...freshTargets, ...fallbackTargets].slice(0, 3);
   const others = state.directory.filter((t) => t.id !== state.teamId);
-  return candidates.map((player, index) => {
-    const from = others[rng.int(others.length)] ?? others[0];
+  const recentTeams = new Set(state.recentTradeTeams ?? []);
+  const callers = [...shuffle(others.filter((team) => !recentTeams.has(team.id)), rng), ...shuffle(others.filter((team) => recentTeams.has(team.id)), rng)];
+  const valueCopy: Record<TradeOffer["fair"], string[]> = {
+    bargain: [
+      "{TEAM} is paying above the chart. The extra value is real; the roster cost is yours to judge.",
+      "{TEAM} pushed the offer past fair value. This is the kind of call that tests attachment.",
+      "{TEAM} wants the player enough to pay a premium. The decision is value versus continuity.",
+    ],
+    fair: [
+      "{TEAM} is in the right neighborhood. The return and the player carry similar modeled value.",
+      "{TEAM} put a balanced offer on the table. This comes down to roster direction.",
+      "{TEAM} met the market without overreaching. Either answer is defensible.",
+    ],
+    fleece: [
+      "{TEAM} wants {PLAYER} for less than the chart says he is worth.",
+      "{TEAM} is asking you to sell low on {PLAYER}. The cap relief does not erase the value gap.",
+      "{TEAM} opened below market for {PLAYER}. Accepting would need a reason beyond the return.",
+    ],
+  };
+  const offers = candidates.map((player, index) => {
+    const from = callers[index % Math.max(1, callers.length)] ?? others[0];
     const targetFactor = index === 0 ? 1.08 : index === 1 ? 0.9 : 0.62;
     const outgoingValue = playerTradeValue(player);
     const pickRound = pickRoundForTradeValue(outgoingValue * (index === 0 ? 0.35 : index === 1 ? 0.28 : 0.2));
@@ -769,15 +791,13 @@ function makeOffers(state: SeasonState): TradeOffer[] {
       incoming,
       pickRound,
       pickYear: pickRound ? state.year + 1 : null,
-      blurb:
-        fair === "bargain"
-          ? `${from.abbr} is overpaying. Take it if you can stand the headline.`
-          : fair === "fair"
-            ? `${from.abbr} is in the right neighborhood.`
-            : `${from.abbr} wants ${player.name} for less than he is worth.`,
+      blurb: rng.pick(valueCopy[fair]).replace("{TEAM}", from.abbr).replace("{PLAYER}", player.name),
       fair,
     };
   });
+  state.recentTradeTargets = [...(state.recentTradeTargets ?? []), ...offers.map((offer) => offer.wantId)].slice(-6);
+  state.recentTradeTeams = [...(state.recentTradeTeams ?? []), ...offers.map((offer) => offer.fromTeamId)].slice(-6);
+  return offers;
 }
 
 const TRADE_POSITION_MULTIPLIER: Record<Pos, number> = {
@@ -1515,6 +1535,31 @@ function resolveLimitedPlayers(state: SeasonState) {
   }
 }
 
+export function unusedCapUnderReview(state: SeasonState): boolean {
+  return state.capMode === "hard" && capSpace(state) / Math.max(1, state.capLimit) >= UNUSED_CAP_REVIEW_RATIO;
+}
+
+export function ownerGameChange(state: SeasonState, won: boolean, margin: number): { delta: number; reasons: string[] } {
+  if (won) return { delta: 1, reasons: ["win +1"] };
+  const reasons = ["loss −3"];
+  let delta = -3;
+  const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
+  if (!bestQuarterback || bestQuarterback.ovr < 70) {
+    delta -= 1;
+    reasons.push("unresolved QB −1");
+  }
+  const capReviewWeek = state.week % 4 === 0 || state.week === state.seasonLength;
+  if (unusedCapUnderReview(state) && capReviewWeek) {
+    delta -= 1;
+    reasons.push("quarterly unused-cap review −1");
+  }
+  if (margin <= -14) {
+    delta -= 1;
+    reasons.push("blowout −1");
+  }
+  return { delta, reasons };
+}
+
 function doPlayWeek(state: SeasonState): SeasonState {
   if (state.phase !== "regular") throw new Error("The regular season is not live");
   if (state.activeDecision) throw new Error("There is a decision on the desk");
@@ -1542,20 +1587,22 @@ function doPlayWeek(state: SeasonState): SeasonState {
         won,
       };
       const margin = yoursScore - oppScore;
-      const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
-      const weakQuarterback = !bestQuarterback || bestQuarterback.ovr < 70;
-      const unusedCap = state.capMode === "hard" && capSpace(state) >= 25;
-      const ownerDelta = won ? 1 : -3 - (weakQuarterback ? 1 : 0) - (unusedCap ? 1 : 0);
-      bump(state, ownerDelta, won ? 2 : -2, won ? 1 : -1);
+      const ownerChange = ownerGameChange(state, won, margin);
+      bump(state, ownerChange.delta, won ? 2 : -2, won ? 1 : -1);
       if (margin >= 14) bump(state, 0, 1, 1);
-      if (margin <= -14) bump(state, -1, -1, -1);
+      if (margin <= -14) bump(state, 0, -1, -1);
+      state.flags[`owner-week:${state.week}`] = ownerChange.reasons.join(", ");
     }
   }
   resolveLimitedPlayers(state);
   if (yours) {
     const rng = makeRng(hashSeed(state.seed, "hl", state.week));
     state.headlines = resultHeadlines(state, yours.won, yours.score, yours.opp, rng);
+    const ownerExplanation = String(state.flags[`owner-week:${state.week}`] ?? "result processed");
+    const analytics = state.headlines.find((headline) => headline.outlet === "analytics");
+    if (analytics) analytics.text = `Week ${state.week}: owner confidence ${state.meters.owner}. ${ownerExplanation}.`;
     state.log.push(`${yours.won ? "Beat" : "Lost to"} ${yours.opp} ${yours.score}.`);
+    state.log.push(`Owner confidence ${state.meters.owner}: ${ownerExplanation}.`);
   }
   if (state.meters.owner <= FIRING_THRESHOLD) return state;
   if (state.week >= state.seasonLength) return startPlayoffs(state);
@@ -1871,16 +1918,21 @@ function toRecap(state: SeasonState): SeasonState {
   if (state.phase === "fired") return state;
   const record = teamRecord(state, state.teamId);
   const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
-  if (record.wins <= 6 && state.capMode === "hard" && capSpace(state) >= 25) {
-    state.meters.owner = clamp(state.meters.owner - 8, 0, 100);
+  const recapPenalties: string[] = [];
+  if (record.wins <= 6 && unusedCapUnderReview(state)) {
+    state.meters.owner = clamp(state.meters.owner - 5, 0, 100);
+    recapPenalties.push("poor finish with at least 18% of the cap unused −5");
   }
   if (!bestQuarterback || bestQuarterback.ovr < 70) {
-    state.meters.owner = clamp(state.meters.owner - 8, 0, 100);
+    state.meters.owner = clamp(state.meters.owner - 6, 0, 100);
+    recapPenalties.push("unresolved starting quarterback −6");
   }
   if (record.wins <= 6) {
     const performancePenalty = 6 + (6 - record.wins) * 2 + (state.owner.priority === "win" ? 3 : 0);
     state.meters.owner = clamp(state.meters.owner - performancePenalty, 0, 100);
+    recapPenalties.push(`${record.wins}-${record.losses} performance −${performancePenalty}`);
   }
+  if (recapPenalties.length) state.log.push(`Owner year-end review: ${recapPenalties.join("; ")}. Confidence ${state.meters.owner}.`);
   if (state.meters.owner <= FIRING_THRESHOLD) {
     fire(state, `A ${record.wins}-${record.losses} finish, unresolved roster needs, and lost owner confidence ended the job.`);
     return state;
@@ -1921,7 +1973,7 @@ function buildGrade(state: SeasonState, fired: boolean) {
   score += (state.meters.locker - 60) / 12;
   score += (capHealth(state) - 55) / 12;
   const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
-  if (record.wins <= 6 && state.capMode === "hard" && capSpace(state) >= 25) score -= 8;
+  if (record.wins <= 6 && unusedCapUnderReview(state)) score -= 8;
   if (!bestQuarterback || bestQuarterback.ovr < 70) score -= 6;
   if (historical && (!champ || record.wins < state.seasonLength)) score = Math.min(score, 92);
   if (fired) score = Math.min(score, 47);
@@ -1995,6 +2047,19 @@ export function suggestAction(state: SeasonState): Action | null {
     return { type: "cap", choice: "hold" };
   }
   if (state.phase === "fa") {
+    if (state.faWave === 1) {
+      const contracted = yourRoster(state).filter((player) => player.years > 0);
+      const need = needs(contracted);
+      const ownFit = state.faBoard
+        .filter((player) => player.origin === state.teamId && (state.capMode === "payroll" || player.cap <= capSpace(state) - 3))
+        .sort((a, b) => {
+          const aValue = a.ovr + (need.has(a.pos) ? 14 : 0) - a.cap * 0.08;
+          const bValue = b.ovr + (need.has(b.pos) ? 14 : 0) - b.cap * 0.08;
+          return bValue - aValue;
+        });
+      const core = ownFit.find((player) => need.has(player.pos) || player.ovr >= 76);
+      if (core && (need.has(core.pos) || contracted.length < 24)) return { type: "sign", playerId: core.id };
+    }
     const fit = state.faBoard
       .filter((p) => p.ovr >= 83 && (state.capMode === "payroll" || p.cap <= capSpace(state) - 3))
       .sort((a, b) => b.ovr - a.ovr)[0];
