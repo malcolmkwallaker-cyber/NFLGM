@@ -79,6 +79,25 @@ export function yourRoster(state: SeasonState): Player[] {
   return state.teams[state.teamId]?.roster ?? [];
 }
 
+function persistActiveCapLiabilities(state: SeasonState): void {
+  state.teamCapLiabilities ??= {};
+  state.teamCapLiabilities[state.teamId] = {
+    deadMoney: Math.round(state.deadMoney * 10) / 10,
+    futureDead: Math.round(state.futureDead * 10) / 10,
+  };
+}
+
+export function activateTeamCapLiabilities(state: SeasonState, teamId: string): SeasonState {
+  if (!state.teams[teamId]) throw new Error("That team is no longer available");
+  persistActiveCapLiabilities(state);
+  state.teamId = teamId;
+  const liability = state.teamCapLiabilities?.[teamId] ?? { deadMoney: 0, futureDead: 0 };
+  state.deadMoney = liability.deadMoney;
+  state.futureDead = liability.futureDead;
+  persistActiveCapLiabilities(state);
+  return state;
+}
+
 export { capSpace, capHealth, payroll };
 
 export function createSeason(input: {
@@ -187,6 +206,13 @@ export function createSeason(input: {
     capMode: historical?.capMode ?? "hard",
     deadMoney: historical?.deadMoney ?? ROSTERS.teams[teamId]?.dead ?? 12,
     futureDead: 0,
+    teamCapLiabilities: Object.fromEntries(directory.map((team) => [
+      team.id,
+      {
+        deadMoney: team.id === teamId && historical ? historical.deadMoney : ROSTERS.teams[team.id]?.dead ?? 0,
+        futureDead: 0,
+      },
+    ])),
     extraPicks: [],
     restructuredIds: [],
     franchiseTagUsed: false,
@@ -460,6 +486,7 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     const saved = Math.round(player.cap * 0.3 * 10) / 10;
     player.cap = Math.round((player.cap - saved) * 10) / 10;
     state.futureDead = Math.round((state.futureDead + saved) * 10) / 10;
+    persistActiveCapLiabilities(state);
     state.restructuredIds = [...(state.restructuredIds ?? []), player.id];
     bump(state, state.owner.priority === "fiscal" ? -1 : 1, 0, -1);
     pushDecision(state, "Cap", `Restructured ${player.name}`, `Restructured ${player.name}, saving $${saved.toFixed(1)}M now and pushing it forward.`, -1);
@@ -473,6 +500,7 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
   roster.splice(roster.indexOf(player), 1);
   const dead = Math.round(player.cap * 0.45 * 10) / 10;
   state.deadMoney = Math.round((state.deadMoney + dead) * 10) / 10;
+  persistActiveCapLiabilities(state);
   bump(state, 0, player.ovr >= 80 ? -5 : -2, player.ovr >= 80 ? -4 : -2);
   pushDecision(state, "Cap", `Cut ${player.name}`, `Cut ${player.name}. Dead money $${dead.toFixed(1)}M.`, -3);
   if (player.ovr >= 82) queueRipple(state, 5, veteranRipple(player));
@@ -1209,6 +1237,18 @@ function doCampSelection(state: SeasonState, cutIds: string[]): SeasonState {
   return state;
 }
 
+export function campCutDeadMoney(state: SeasonState, cutIds: string[]): number {
+  const selected = new Set(cutIds);
+  return Math.round(yourRoster(state)
+    .filter((player) => selected.has(player.id))
+    .reduce((total, player) => {
+      if (player.origin === "replacement" || player.cap <= 1) return total;
+      if (state.flags[`signed:${player.id}`] === state.year) return total + player.cap * 0.45;
+      if (player.drafted) return total + player.cap * 0.15;
+      return total + player.cap * 0.3;
+    }, 0) * 10) / 10;
+}
+
 function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
   if (state.phase !== "camp") throw new Error("Camp cuts are done");
   const roster = yourRoster(state);
@@ -1219,19 +1259,22 @@ function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
     throw new Error("The camp roster has to land between 22 and 26, with a quarterback");
   }
   const cut = roster.filter((p) => unique.includes(p.id));
+  const addedDead = campCutDeadMoney(state, unique);
   state.teams[state.teamId].roster = remaining;
+  state.deadMoney = Math.round((state.deadMoney + addedDead) * 10) / 10;
+  persistActiveCapLiabilities(state);
   for (const player of cut) {
     if (player.ovr >= 84) queueRipple(state, Math.min(6, state.seasonLength), veteranRipple(player));
     if (player.ovr >= 80) bump(state, 0, -2, -2);
   }
-  pushDecision(state, "Camp", `Cut ${cut.length}`, `Cut ${cut.map((p) => p.name).slice(0, 4).join(", ")}.`, cut.some((p) => p.ovr >= 84) ? -2 : 0);
+  pushDecision(state, "Camp", `Cut ${cut.length}`, `Cut ${cut.map((p) => p.name).slice(0, 4).join(", ")}. Added ${formatMoney(addedDead)} in dead money.`, cut.some((p) => p.ovr >= 84) ? -2 : 0);
   state.phase = "regular";
   state.week = 1;
   prepareWeek(state);
   state.headlines = makeHeadlines(state, "neutral", {
     beat: `The roster is set at ${remaining.length}. Week 1 is a real game.`,
     national: "Camp reports are over. The standings start doing the talking.",
-    analytics: `Cap health ${capHealth(state)}. Chemistry ${state.meters.locker}.`,
+    analytics: `Camp releases added ${formatMoney(addedDead)} in dead money. Cap health ${capHealth(state)}. Chemistry ${state.meters.locker}.`,
   });
   return state;
 }
@@ -1397,6 +1440,7 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
     if (victim) {
       state.teams[state.teamId].roster = yourRoster(state).filter((p) => p.id !== victim.id);
       state.deadMoney += Math.round(victim.cap * 0.3 * 10) / 10;
+      persistActiveCapLiabilities(state);
     }
   }
   if (choice.tag?.startsWith("deadline:")) {
@@ -2016,6 +2060,7 @@ export function divisionTable(state: SeasonState): StandingRow[] {
 
 export function rolloverSeason(state: SeasonState): SeasonState {
   const next = clone(state);
+  persistActiveCapLiabilities(next);
   const currentDeadCleared = state.deadMoney;
   const pushedDeadBecomingCurrent = state.futureDead;
   const previous = {
@@ -2051,8 +2096,13 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   next.pendingDraftTrade = null;
   next.decisions = [];
   next.walked = [];
-  next.deadMoney = Math.round(next.futureDead * 10) / 10;
-  next.futureDead = 0;
+  next.teamCapLiabilities = Object.fromEntries(Object.entries(next.teamCapLiabilities ?? {}).map(([teamId, liability]) => [
+    teamId,
+    { deadMoney: Math.round(liability.futureDead * 10) / 10, futureDead: 0 },
+  ]));
+  const activeLiability = next.teamCapLiabilities[next.teamId] ?? { deadMoney: 0, futureDead: 0 };
+  next.deadMoney = activeLiability.deadMoney;
+  next.futureDead = activeLiability.futureDead;
   next.teamMod = 0;
   next.capLimit = Math.round(next.capLimit * 1.05 * 10) / 10;
   next.meters.owner = clamp(Math.round(next.meters.owner * 0.7 + 66 * 0.3), 35, 90);

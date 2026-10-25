@@ -1,5 +1,21 @@
 # NFLGM career-mode audit
 
+## 2026-10-25 scripted 20-run follow-up disposition
+
+Source: user-provided summary of 20 Season runs and 20 three-season Career runs. The tester explicitly described scripted clicks, did not provide a build identifier, and asked that the observations be treated as leads rather than hand-verified findings. Findings were checked against production baseline `e8b287bf916a4d7b6dcdf2008e8b47a22786a8e2`.
+
+| Finding | Disposition |
+| --- | --- |
+| Restructure dead money follows the GM to a new team | Confirmed state-ownership defect. Current and pushed dead money were stored only on the active season, and `takeJob` changed the team before rollover. Liabilities are now tracked by team; rollover converts each club's pushed amount into that same club's current charge before the new job becomes active. Legacy saves initialize the ledger from their current club only, without inventing other-team debt. Tests cover the reported Carolina-to-Las Vegas shape, an 18.7M legacy Tampa Bay-to-Cleveland shape, and save/reload. |
+| Camp cuts have no dead-money cost | Confirmed. Camp releases now add a visible estimate and a contract-based charge: replacement/minimum deals have no charge, drafted deals use a smaller modeled charge, and veteran or same-year signed deals use larger modeled charges. The final decision log records the amount. These are simulation rules, not representations of verified NFL contract guarantees. |
+| Play the week silently stalls with a pending trade offer | Partly confirmed. The engine already rejected advancement with a specific review message and no roster mutation, but the week and season-simulation buttons remained enabled. They now disable and explicitly say to review the visible offer first. Accepting or declining remains deliberate. |
+| Trade-call labels read backward; any accepted deal raises owner confidence | Presentation issue confirmed; arithmetic claim not reproduced. The value badges now say `Good value for you`, `Fair value for you`, or `Poor value for you`. Current engine behavior already gives +4 owner confidence for a bargain, +1 for fair value, and −4 for a poor-value deal, so no new automatic acceptance bonus was added. |
+| Only Daily, Season, and Career are available | Not reproduced. The verified production artifact exposes Historical and Turnaround navigation and distinct pages in addition to the three named modes. The report did not identify which build it loaded. |
+| Production build cannot be identified | Confirmed visibility gap. The footer now embeds the hosting provider's real commit SHA when supplied at build time, shortened for display with the full value in the title; local or unknown builds say `Build unknown` rather than claiming a release. |
+| Cap room reaches 100–220M, old quarterbacks ask high prices, confidence swings, roster strength feels weak, grades are generous, and calls repeat | Retained as tuning leads, not treated as proven regressions from this scripted sample. The preceding release already changed long-run contract scaling, CPU signings, aging, confidence pressure, and substantive consecutive-headline repetition. No second broad rebalance was layered on without seeded current-build traces. |
+
+The current build also contains all earlier QA disposition records below. This follow-up does not activate ads, tracking, cloud saves, payments, or a backend.
+
 ## 2026-10-24 all-team and 20-year report disposition
 
 Source: user-provided summary and Google Doc `1iYdGecoscnjIBEDW4OwnUXHt-NOEvScFraNe5KZ3Fzc` (title: *RunTheRoster Career Playtest – All 32 Teams + Jets 20-Year (2026-10-24)*, created 2026-10-24 23:21:52 UTC). The report has no tested commit, seed, or run timestamps. Findings were reproduced against production baseline `2f969d5fb68ba2cb36ab59d5edc5910d48eb9176`; report explanations were treated as hypotheses rather than proof.

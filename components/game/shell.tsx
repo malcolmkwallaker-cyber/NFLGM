@@ -71,6 +71,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           Run The Roster is an unofficial fan game. It is not affiliated with, endorsed by, or connected to the National
           Football League or any of its teams. Team marks are abbreviations and colors, not logos.
         </p>
+        <p title={process.env.NEXT_PUBLIC_BUILD_SHA ?? "unknown"}>
+          Build {(process.env.NEXT_PUBLIC_BUILD_SHA ?? "unknown") === "unknown" ? "unknown" : process.env.NEXT_PUBLIC_BUILD_SHA?.slice(0, 7)}
+        </p>
       </footer>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-white/10 bg-[#0b1018]/95 backdrop-blur md:hidden">
         {[

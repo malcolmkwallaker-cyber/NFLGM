@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, capSpace, createSeason, ensureMinimumRoster, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
+import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -609,6 +609,67 @@ describe("audit regressions", () => {
     expect(hired.season.teams.BUF.roster.some((player) => player.id === markerId)).toBe(true);
     expect(hired.season.staffStep).toBe(0);
     expect(hired.season.phase).toBe("intro");
+  });
+
+  it("keeps restructure liabilities with the old team after a fired GM changes jobs", () => {
+    const career = createCareer("Cap Ownership Audit", "CAR", 2501);
+    career.season.phase = "fired";
+    career.season.futureDead = 8.3;
+    career.season.teamCapLiabilities = {
+      ...(career.season.teamCapLiabilities ?? {}),
+      CAR: { deadMoney: career.season.deadMoney, futureDead: 8.3 },
+    };
+    career.season.grade = { letter: "F", score: 30, round: "missed", champ: false, wins: 3, losses: 14, pf: 210, pa: 420, headline: "Fired", best: "Draft", worst: "Record" };
+
+    const hired = takeJob(career, "LV");
+    expect(hired.season.teamId).toBe("LV");
+    expect(hired.season.deadMoney).toBe(0);
+    expect(hired.season.futureDead).toBe(0);
+    expect(hired.season.teamCapLiabilities?.CAR).toEqual({ deadMoney: 8.3, futureDead: 0 });
+    expect(hired.season.teamCapLiabilities?.LV).toEqual({ deadMoney: 0, futureDead: 0 });
+
+    const reloaded = migrateProfile({ ...freshProfile(), active: "career", career: JSON.parse(JSON.stringify(hired)) });
+    expect(reloaded.career?.season.deadMoney).toBe(0);
+    expect(reloaded.career?.season.teamCapLiabilities?.CAR).toEqual({ deadMoney: 8.3, futureDead: 0 });
+  });
+
+  it("migrates legacy cap liabilities without assigning the old team's debt to a new job", () => {
+    const career = createCareer("Legacy Cap Audit", "TB", 2502);
+    career.season.phase = "fired";
+    career.season.deadMoney = 4.2;
+    career.season.futureDead = 18.7;
+    delete career.season.teamCapLiabilities;
+    career.season.grade = { letter: "F", score: 28, round: "missed", champ: false, wins: 2, losses: 15, pf: 190, pa: 440, headline: "Fired", best: "Draft", worst: "Record" };
+    const migrated = migrateProfile({ ...freshProfile(), active: "career", career });
+    if (!migrated.career) throw new Error("Legacy career was lost");
+
+    const hired = takeJob(migrated.career, "CLE");
+    expect(hired.season.deadMoney).toBe(0);
+    expect(hired.season.teamCapLiabilities?.TB).toEqual({ deadMoney: 18.7, futureDead: 0 });
+    expect(hired.season.teamCapLiabilities?.CLE).toEqual({ deadMoney: 0, futureDead: 0 });
+  });
+
+  it("charges transparent dead money for active contracts released at camp", () => {
+    const state = createSeason({ teamId: "KC", gmName: "Camp Cap Audit", seed: 2503, mode: "career" });
+    state.phase = "camp";
+    while (yourRoster(state).length < 27) {
+      const index = yourRoster(state).length;
+      state.teams.KC.roster.push({ id: `camp-replacement-${index}`, name: `Camp Replacement ${index}`, pos: index % 2 ? "WR" : "LB", ovr: 60, age: 24, cap: 0.9, years: 1, potential: 62, real: false, origin: "replacement" });
+    }
+    const veteran = yourRoster(state).filter((player) => player.pos !== "QB" && player.cap > 1).sort((a, b) => b.cap - a.cap)[0];
+    if (!veteran) throw new Error("Camp contract fixture missing");
+    const cutIds = [veteran.id, ...yourRoster(state)
+      .filter((player) => player.id !== veteran.id && player.pos !== "QB")
+      .slice(0, Math.max(0, yourRoster(state).length - 27))
+      .map((player) => player.id)];
+    const before = state.deadMoney;
+    const expected = campCutDeadMoney(state, cutIds);
+    expect(expected).toBeGreaterThan(0);
+
+    const regular = applyAction(state, { type: "camp", cutIds });
+    expect(regular.deadMoney).toBe(Math.round((before + expected) * 10) / 10);
+    expect(regular.teamCapLiabilities?.KC?.deadMoney).toBe(regular.deadMoney);
+    expect(regular.decisions[0]?.log).toContain(`$${expected.toFixed(1)}M`);
   });
 
   it("migrates an older deadlocked camp save without losing the original", () => {

@@ -241,6 +241,7 @@ export interface SeasonState {
   capMode: CapMode;
   deadMoney: number;
   futureDead: number;
+  teamCapLiabilities?: Record<string, { deadMoney: number; futureDead: number }>;
   extraPicks: { round: number; year: number; source?: string }[];
   restructuredIds?: string[];
   franchiseTagUsed?: boolean;

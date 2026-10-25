@@ -12,7 +12,7 @@ import { capSpace, offerYears } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -178,11 +178,11 @@ export function Desk() {
 
       {(season.phase === "playoffs" || (season.phase === "regular" && season.week > 1)) ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => dispatch({ type: "sim", until: "playoffs" })}>
-            Sim to the playoffs
+          <Button variant="outline" disabled={Boolean(season.shop)} onClick={() => dispatch({ type: "sim", until: "playoffs" })}>
+            {season.shop ? "Review trade offer first" : "Sim to the playoffs"}
           </Button>
-          <Button variant="ghost" onClick={() => dispatch({ type: "sim", until: "recap" })}>
-            Finish the year
+          <Button variant="ghost" disabled={Boolean(season.shop)} onClick={() => dispatch({ type: "sim", until: "recap" })}>
+            {season.shop ? "Review trade offer first" : "Finish the year"}
           </Button>
         </div>
       ) : null}
@@ -466,7 +466,9 @@ function Trades({
         <article key={offer.id} className="rounded-xl border border-white/10 bg-card p-4">
           <div className="flex items-center justify-between gap-2">
             <p className="font-medium">{offer.fromTeamId} called about {offer.wantName}</p>
-            <Badge variant={offer.fair === "fleece" ? "destructive" : "outline"}>{offer.fair}</Badge>
+            <Badge variant={offer.fair === "fleece" ? "destructive" : "outline"}>
+              {offer.fair === "bargain" ? "Good value for you" : offer.fair === "fleece" ? "Poor value for you" : "Fair value for you"}
+            </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{offer.blurb}</p>
           <dl className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
@@ -651,6 +653,9 @@ function Camp({
         <Button type="button" variant="outline" onClick={onSuggest}>Select suggested cuts</Button>
         <span className="text-xs text-muted-foreground">{cutIds.length ? `${cutIds.length} selected to cut` : "No cuts selected yet"}</span>
       </div>
+      {cutIds.length ? (
+        <p className="text-xs text-amber-100">Estimated added dead money: {money(campCutDeadMoney(season, cutIds))}. Replacement-level and minimum contracts can be released without a charge.</p>
+      ) : null}
       {!keptQb ? <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm">Keep at least one quarterback before opening the season.</p> : null}
       <section className="rounded-xl border border-white/10 bg-black/20 p-3" aria-label="Your draft class">
         <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Draft class added to camp</p>
@@ -753,8 +758,8 @@ function Regular({
           <p className="mt-2 text-sm text-muted-foreground">
             The rest of the league plays the same week. A win moves the owner. A collapse can end the job before February.
           </p>
-          <Button className="mt-4 !h-12 !px-5" data-testid="play-week" onClick={() => dispatch({ type: "play-week" })}>
-            Play the week
+          <Button className="mt-4 !h-12 !px-5" disabled={Boolean(season.shop)} data-testid="play-week" onClick={() => dispatch({ type: "play-week" })}>
+            {season.shop ? "Review the trade offer first" : "Play the week"}
           </Button>
         </div>
       )}

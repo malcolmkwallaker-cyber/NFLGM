@@ -1,6 +1,6 @@
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { teamRatings } from "@/lib/engine/ratings";
-import { createSeason, rolloverSeason } from "@/lib/engine/season";
+import { activateTeamCapLiabilities, createSeason, rolloverSeason } from "@/lib/engine/season";
 import type { CareerState, SeasonState, SeasonSummary } from "@/lib/types";
 import { normalizeGmName } from "@/lib/gm-name";
 import { writeWikipedia } from "@/lib/engine/wikipedia";
@@ -112,7 +112,7 @@ export function withJobOffers(career: CareerState): CareerState {
 export function takeJob(career: CareerState, teamId: string): CareerState {
   const summary = summarize(career.season);
   if (!career.season.teams[teamId]) throw new Error("That job is no longer available");
-  const season = rolloverSeason({ ...career.season, teamId });
+  const season = activateTeamCapLiabilities(rolloverSeason(career.season), teamId);
   season.staff = {};
   season.staffStep = 0;
   season.meters.owner = 58;

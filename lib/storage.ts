@@ -48,6 +48,9 @@ export function migrateProfile(profile: Profile): Profile {
     season.restructuredIds ??= [];
     season.franchiseTagUsed ??= false;
     season.faPool ??= [];
+    season.teamCapLiabilities ??= {
+      [season.teamId]: { deadMoney: season.deadMoney, futureDead: season.futureDead },
+    };
     if (season.phase !== "camp") continue;
     const addedToUser = ensureMinimumRoster(season, season.teamId);
     for (const teamId of Object.keys(season.teams)) {
