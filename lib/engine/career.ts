@@ -1,6 +1,6 @@
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { teamRatings } from "@/lib/engine/ratings";
-import { activateTeamCapLiabilities, createSeason, rolloverSeason } from "@/lib/engine/season";
+import { createSeason, prepareNewJob, rolloverSeason } from "@/lib/engine/season";
 import type { CareerState, SeasonState, SeasonSummary } from "@/lib/types";
 import { normalizeGmName } from "@/lib/gm-name";
 import { writeWikipedia } from "@/lib/engine/wikipedia";
@@ -98,12 +98,17 @@ export function withJobOffers(career: CareerState): CareerState {
     .slice(0, 3);
   return {
     ...career,
-    jobOffers: ranked.map((t) => {
+    jobOffers: ranked.map((t, index) => {
       const info = teamById(t.id, career.season.directory);
+      const direction = index === 0
+        ? "The roster needs a patient rebuild."
+        : index === 1
+          ? "The roster has a middle class, but no shortcut."
+          : "The owner expects a faster reset than the depth chart promises.";
       return {
         teamId: t.id,
         teamName: teamLabel(info),
-        blurb: `${info.city} is looking for someone who still answers the phone. The roster is not a shortcut.`,
+        blurb: `${info.city} is looking for someone who still answers the phone. ${direction} Modeled roster power: ${Math.round(t.power / 2)}.`,
       };
     }),
   };
@@ -112,11 +117,8 @@ export function withJobOffers(career: CareerState): CareerState {
 export function takeJob(career: CareerState, teamId: string): CareerState {
   const summary = summarize(career.season);
   if (!career.season.teams[teamId]) throw new Error("That job is no longer available");
-  const season = activateTeamCapLiabilities(rolloverSeason(career.season), teamId);
-  season.staff = {};
-  season.staffStep = 0;
-  season.meters.owner = 58;
-  season.log.unshift(`${career.gmName} is hired after being fired.`);
+  const previousTeamId = career.season.teamId;
+  const season = prepareNewJob(rolloverSeason(career.season), teamId, previousTeamId);
   return {
     ...career,
     jobs: career.jobs + 1,

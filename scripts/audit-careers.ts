@@ -2,11 +2,11 @@ import { advanceCareer, createCareer, takeJob, withJobOffers } from "@/lib/engin
 import {
   applyAction,
   capSpace,
-  payroll,
   suggestedCuts,
   suggestAction,
   yourRoster,
 } from "@/lib/engine/season";
+import { committedPayroll } from "@/lib/engine/cap";
 import type { CareerState, SeasonState } from "@/lib/types";
 
 const careers = Number(process.env.AUDIT_CAREERS ?? 200);
@@ -157,7 +157,7 @@ function auditState(state: SeasonState, career: number, season: number) {
     }
   }
 
-  const expectedSpace = Math.round((state.capLimit - payroll(yourRoster(state)) - state.deadMoney) * 10) / 10;
+  const expectedSpace = Math.round((state.capLimit - committedPayroll(yourRoster(state)) - state.deadMoney) * 10) / 10;
   if (capSpace(state) !== expectedSpace) {
     record({ ...context, kind: "cap-arithmetic", detail: `expected ${expectedSpace}, got ${capSpace(state)}` });
   }
@@ -176,7 +176,7 @@ function auditState(state: SeasonState, career: number, season: number) {
   }
   if (state.phase === "intro") {
     for (const pick of state.extraPicks) {
-      if (pick.round < 1 || pick.round > 3 || pick.year < state.year) {
+      if (pick.round < 1 || pick.round > 7 || pick.year < state.year) {
         record({ ...context, kind: "invalid-extra-pick", detail: `round=${pick.round}, year=${pick.year}` });
       }
     }

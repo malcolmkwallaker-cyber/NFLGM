@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -176,7 +176,7 @@ export function Desk() {
         />
       ) : null}
 
-      {(season.phase === "playoffs" || (season.phase === "regular" && season.week > 1)) ? (
+      {season.phase === "regular" && season.week > 1 ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" disabled={Boolean(season.shop || season.activeDecision)} onClick={() => dispatch({ type: "sim", until: "playoffs" })}>
             {season.shop ? "Review trade offer first" : season.activeDecision ? "Resolve the desk decision first" : "Sim to the playoffs"}
@@ -185,6 +185,11 @@ export function Desk() {
             {season.shop ? "Review trade offer first" : season.activeDecision ? "Resolve the desk decision first" : "Finish the year"}
           </Button>
         </div>
+      ) : null}
+      {season.phase === "playoffs" ? (
+        <Button variant="ghost" onClick={() => dispatch({ type: "sim", until: "recap" })}>
+          Finish the postseason
+        </Button>
       ) : null}
 
       <details className="rounded-xl border border-white/10 bg-card px-4 py-3">
@@ -458,6 +463,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           Outside free agents in historical modes are fictional, deterministic gameplay candidates. They are not claimed as players from the original season.
         </p>
       ) : null}
+      {season.faWave === 1 && season.faBoard.length > 0 ? (
+        <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-amber-100">
+          Opening the outside market leaves every unsigned player on this list available to other teams. An unsigned player is not guaranteed to appear again.
+        </p>
+      ) : null}
       <Button variant="outline" className="!h-11" data-testid="choice-next-wave" onClick={() => dispatch({ type: "next-wave" })}>
         {season.faWave === 1 ? "Open the outside market" : season.faWave < 3 ? "Next wave" : "Close free agency"}
       </Button>
@@ -507,8 +517,12 @@ function Trades({
       ))}
       {season.shop ? (
         <article className="rounded-xl border border-primary/40 bg-card p-4">
-          <p className="font-medium">The market answered on {season.shop.wantName}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="font-medium">The market answered on {season.shop.wantName}</p>
+            <Badge variant={season.shop.fair === "fleece" ? "destructive" : "outline"}>{tradeValueLabel(season.shop.fair)}</Badge>
+          </div>
           <p className="mt-1 text-sm text-muted-foreground">{season.shop.blurb}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Accepting changes owner confidence by {season.shop.fair === "fleece" ? "−4" : "+1"}. The grade is shown before you decide.</p>
           <div className="mt-3 flex gap-2">
             <Button onClick={() => dispatch({ type: "shop-resolve", accept: true })}>Take the pick</Button>
             <Button variant="outline" onClick={() => dispatch({ type: "shop-resolve", accept: false })}>
@@ -932,7 +946,7 @@ function Recap({
       </div>
       <ShareCard
         kicker={`${season.year} ${teamById(season.teamId, season.directory).abbr}`}
-        title={`${grade?.letter ?? "—"} · ${grade?.champ ? "CHAMP" : (grade?.round ?? "missed").toUpperCase()}`}
+        title={`${grade?.letter ?? "—"} · ${grade?.champ ? "CHAMP" : grade?.round === "superbowl" ? "RUNNER-UP" : (grade?.round ?? "missed").toUpperCase()}`}
         line={`${grade?.wins ?? 0}-${grade?.losses ?? 0}`}
         text={seasonShareText(season)}
       />

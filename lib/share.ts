@@ -26,7 +26,7 @@ export function seasonShareText(state: SeasonState): string {
   const grade = state.grade;
   const abbr = teamById(state.teamId, state.directory).abbr;
   const record = `${grade?.wins ?? 0}-${grade?.losses ?? 0}`;
-  const round = grade?.champ ? "CHAMP" : (grade?.round ?? "missed").toUpperCase();
+  const round = grade?.champ ? "CHAMP" : grade?.round === "superbowl" ? "RUNNER-UP" : (grade?.round ?? "missed").toUpperCase();
   return [
     "RUN THE ROSTER",
     `${state.year} ${abbr} · ${record}`,

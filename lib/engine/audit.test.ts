@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, yourRoster } from "@/lib/engine/season";
+import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeValueLabel, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -9,6 +9,7 @@ import { capHealth, committedPayroll, marketAgeFactor, marketAsk, salaryScale } 
 import { effectiveOvr } from "@/lib/engine/ratings";
 import { resultHeadlines } from "@/lib/engine/headlines";
 import { makeRng } from "@/lib/engine/rng";
+import { seasonShareText } from "@/lib/share";
 
 function advanceTo(state: SeasonState, phase: Phase): SeasonState {
   let current = state;
@@ -663,12 +664,44 @@ describe("audit regressions", () => {
     career.season.phase = "fired";
     career.season.grade = { letter: "F", score: 35, round: "missed", champ: false, wins: 3, losses: 14, pf: 200, pa: 400, headline: "Fired", best: "None", worst: "Record" };
     const markerId = career.season.teams.BUF.roster[0].id;
+    const priorOwner = career.season.owner.name;
     const hired = takeJob(career, "BUF");
     expect(hired.season.year).toBe(2037);
     expect(hired.season.teamId).toBe("BUF");
     expect(hired.season.teams.BUF.roster.some((player) => player.id === markerId)).toBe(true);
     expect(hired.season.staffStep).toBe(0);
     expect(hired.season.phase).toBe("intro");
+    expect(hired.season.owner.name).not.toBe(priorOwner);
+    expect(hired.season.owner.note).toContain("2037");
+    expect(hired.season.headlines.find((headline) => headline.outlet === "beat")?.outletName).toBe("Buffalo Ledger");
+    expect(hired.season.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain("Owner confidence starts at 58");
+    expect(hired.season.log.join(" ")).toContain("Old-team liabilities stayed with KC");
+  });
+
+  it("keeps trade grades consistent and shows unique names across a draft class", () => {
+    expect(tradeValueLabel("bargain")).toBe("Good value for you");
+    expect(tradeValueLabel("fair")).toBe("Fair value for you");
+    expect(tradeValueLabel("fleece")).toBe("Poor value for you");
+
+    const draft = advanceTo(createSeason({ teamId: "DAL", gmName: "Draft Name Audit", seed: 2601, mode: "career" }), "draft");
+    const names = draft.prospects.map((prospect) => prospect.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("records the exact owner year-end review and labels a Super Bowl loss as runner-up", () => {
+    let recap: SeasonState | null = null;
+    for (let seed = 1; seed <= 60 && !recap; seed += 1) {
+      const completed = simulateUntil(createSeason({ teamId: "DAL", gmName: "Recap Delta Audit", seed, mode: "career" }), "recap");
+      if (completed.phase === "recap") recap = completed;
+    }
+    expect(recap).not.toBeNull();
+    expect(String(recap?.flags["owner-year-end-review"])).toMatch(/Owner year-end review \d+ → \d+:/);
+    expect(recap?.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain("Owner year-end review");
+
+    if (!recap?.grade) throw new Error("Recap fixture missing grade");
+    recap.grade = { ...recap.grade, champ: false, round: "superbowl" };
+    expect(seasonShareText(recap)).toContain("RUNNER-UP");
+    expect(seasonShareText(recap)).not.toContain("SUPERBOWL");
   });
 
   it("keeps restructure liabilities with the old team after a fired GM changes jobs", () => {

@@ -100,6 +100,38 @@ export function activateTeamCapLiabilities(state: SeasonState, teamId: string): 
   return state;
 }
 
+export function prepareNewJob(state: SeasonState, teamId: string, previousTeamId: string): SeasonState {
+  const previousOwnerName = state.owner.name;
+  activateTeamCapLiabilities(state, teamId);
+  const rng = makeRng(hashSeed(state.seed, "new-job", state.year, teamId));
+  const ownerName = rng.pick(OWNERS.filter((name) => name !== previousOwnerName));
+  const ownerPriority = rng.pick(PRIORITIES);
+  const strength = teamRatings(state, teamId);
+  state.phase = "intro";
+  state.staff = {};
+  state.staffStep = 0;
+  state.owner = { name: ownerName, priority: ownerPriority, note: ownerNote(ownerPriority, state.year) };
+  state.market = staffMarket(rng, [], [ownerName]);
+  state.meters = {
+    owner: 58,
+    fans: clamp(58 + (strength.off - 78) * 0.4, 45, 78),
+    locker: 64,
+  };
+  delete state.flags.plan;
+  const oldTeam = teamById(previousTeamId, state.directory).abbr;
+  const newTeam = teamById(teamId, state.directory);
+  state.log = [
+    `${state.gmName} was hired by ${teamLabel(newTeam)} after leaving ${oldTeam}.`,
+    `New-team cap ledger: ${formatMoney(state.deadMoney)} current dead money and ${formatMoney(state.futureDead)} pushed forward. Old-team liabilities stayed with ${oldTeam}.`,
+  ];
+  state.headlines = makeHeadlines(state, "neutral", {
+    beat: `${teamLabel(newTeam)} have a new GM. ${ownerName} wants a ${priorityLabel(ownerPriority).toLowerCase()} plan.`,
+    national: `${gmSubject(state.gmName)} took another call. This is a new building and a new ledger.`,
+    analytics: `Inherited roster rates ${strength.off.toFixed(0)} on offense and ${strength.def.toFixed(0)} on defense. Current dead ${formatMoney(state.deadMoney)}; pushed dead ${formatMoney(state.futureDead)}. Owner confidence starts at 58.`,
+  });
+  return state;
+}
+
 export { capSpace, capHealth, payroll };
 
 export function createSeason(input: {
@@ -823,9 +855,15 @@ function makeOffers(state: SeasonState): TradeOffer[] {
       fair,
     };
   });
-  state.recentTradeTargets = [...(state.recentTradeTargets ?? []), ...offers.map((offer) => offer.wantId)].slice(-6);
-  state.recentTradeTeams = [...(state.recentTradeTeams ?? []), ...offers.map((offer) => offer.fromTeamId)].slice(-6);
+  state.recentTradeTargets = [...(state.recentTradeTargets ?? []), ...offers.map((offer) => offer.wantId)].slice(-12);
+  state.recentTradeTeams = [...(state.recentTradeTeams ?? []), ...offers.map((offer) => offer.fromTeamId)].slice(-12);
   return offers;
+}
+
+export function tradeValueLabel(fair: TradeOffer["fair"]): string {
+  if (fair === "bargain") return "Good value for you";
+  if (fair === "fleece") return "Poor value for you";
+  return "Fair value for you";
 }
 
 const TRADE_POSITION_MULTIPLIER: Record<Pos, number> = {
@@ -893,7 +931,7 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
   state.headlines = makeHeadlines(state, swing >= 0 ? "positive" : "negative", {
     beat: `${sent.name} is gone. Coming back: ${got}.`,
     national: offer.fair === "fleece" ? "That is how you lose a locker room and the trade chart." : "The calls are getting sharper.",
-    analytics: `Chart grade: ${offer.fair}. Future dead and future picks both travel.`,
+    analytics: `Trade chart: ${tradeValueLabel(offer.fair)}. This trade's draft compensation is on your board; restructure dead money remains with the club that created it. Owner confidence ${formatSigned(swing)}.`,
   });
 }
 
@@ -905,6 +943,7 @@ function doShop(state: SeasonState, playerId: string): SeasonState {
   const rng = makeRng(hashSeed(state.seed, "shop", playerId));
   const from = state.directory.filter((t) => t.id !== state.teamId)[rng.int(state.directory.length - 1)];
   const pickRound = pickRoundForTradeValue(playerTradeValue(player) * 0.72);
+  const fair: TradeOffer["fair"] = pickTradeValue(pickRound) >= playerTradeValue(player) * 0.78 ? "fair" : "fleece";
   state.shop = {
     id: `shop-${player.id}`,
     fromTeamId: from?.id ?? "SF",
@@ -913,8 +952,8 @@ function doShop(state: SeasonState, playerId: string): SeasonState {
     incoming: null,
     pickRound,
     pickYear: state.year + 1,
-    blurb: `${from?.abbr ?? "A rival"} will give you a round ${pickRound} next year. No player coming back. Age, position, contract control, and draft value all shape the return.`,
-    fair: pickTradeValue(pickRound) >= playerTradeValue(player) * 0.78 ? "fair" : "fleece",
+    blurb: `${from?.abbr ?? "A rival"} will give you a round ${pickRound} next year. No player coming back. Age, position, contract control, and draft value all shape the return. The chart calls this ${tradeValueLabel(fair).toLowerCase()}.`,
+    fair,
   };
   state.shopUsed = true;
   return state;
@@ -951,6 +990,8 @@ function makeProspects(state: SeasonState): Prospect[] {
   const accuracy = scout ? scout.development / 5 : 0.45;
   const error = Math.round((1 - accuracy) * 8);
   const prospects: Prospect[] = [];
+  const nameCount = FIRSTS.length * LASTS.length;
+  const nameOffset = makeRng(hashSeed(state.seed, "draft-names", state.year)).int(nameCount);
   for (let i = 0; i < 110; i++) {
     const pos = POS_CYCLE[i % POS_CYCLE.length] ?? "WR";
     let trueOvr = 64 + rng.int(8);
@@ -959,7 +1000,11 @@ function makeProspects(state: SeasonState): Prospect[] {
     else if (i < 70) trueOvr = 68 + rng.int(8);
     const noise = rng.int(error * 2 + 1) - error;
     const perceived = clamp(trueOvr + noise, 58, 99);
-    const name = `${FIRSTS[rng.int(FIRSTS.length)]} ${LASTS[rng.int(LASTS.length)]}`;
+    const nameIndex = (nameOffset + i * 37) % nameCount;
+    const name = `${FIRSTS[Math.floor(nameIndex / LASTS.length)]} ${LASTS[nameIndex % LASTS.length]}`;
+    // Keep the legacy draft RNG sequence stable so existing seeds retain ratings, ages, and colleges.
+    rng.int(FIRSTS.length);
+    rng.int(LASTS.length);
     prospects.push({
       id: `p-${state.year}-${i}-${name.replace(/\s/g, "")}`,
       name,
@@ -1408,7 +1453,7 @@ function deadlineDecision(state: SeasonState): Decision | null {
     id: "deadline",
     kicker: "Trade deadline",
     title: `${from?.abbr ?? "A rival"} calls about ${player.name}`,
-    body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. The game's age, position, contract, and pick-value model rates this return ${pickTradeValue(round) >= playerTradeValue(player) * 0.78 ? "near fair value" : "below fair value"}. After today the phones are props.`,
+    body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. The game's age, position, contract, and pick-value model rates this return ${pickTradeValue(round) >= playerTradeValue(player) * 0.78 ? "near fair value" : "below fair value"}. The owner's reaction below reflects the ${priorityLabel(state.owner.priority).toLowerCase()} brief, which is separate from the trade chart. After today the phones are props.`,
     options: [
       { id: "keep", label: `Keep ${player.name}`, detail: "You are trying to win the games on the schedule. Owner +1, fans +2, locker +2.", owner: 1, fans: 2, locker: 2, log: `Kept ${player.name} through the deadline.`, swing: 2 },
       { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: `Take the pick and the cap. Owner ${state.owner.priority === "youth" ? "+4" : "−2"}, fans −3, locker −2.`, owner: state.owner.priority === "youth" ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
@@ -1951,6 +1996,7 @@ function toRecap(state: SeasonState): SeasonState {
   if (state.phase === "fired") return state;
   const record = teamRecord(state, state.teamId);
   const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
+  const ownerBeforeReview = state.meters.owner;
   const recapPenalties: string[] = [];
   if (record.wins <= 6 && unusedCapUnderReview(state)) {
     state.meters.owner = clamp(state.meters.owner - 5, 0, 100);
@@ -1965,7 +2011,9 @@ function toRecap(state: SeasonState): SeasonState {
     state.meters.owner = clamp(state.meters.owner - performancePenalty, 0, 100);
     recapPenalties.push(`${record.wins}-${record.losses} performance −${performancePenalty}`);
   }
-  if (recapPenalties.length) state.log.push(`Owner year-end review: ${recapPenalties.join("; ")}. Confidence ${state.meters.owner}.`);
+  const reviewExplanation = recapPenalties.length ? recapPenalties.join("; ") : "no additional year-end penalty";
+  state.flags["owner-year-end-review"] = `Owner year-end review ${ownerBeforeReview} → ${state.meters.owner}: ${reviewExplanation}.`;
+  state.log.push(String(state.flags["owner-year-end-review"]));
   if (state.meters.owner <= FIRING_THRESHOLD) {
     fire(state, `A ${record.wins}-${record.losses} finish, unresolved roster needs, and lost owner confidence ended the job.`);
     return state;
@@ -1986,7 +2034,7 @@ function toRecap(state: SeasonState): SeasonState {
                 : `${teamLabel(teamById(state.teamId, state.directory))}'s run ended in the ${state.grade.round === "wildcard" ? "Wild Card" : state.grade.round} round.`
             }`
       : "The league title is still being decided; your season is over.",
-    analytics: `GM grade ${state.grade.letter} (${state.grade.score}).`,
+    analytics: `GM grade ${state.grade.letter} (${state.grade.score}). Owner year-end review ${ownerBeforeReview} → ${state.meters.owner}: ${reviewExplanation}.`,
   });
   return state;
 }
@@ -2310,11 +2358,13 @@ export function seasonDrivers(state: SeasonState): string[] {
     drivers.push(`Quarterback plan: ${bestQuarterback.name} led the room at ${bestQuarterback.ovr} overall.`);
   }
   if (state.capMode === "hard") {
-    drivers.push(`Cap use: ${formatMoney(space)} remained at season end${record.wins <= 6 && space >= 25 ? " despite six or fewer wins" : ""}.`);
+    const timing = state.phase === "fired" ? "when the job ended" : "at season end";
+    drivers.push(`Cap use: ${formatMoney(space)} remained ${timing}${record.wins <= 6 && space >= 25 ? " despite six or fewer wins" : ""}.`);
   }
   if (injured) drivers.push(`Availability: ${injured} roster player${injured === 1 ? " was" : "s were"} injured at the finish.`);
+  if (typeof state.flags["owner-year-end-review"] === "string") drivers.push(String(state.flags["owner-year-end-review"]));
   drivers.push(`Owner confidence finished at ${state.meters.owner}; locker-room confidence finished at ${state.meters.locker}.`);
-  return drivers.slice(0, 5);
+  return drivers.slice(0, 7);
 }
 
 export function advancedLines(state: SeasonState) {
