@@ -301,6 +301,28 @@ describe("audit regressions", () => {
     expect(state.log.at(-1)).toContain(`Owner confidence ${before} → ${state.meters.owner}`);
   });
 
+  it("explains requested meter gains that are reduced by the confidence ceiling", () => {
+    let decision = createSeason({ teamId: "SEA", gmName: "Ceiling Audit", seed: 1027 });
+    decision.meters.owner = 96;
+    decision = applyAction(decision, { type: "intro", choice: "embrace" });
+    expect(decision.headlines.find((headline) => headline.outlet === "analytics")?.text)
+      .toContain("Owner confidence 96 → 96 (0 applied; +8 requested, capped at 96)");
+
+    let cappedWeek: SeasonState | null = null;
+    for (let seed = 1; seed <= 20 && !cappedWeek; seed += 1) {
+      let state = advanceTo(createSeason({ teamId: "KC", gmName: "Weekly Ceiling Audit", seed }), "regular");
+      if (state.activeDecision) state = applyAction(state, { type: "decide", choiceId: state.activeDecision.options[0].id });
+      state.meters.owner = 96;
+      state = applyAction(state, { type: "play-week" });
+      const analytics = state.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+      if (analytics.includes("win +1")) cappedWeek = state;
+    }
+    expect(cappedWeek).not.toBeNull();
+    expect(cappedWeek?.headlines.find((headline) => headline.outlet === "analytics")?.text)
+      .toContain("win +1; 0 applied; +1 requested, capped at 96");
+    expect(cappedWeek?.log.at(-1)).toContain("0 applied; +1 requested, capped at 96");
+  });
+
   it("asks for explicit acceptance after listening to contract-year trade calls", () => {
     let state = advanceTo(createSeason({ teamId: "DAL", gmName: "Listen Audit", seed: 1227 }), "regular");
     for (let guard = 0; guard < 20 && state.activeDecision?.id !== "extension"; guard += 1) {

@@ -429,6 +429,8 @@ function pushDecision(state: SeasonState, title: string, choice: string, log: st
 
 function doIntro(state: SeasonState, choice: string, text?: string): SeasonState {
   if (state.phase !== "intro") throw new Error("No owner meeting on the desk");
+  const ownerBefore = state.meters.owner;
+  let ownerRequested = 0;
   let path = choice;
   if (text && text.trim().length > 8) {
     const read = interpretFreeText(text);
@@ -437,14 +439,17 @@ function doIntro(state: SeasonState, choice: string, text?: string): SeasonState
     if (read) state.flags.plan = read.path;
   }
   if (path === "embrace" || path === state.owner.priority) {
+    ownerRequested = 8;
     bump(state, 8, 1, 1);
     state.flags.plan = state.owner.priority;
     pushDecision(state, "Owner meeting", "Embrace the brief", `Told ${state.owner.name} the plan matches the brief.`, 8);
   } else if (path === "balance") {
+    ownerRequested = 2;
     bump(state, 2, 3, 1);
     state.flags.plan = "balance";
     pushDecision(state, "Owner meeting", "Split the difference", "Promised a balanced year and left the door open.", 2);
   } else {
+    ownerRequested = -6;
     bump(state, -6, 3, 0);
     state.flags.plan = path === "defy" ? "defy" : path;
     pushDecision(state, "Owner meeting", "Pushed back", "Told the owner the brief was wrong.", -6);
@@ -453,7 +458,7 @@ function doIntro(state: SeasonState, choice: string, text?: string): SeasonState
   state.headlines = makeHeadlines(state, state.meters.owner >= 70 ? "positive" : "negative", {
     beat: `${state.owner.name} leaves the meeting ${state.meters.owner >= 70 ? "nodding" : "already second-guessing"}.`,
     national: `${gmSubject(state.gmName)} just told the building what kind of GM this is going to be.`,
-    analytics: `Owner confidence is ${state.meters.owner}. That is the only poll that can end the job.`,
+    analytics: `Owner confidence ${ownerBefore} → ${state.meters.owner} (${meterEffect(ownerBefore, state.meters.owner, ownerRequested, 96)}). That is the only poll that can end the job.`,
   });
   if (state.phase === "cap") openCap(state);
   return state;
@@ -1584,12 +1589,23 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
   state.headlines = makeHeadlines(state, (choice.owner ?? 0) + (choice.fans ?? 0) >= 0 ? "positive" : "negative", {
     beat: choice.log,
     national: `${gmSubject(state.gmName)} made a call: ${choice.label}.`,
-    analytics: `Owner ${beforeMeters.owner} → ${state.meters.owner} (${formatSigned(choice.owner ?? 0)}), fans ${beforeMeters.fans} → ${state.meters.fans} (${formatSigned(choice.fans ?? 0)}), locker ${beforeMeters.locker} → ${state.meters.locker} (${formatSigned(choice.locker ?? 0)}).`,
+    analytics: `Owner ${beforeMeters.owner} → ${state.meters.owner} (${meterEffect(beforeMeters.owner, state.meters.owner, choice.owner ?? 0, 96)}), fans ${beforeMeters.fans} → ${state.meters.fans} (${meterEffect(beforeMeters.fans, state.meters.fans, choice.fans ?? 0, 100)}), locker ${beforeMeters.locker} → ${state.meters.locker} (${meterEffect(beforeMeters.locker, state.meters.locker, choice.locker ?? 0, 96)}).`,
   });
 }
 
 function formatSigned(value: number): string {
   return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
+}
+
+function meterEffect(before: number, after: number, requested: number, ceiling: number): string {
+  const applied = after - before;
+  if (applied === requested) return formatSigned(requested);
+  const boundary = requested > 0 && after === ceiling
+    ? `, capped at ${ceiling}`
+    : requested < 0 && after === 0
+      ? ", stopped at 0"
+      : "";
+  return `${formatSigned(applied)} applied; ${formatSigned(requested)} requested${boundary}`;
 }
 
 function heal(state: SeasonState) {
@@ -1676,14 +1692,20 @@ function doPlayWeek(state: SeasonState): SeasonState {
       if (margin <= -14) bump(state, 0, -1, -1);
       state.flags[`owner-week:${state.week}`] = ownerChange.reasons.join(", ");
       state.flags[`owner-week-before:${state.week}`] = ownerBeforeGame;
+      state.flags[`owner-week-requested:${state.week}`] = ownerChange.delta;
     }
   }
   resolveLimitedPlayers(state);
   if (yours) {
     const rng = makeRng(hashSeed(state.seed, "hl", state.week));
     state.headlines = resultHeadlines(state, yours.won, yours.score, yours.opp, rng);
-    const ownerExplanation = String(state.flags[`owner-week:${state.week}`] ?? "result processed");
+    const ownerReasons = String(state.flags[`owner-week:${state.week}`] ?? "result processed");
     const ownerBeforeGame = Number(state.flags[`owner-week-before:${state.week}`] ?? state.meters.owner);
+    const ownerRequested = Number(state.flags[`owner-week-requested:${state.week}`] ?? state.meters.owner - ownerBeforeGame);
+    const ownerApplied = state.meters.owner - ownerBeforeGame;
+    const ownerExplanation = ownerApplied === ownerRequested
+      ? ownerReasons
+      : `${ownerReasons}; ${meterEffect(ownerBeforeGame, state.meters.owner, ownerRequested, 96)}`;
     const analytics = state.headlines.find((headline) => headline.outlet === "analytics");
     if (analytics) analytics.text = `Week ${state.week}: owner confidence ${ownerBeforeGame} → ${state.meters.owner}. ${ownerExplanation}.`;
     state.log.push(`${yours.won ? "Beat" : "Lost to"} ${yours.opp} ${yours.score}.`);
