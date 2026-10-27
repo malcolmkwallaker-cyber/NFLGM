@@ -552,7 +552,11 @@ function Trades({
             Make the call
           </Button>
         </div>
-      ) : null}
+      ) : season.shop ? null : (
+        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
+          You used this offseason&apos;s one shop request. Incoming calls remain available, and the shop control resets next season.
+        </p>
+      )}
       <Button className="!h-12 !px-4" data-testid="choice-trade-done" onClick={() => dispatch({ type: "trade-done" })}>
         Close the phones and go to the draft
       </Button>

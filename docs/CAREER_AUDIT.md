@@ -1,5 +1,21 @@
 # NFLGM career-mode audit
 
+## 2026-10-27 Daily #230 / Historical / Turnaround report disposition
+
+Source: Google Doc `1ffEyTnY26eGKR97c1CxOAEO8Y-55qEAkgzSBoBJKVnI` and matching Slack report posted 2026-10-27. These are duplicate copies of one report; there were no Drive comments or Slack replies. The report identifies footer build `4cf6cba` and describes scripted Daily #230, a full 2013 Seattle Historical season, and 2011 Philadelphia Turnaround through Week 6 with seed `1936146732`. It does not include a save fixture or screenshots. Findings were reproduced against exact source `4cf6cba4e67ba035fe42d881a8a1784ec4c976fc` and treated as leads.
+
+| Finding | Disposition |
+| --- | --- |
+| A deadline offer can be below fair value while a youth-priority owner gains four points | The separate calculations were intentional, but the compact action button did not state why the owner approved a weak return. The decision now repeats the owner's stated build-young reason beside the exact meter effect and uses the same Good/Fair/Poor trade-chart label shown elsewhere. The owner effect was not changed. |
+| Nine incoming offers were Poor, including a first-round pick for Golden Tate | Confirmed systemic calibration defect in Historical and Turnaround modes. Aggregate-only opponent rosters often cannot include a player, while offer construction targeted only 20–35% of the outgoing player's modeled value. In 1,050 deterministic pre-fix offers, 1,022 were Poor, 25 Fair, and 3 Good. Offer construction, shopping, and grading now share one age-, position-, contract-, player-, and pick-sensitive value chart. A post-fix 420-offer sample produced 216 Poor, 178 Fair, and 26 Good offers across all 14 historical scenarios. A first-round pick for Golden Tate is Fair; the same pick for Bobby Wagner remains Poor, so a first-round label alone does not guarantee value. |
+| The player-shopping control disappears after one use | Confirmed presentation gap, not a repeat-action defect. Shopping remains deliberately limited to one request per offseason, but after that request is resolved the screen now says the request was used, incoming calls remain available, and the control resets next season. Save/reload preserves the used state. |
+| Weekly owner confidence fell without a visible calculation | The weekly engine already recorded result, margin, quarterback, and quarterly unused-cap components, but showed only the final value. Weekly analytics and the ledger now display the exact before-and-after confidence values followed by the existing itemized reasons. The reported Philadelphia seed is regression coverage; no meter values were rebalanced from the anecdote. |
+| Daily result text briefly remained after navigation to Historical | Not reproduced as durable route state. Daily result state is page-local and the destination page unmounts it; no stale text remained after navigation settled. No speculative state reset was added for a transient frame described without a screenshot. |
+| Seattle went 16–0 with a large point differential before losing the conference game | One plausible upset is not evidence of a deterministic defect. No difficulty, score, playoff, or grade rebalance was made from a single run. |
+| Restore Pro | Excluded. Public free testing remains intentional and billing is outside this report's authorized scope. |
+
+The report says prior career handoff, year-end, firing, postseason, and generated-name fixes were not retested. This pass does not claim new coverage for those observations and does not activate ads, tracking, payments, cloud saves, or a backend.
+
 ## 2026-10-26 Career / Daily #229 / quick Season report disposition
 
 Source: Google Doc `1IEqCrNsR09XQc0IL9vyKvWPA-5AQ9WdPUXYyZHkMHj0` and matching Slack report posted 2026-10-26. These are duplicate copies of one report. The report identifies footer build `38cc802` and describes scripted DAL 2027–2029, SEA 2030, Daily #229, and a quick KC Season free-agency pass, but supplies no seed or save fixture. Screenshots mentioned by the report were not available in this coding environment. Findings were reproduced against exact source `38cc802bee1b8ace9528708a54de1b80d0eb6ae2` and treated as leads.

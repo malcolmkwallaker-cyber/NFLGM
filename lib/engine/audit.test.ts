@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeValueLabel, yourRoster } from "@/lib/engine/season";
+import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeValueLabel, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -286,6 +286,19 @@ describe("audit regressions", () => {
     state = applyAction(state, { type: "cap", choice: "restructure", playerId: player.id });
     expect(state.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain(`Owner confidence ${before}`);
     expect(state.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain(String(state.meters.owner));
+  });
+
+  it("shows the exact weekly owner-confidence change and its components", () => {
+    let state = advanceTo(createSeason({ teamId: "PHI", gmName: "Weekly Owner Audit", seed: 1936146732 }), "regular");
+    if (state.activeDecision) {
+      state = applyAction(state, { type: "decide", choiceId: state.activeDecision.options[0]?.id ?? "" });
+    }
+    const before = state.meters.owner;
+    state = applyAction(state, { type: "play-week" });
+    const analytics = state.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+    expect(analytics).toContain(`owner confidence ${before} → ${state.meters.owner}`);
+    expect(analytics).toMatch(/win|loss|quarterly unused-cap review|close result|decisive result/);
+    expect(state.log.at(-1)).toContain(`Owner confidence ${before} → ${state.meters.owner}`);
   });
 
   it("asks for explicit acceptance after listening to contract-year trade calls", () => {
@@ -682,6 +695,9 @@ describe("audit regressions", () => {
     expect(tradeValueLabel("bargain")).toBe("Good value for you");
     expect(tradeValueLabel("fair")).toBe("Fair value for you");
     expect(tradeValueLabel("fleece")).toBe("Poor value for you");
+    expect(tradeFairness(92, 100)).toBe("bargain");
+    expect(tradeFairness(55, 100)).toBe("fair");
+    expect(tradeFairness(54, 100)).toBe("fleece");
 
     const draft = advanceTo(createSeason({ teamId: "DAL", gmName: "Draft Name Audit", seed: 2601, mode: "career" }), "draft");
     const names = draft.prospects.map((prospect) => prospect.name);

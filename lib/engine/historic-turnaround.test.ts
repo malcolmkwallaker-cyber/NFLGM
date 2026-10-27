@@ -109,12 +109,49 @@ describe("historic turnaround challenge contract", () => {
     }
     expect(season.phase).toBe("regular");
     expect(season.activeDecision?.id).toBe("deadline");
-    expect(season.activeDecision?.body).toMatch(/near fair value|below fair value/);
+    expect(season.activeDecision?.body).toMatch(/good value|fair value|poor value/);
     expect(season.activeDecision?.options.every((option) => option.detail.includes("Owner"))).toBe(true);
+    const tradeOption = season.activeDecision?.options.find((option) => option.id === "deal");
+    expect(tradeOption?.detail).toMatch(/because the .* brief/);
+    expect(tradeOption?.detail).toMatch(/Trade chart: (Good|Fair|Poor) value for you/);
     const before = season.meters.owner;
     season = applyAction(season, { type: "decide", choiceId: "keep" });
     const analytics = season.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
     expect(analytics).toContain(`Owner ${before} → ${season.meters.owner}`);
+  });
+
+  it("offers historical teams a genuine range of trade values instead of grading every call Poor", () => {
+    const grades = new Set<string>();
+    for (let seed = 1; seed <= 12; seed += 1) {
+      let season = createSeason({ teamId: "SEA", gmName: "Trade Distribution", seed, mode: "historical", historicalId: "2013-seahawks" });
+      for (let guard = 0; guard < 40 && season.phase !== "trade"; guard += 1) {
+        const action = suggestAction(season);
+        if (!action) throw new Error(`No action available in ${season.phase}`);
+        season = applyAction(season, action);
+      }
+      expect(season.phase).toBe("trade");
+      for (const offer of season.tradeOffers) grades.add(offer.fair);
+    }
+    expect(grades.has("fleece")).toBe(true);
+    expect(grades.has("fair") || grades.has("bargain")).toBe(true);
+  });
+
+  it("uses the same trade chart for a player the GM shops", () => {
+    let season = createSeason({ teamId: "SEA", gmName: "Shop Audit", seed: 2013, mode: "historical", historicalId: "2013-seahawks" });
+    for (let guard = 0; guard < 40 && season.phase !== "trade"; guard += 1) {
+      const action = suggestAction(season);
+      if (!action) throw new Error(`No action available in ${season.phase}`);
+      season = applyAction(season, action);
+    }
+    const tate = season.teams.SEA.roster.find((player) => player.name === "Golden Tate");
+    if (!tate) throw new Error("Golden Tate fixture missing");
+    season = applyAction(season, { type: "shop", playerId: tate.id });
+    expect(season.shop?.pickRound).toBe(1);
+    expect(season.shop?.fair).toBe("fair");
+    expect(season.shop?.blurb).toContain("fair value for you");
+    season = applyAction(season, { type: "shop-resolve", accept: false });
+    expect(season.shop).toBeNull();
+    expect(season.shopUsed).toBe(true);
   });
   it("publishes only sourced season records with explicit game targets", () => {
     expect(HISTORIC_TURNAROUNDS).toHaveLength(8);

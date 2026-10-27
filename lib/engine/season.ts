@@ -826,7 +826,7 @@ function makeOffers(state: SeasonState): TradeOffer[] {
     const from = callers[index % Math.max(1, callers.length)] ?? others[0];
     const targetFactor = index === 0 ? 1.08 : index === 1 ? 0.9 : 0.62;
     const outgoingValue = playerTradeValue(player);
-    const pickRound = pickRoundForTradeValue(outgoingValue * (index === 0 ? 0.35 : index === 1 ? 0.28 : 0.2));
+    const pickRound = pickRoundClosestToValue(outgoingValue * (index === 0 ? 0.9 : index === 1 ? 0.65 : 0.4));
     const pickValue = pickTradeValue(pickRound);
     const sourceRoster = state.teams[from.id]?.roster ?? [];
     const sourceQuarterbacks = sourceRoster.filter((candidate) => candidate.pos === "QB").sort((a, b) => b.ovr - a.ovr);
@@ -841,8 +841,7 @@ function makeOffers(state: SeasonState): TradeOffer[] {
       .sort((a, b) => playerTradeValue(b) - playerTradeValue(a));
     const incoming = index === 2 ? null : incomingPool[0] ? { ...incomingPool[0] } : null;
     const returnValue = pickValue + (incoming ? playerTradeValue(incoming) : 0);
-    const ratio = returnValue / Math.max(1, outgoingValue);
-    const fair: TradeOffer["fair"] = ratio >= 1.02 ? "bargain" : ratio >= 0.72 ? "fair" : "fleece";
+    const fair = tradeFairness(returnValue, outgoingValue);
     return {
       id: `offer-${player.id}`,
       fromTeamId: from.id,
@@ -866,6 +865,13 @@ export function tradeValueLabel(fair: TradeOffer["fair"]): string {
   return "Fair value for you";
 }
 
+export function tradeFairness(returnValue: number, outgoingValue: number): TradeOffer["fair"] {
+  const ratio = returnValue / Math.max(1, outgoingValue);
+  if (ratio >= 0.92) return "bargain";
+  if (ratio >= 0.55) return "fair";
+  return "fleece";
+}
+
 const TRADE_POSITION_MULTIPLIER: Record<Pos, number> = {
   QB: 1.65, EDGE: 1.18, WR: 1.08, CB: 1.02, OL: 1, DL: 0.96,
   LB: 0.88, S: 0.84, TE: 0.78, RB: 0.65, K: 0.18,
@@ -884,14 +890,9 @@ export function pickTradeValue(round: number): number {
   return ({ 1: 82, 2: 48, 3: 29, 4: 18, 5: 11, 6: 7, 7: 4 } as Record<number, number>)[round] ?? 0;
 }
 
-function pickRoundForTradeValue(value: number): number {
-  if (value >= 82) return 1;
-  if (value >= 48) return 2;
-  if (value >= 29) return 3;
-  if (value >= 18) return 4;
-  if (value >= 11) return 5;
-  if (value >= 7) return 6;
-  return 7;
+function pickRoundClosestToValue(value: number): number {
+  return [1, 2, 3, 4, 5, 6, 7]
+    .sort((a, b) => Math.abs(pickTradeValue(a) - value) - Math.abs(pickTradeValue(b) - value) || a - b)[0] ?? 7;
 }
 
 function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonState {
@@ -942,8 +943,9 @@ function doShop(state: SeasonState, playerId: string): SeasonState {
   if (!player) throw new Error("Not on the roster");
   const rng = makeRng(hashSeed(state.seed, "shop", playerId));
   const from = state.directory.filter((t) => t.id !== state.teamId)[rng.int(state.directory.length - 1)];
-  const pickRound = pickRoundForTradeValue(playerTradeValue(player) * 0.72);
-  const fair: TradeOffer["fair"] = pickTradeValue(pickRound) >= playerTradeValue(player) * 0.78 ? "fair" : "fleece";
+  const outgoingValue = playerTradeValue(player);
+  const pickRound = pickRoundClosestToValue(outgoingValue * 0.72);
+  const fair = tradeFairness(pickTradeValue(pickRound), outgoingValue);
   state.shop = {
     id: `shop-${player.id}`,
     fromTeamId: from?.id ?? "SF",
@@ -1449,14 +1451,16 @@ function deadlineDecision(state: SeasonState): Decision | null {
   const rng = makeRng(hashSeed(state.seed, "deadline", state.year));
   const from = state.directory.filter((t) => t.id !== state.teamId)[rng.int(10)];
   const round = player.ovr >= 84 ? 2 : 3;
+  const valueGrade = tradeFairness(pickTradeValue(round), playerTradeValue(player));
+  const youthBrief = state.owner.priority === "youth";
   return {
     id: "deadline",
     kicker: "Trade deadline",
     title: `${from?.abbr ?? "A rival"} calls about ${player.name}`,
-    body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. The game's age, position, contract, and pick-value model rates this return ${pickTradeValue(round) >= playerTradeValue(player) * 0.78 ? "near fair value" : "below fair value"}. The owner's reaction below reflects the ${priorityLabel(state.owner.priority).toLowerCase()} brief, which is separate from the trade chart. After today the phones are props.`,
+    body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. The trade chart rates this ${tradeValueLabel(valueGrade).toLowerCase()}. The owner's reaction below reflects the ${priorityLabel(state.owner.priority).toLowerCase()} brief, which is separate from the trade chart. After today the phones are props.`,
     options: [
       { id: "keep", label: `Keep ${player.name}`, detail: "You are trying to win the games on the schedule. Owner +1, fans +2, locker +2.", owner: 1, fans: 2, locker: 2, log: `Kept ${player.name} through the deadline.`, swing: 2 },
-      { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: `Take the pick and the cap. Owner ${state.owner.priority === "youth" ? "+4" : "−2"}, fans −3, locker −2.`, owner: state.owner.priority === "youth" ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
+      { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: `Take the pick and the cap. Owner ${youthBrief ? "+4 because the brief prioritizes building young" : `−2 because the ${priorityLabel(state.owner.priority).toLowerCase()} brief does not reward selling low`}; fans −3, locker −2. Trade chart: ${tradeValueLabel(valueGrade)}.`, owner: youthBrief ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
     ],
   };
 }
@@ -1666,10 +1670,12 @@ function doPlayWeek(state: SeasonState): SeasonState {
       };
       const margin = yoursScore - oppScore;
       const ownerChange = ownerGameChange(state, won, margin);
+      const ownerBeforeGame = state.meters.owner;
       bump(state, ownerChange.delta, won ? 2 : -2, won ? 1 : -1);
       if (margin >= 14) bump(state, 0, 1, 1);
       if (margin <= -14) bump(state, 0, -1, -1);
       state.flags[`owner-week:${state.week}`] = ownerChange.reasons.join(", ");
+      state.flags[`owner-week-before:${state.week}`] = ownerBeforeGame;
     }
   }
   resolveLimitedPlayers(state);
@@ -1677,10 +1683,11 @@ function doPlayWeek(state: SeasonState): SeasonState {
     const rng = makeRng(hashSeed(state.seed, "hl", state.week));
     state.headlines = resultHeadlines(state, yours.won, yours.score, yours.opp, rng);
     const ownerExplanation = String(state.flags[`owner-week:${state.week}`] ?? "result processed");
+    const ownerBeforeGame = Number(state.flags[`owner-week-before:${state.week}`] ?? state.meters.owner);
     const analytics = state.headlines.find((headline) => headline.outlet === "analytics");
-    if (analytics) analytics.text = `Week ${state.week}: owner confidence ${state.meters.owner}. ${ownerExplanation}.`;
+    if (analytics) analytics.text = `Week ${state.week}: owner confidence ${ownerBeforeGame} → ${state.meters.owner}. ${ownerExplanation}.`;
     state.log.push(`${yours.won ? "Beat" : "Lost to"} ${yours.opp} ${yours.score}.`);
-    state.log.push(`Owner confidence ${state.meters.owner}: ${ownerExplanation}.`);
+    state.log.push(`Owner confidence ${ownerBeforeGame} → ${state.meters.owner}: ${ownerExplanation}.`);
   }
   if (state.meters.owner <= FIRING_THRESHOLD) return state;
   if (state.week >= state.seasonLength) return startPlayoffs(state);
