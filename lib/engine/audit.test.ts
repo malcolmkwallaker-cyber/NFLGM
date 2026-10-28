@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advancedLines, applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
+import { advancedLines, applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, rosterForDisplay, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -977,6 +977,15 @@ describe("audit regressions", () => {
     expect(draftedBeforeCamp.ovr).toBe(prospect.trueOvr);
     expect(visiblePlayerOverall(draft, draftedBeforeCamp)).toBe(prospect.perceived);
     expect(advancedLines(draft).rosterValue).toBe(yourRoster(draft).reduce((sum, player) => sum + visiblePlayerOverall(draft, player), 0));
+
+    const orderingFixture = structuredClone(draft);
+    const hiddenRookie = yourRoster(orderingFixture).find((player) => player.id === `draft-${prospect.id}`);
+    if (!hiddenRookie) throw new Error("Drafted ordering fixture missing");
+    hiddenRookie.ovr = 82;
+    hiddenRookie.perceived = 79;
+    orderingFixture.teams[orderingFixture.teamId].roster.push({ id: "disclosed-80", name: "Disclosed Veteran", pos: "WR", ovr: 80, age: 27, cap: 8, years: 2, potential: 80, real: false });
+    const displayed = rosterForDisplay(orderingFixture);
+    expect(displayed.findIndex((player) => player.id === "disclosed-80")).toBeLessThan(displayed.findIndex((player) => player.id === hiddenRookie.id));
 
     const camp = advanceTo(draft, "camp");
     const draftedAtCamp = yourRoster(camp).find((player) => player.id === `draft-${prospect.id}`);

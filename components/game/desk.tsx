@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, rosterForDisplay, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -84,7 +84,7 @@ export function Desk() {
   const team = teamById(live.teamId, live.directory);
   const record = teamRecord(season, season.teamId);
   const space = capSpace(season);
-  const roster = yourRoster(season).slice().sort((a, b) => b.ovr - a.ovr);
+  const roster = rosterForDisplay(season);
   const role = ROLES[season.staffStep] ?? "hc";
   const matchup = weekMatchup(season);
   const remaining = roster.length - (season.phase === "camp" ? cutIds.length : 0);

@@ -88,6 +88,10 @@ export function visiblePlayerOverall(state: SeasonState, player: Player): number
   return player.ovr;
 }
 
+export function rosterForDisplay(state: SeasonState): Player[] {
+  return yourRoster(state).slice().sort((a, b) => visiblePlayerOverall(state, b) - visiblePlayerOverall(state, a));
+}
+
 function persistActiveCapLiabilities(state: SeasonState): void {
   state.teamCapLiabilities ??= {};
   state.teamCapLiabilities[state.teamId] = {
