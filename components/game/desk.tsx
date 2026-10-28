@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -217,7 +217,7 @@ export function Desk() {
                     : ""}
                 </span>
                 <span className="text-muted-foreground">
-                  {player.ovr} · {money(player.cap)} · {formatContractYears(player.years)}
+                  {visiblePlayerOverall(season, player)} · {money(player.cap)} · {formatContractYears(player.years)}
                 </span>
               </li>
             ))}

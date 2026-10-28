@@ -81,6 +81,13 @@ export function yourRoster(state: SeasonState): Player[] {
   return state.teams[state.teamId]?.roster ?? [];
 }
 
+export function visiblePlayerOverall(state: SeasonState, player: Player): number {
+  if (state.phase === "draft" && player.drafted && typeof player.perceived === "number" && player.perceived > 0) {
+    return player.perceived;
+  }
+  return player.ovr;
+}
+
 function persistActiveCapLiabilities(state: SeasonState): void {
   state.teamCapLiabilities ??= {};
   state.teamCapLiabilities[state.teamId] = {
@@ -2446,7 +2453,7 @@ export function advancedLines(state: SeasonState) {
         : games * (1 / (1 + Math.pow(record.pa / Math.max(1, record.pf), 2.37)));
   const roster = yourRoster(state);
   const byPos = new Map<string, number>();
-  for (const player of roster) byPos.set(player.pos, (byPos.get(player.pos) ?? 0) + player.ovr);
+  for (const player of roster) byPos.set(player.pos, (byPos.get(player.pos) ?? 0) + visiblePlayerOverall(state, player));
   return {
     pythWins: Math.round(pyth * 10) / 10,
     diff: record.pf - record.pa,
@@ -2454,7 +2461,7 @@ export function advancedLines(state: SeasonState) {
     cap: capSpace(state),
     dead: state.deadMoney,
     health: capHealth(state),
-    rosterValue: roster.reduce((sum, p) => sum + p.ovr, 0),
+    rosterValue: roster.reduce((sum, player) => sum + visiblePlayerOverall(state, player), 0),
     top: roster.slice().sort((a, b) => b.cap - a.cap).slice(0, 5),
     byPos: [...byPos.entries()],
   };

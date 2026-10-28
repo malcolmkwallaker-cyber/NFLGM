@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, yourRoster } from "@/lib/engine/season";
+import { advancedLines, applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -963,13 +963,24 @@ describe("audit regressions", () => {
     expect(new Set(draft.prospects.map((prospect) => prospect.name)).size).toBe(draft.prospects.length);
 
     if (draft.pendingDraftTrade) draft = applyAction(draft, { type: "draft-trade", accept: false });
-    const action = suggestAction(draft);
-    if (!action || action.type !== "draft") throw new Error("User draft pick fixture missing");
-    draft = applyAction(draft, action);
+    const prospect = draft.prospects.find((candidate) => candidate.perceived > 0 && candidate.perceived !== candidate.trueOvr && !draft.draftPicks.some((pick) => pick.prospectId === candidate.id));
+    if (!prospect) throw new Error("Draft rating-gap fixture missing");
+    draft = applyAction(draft, { type: "draft", prospectId: prospect.id });
     const latestLog = draft.log.at(-1) ?? "";
     const analytics = draft.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
     expect(latestLog).toContain("full grade reveals at camp");
     expect(latestLog).not.toMatch(/truth|player is \d+/i);
     expect(analytics).not.toContain("truth");
+
+    const draftedBeforeCamp = yourRoster(draft).find((player) => player.id === `draft-${prospect.id}`);
+    if (!draftedBeforeCamp) throw new Error("Drafted player missing before camp");
+    expect(draftedBeforeCamp.ovr).toBe(prospect.trueOvr);
+    expect(visiblePlayerOverall(draft, draftedBeforeCamp)).toBe(prospect.perceived);
+    expect(advancedLines(draft).rosterValue).toBe(yourRoster(draft).reduce((sum, player) => sum + visiblePlayerOverall(draft, player), 0));
+
+    const camp = advanceTo(draft, "camp");
+    const draftedAtCamp = yourRoster(camp).find((player) => player.id === `draft-${prospect.id}`);
+    if (!draftedAtCamp) throw new Error("Drafted player missing at camp");
+    expect(visiblePlayerOverall(camp, draftedAtCamp)).toBe(prospect.trueOvr);
   });
 });

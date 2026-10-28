@@ -6,7 +6,7 @@ import { useGame } from "@/components/profile";
 import { GRADE_EMOJI } from "@/lib/engine/daily";
 import { marketAsk, salaryScale } from "@/lib/engine/cap";
 import { playerStatsRows } from "@/lib/engine/player-stats";
-import { advancedLines, standings, yourRoster } from "@/lib/engine/season";
+import { advancedLines, standings, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { formatContractYears, formatMoney } from "@/lib/format";
 import { hasFullAccess } from "@/lib/access";
@@ -61,7 +61,7 @@ function SeasonOverview({ season, lines }: { season: SeasonState; lines: ReturnT
 function PlayerStatsTable({ season, position, setPosition, sort, setSort }: { season: SeasonState; position: "ALL" | Pos; setPosition: (position: "ALL" | Pos) => void; sort: SortKey; setSort: (sort: SortKey) => void }) {
   const rows = useMemo(() => playerStatsRows(season)
     .filter(({ player }) => position === "ALL" || player.pos === position)
-    .sort((a, b) => sort === "name" ? a.player.name.localeCompare(b.player.name) : sort === "overall" ? b.player.ovr - a.player.ovr : sort === "yards" ? totalYards(b.stats) - totalYards(a.stats) : sort === "touchdowns" ? totalTouchdowns(b.stats) - totalTouchdowns(a.stats) : b.stats.tackles - a.stats.tackles), [position, season, sort]);
+    .sort((a, b) => sort === "name" ? a.player.name.localeCompare(b.player.name) : sort === "overall" ? visiblePlayerOverall(season, b.player) - visiblePlayerOverall(season, a.player) : sort === "yards" ? totalYards(b.stats) - totalYards(a.stats) : sort === "touchdowns" ? totalTouchdowns(b.stats) - totalTouchdowns(a.stats) : b.stats.tackles - a.stats.tackles), [position, season, sort]);
   const games = season.results.filter((result) => result.home === season.teamId || result.away === season.teamId).length;
   const legacyGap = games > 0 && Object.keys(season.playerStats ?? {}).length === 0;
   return <section className="rounded-2xl border border-white/10 bg-card p-4">
@@ -73,7 +73,7 @@ function PlayerStatsTable({ season, position, setPosition, sort, setSort }: { se
       </div>
     </div>
     {legacyGap ? <p className="mt-4 rounded-lg border border-amber-300/30 bg-amber-300/5 p-3 text-sm text-muted-foreground">This save began before player-stat tracking. Past games remain intact, but their player lines are unavailable; tracking begins with the next game.</p> : null}
-    <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-muted-foreground"><tr><th className="p-2">Player</th><th className="p-2">G</th><th className="p-2">Pass</th><th className="p-2">Rush</th><th className="p-2">Receiving</th><th className="p-2">TD</th><th className="p-2">Defense</th></tr></thead><tbody>{rows.map(({ player, stats }) => <tr key={player.id} className="border-t border-white/10"><td className="p-2 font-medium">{player.name}<span className="ml-2 text-xs text-muted-foreground">{player.pos} · {player.ovr}</span></td><td className="p-2">{stats.games}</td><td className="p-2">{stats.completions}/{stats.passAttempts} · {stats.passYards} yd</td><td className="p-2">{stats.rushAttempts} · {stats.rushYards} yd</td><td className="p-2">{stats.receptions}/{stats.targets} · {stats.receivingYards} yd</td><td className="p-2">{totalTouchdowns(stats)}</td><td className="p-2">{stats.tackles} tkl · {stats.sacks} sk · {stats.defensiveInterceptions} int</td></tr>)}</tbody></table></div>
+    <div className="mt-4 overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="text-xs uppercase tracking-wider text-muted-foreground"><tr><th className="p-2">Player</th><th className="p-2">G</th><th className="p-2">Pass</th><th className="p-2">Rush</th><th className="p-2">Receiving</th><th className="p-2">TD</th><th className="p-2">Defense</th></tr></thead><tbody>{rows.map(({ player, stats }) => <tr key={player.id} className="border-t border-white/10"><td className="p-2 font-medium">{player.name}<span className="ml-2 text-xs text-muted-foreground">{player.pos} · {visiblePlayerOverall(season, player)}</span></td><td className="p-2">{stats.games}</td><td className="p-2">{stats.completions}/{stats.passAttempts} · {stats.passYards} yd</td><td className="p-2">{stats.rushAttempts} · {stats.rushYards} yd</td><td className="p-2">{stats.receptions}/{stats.targets} · {stats.receivingYards} yd</td><td className="p-2">{totalTouchdowns(stats)}</td><td className="p-2">{stats.tackles} tkl · {stats.sacks} sk · {stats.defensiveInterceptions} int</td></tr>)}</tbody></table></div>
   </section>;
 }
 
