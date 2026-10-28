@@ -12,13 +12,23 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
 import { titledGmName } from "@/lib/gm-name";
 
 const ROLES: StaffRole[] = ["hc", "oc", "dc", "scout"];
+
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
+}
+
+function meterPreview(effect: { requested: number; applied: number }): string {
+  return effect.requested === effect.applied
+    ? signed(effect.applied)
+    : `${signed(effect.applied)} applied (${signed(effect.requested)} requested; meter limit)`;
+}
 
 const PHASE_TITLE: Record<Phase, string> = {
   intro: "Owner meeting",
@@ -330,7 +340,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
   return (
     <section className="space-y-3">
       <div className="flex items-end justify-between gap-3">
-        <h2 className="font-display text-2xl tracking-wide">Get under the number</h2>
+        <h2 className="font-display text-2xl tracking-wide">{space < 0 ? "Get under the number" : "Put your cap room to work"}</h2>
         <p className={space < 0 ? "text-red-300" : "text-emerald-300"}>
           {money(space)} {label}
         </p>
@@ -394,7 +404,9 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
   return (
     <section className="space-y-3">
       <div className="flex items-end justify-between">
-        <h2 className="font-display text-2xl tracking-wide">Wave {season.faWave} of 3</h2>
+        <h2 className="font-display text-2xl tracking-wide">
+          {season.faWave === 1 ? "Retention stage" : `Outside market · Wave ${season.faWave - 1} of 2`}
+        </h2>
         <p className="text-sm text-muted-foreground">{money(space)} left</p>
       </div>
       <p className="text-sm text-muted-foreground">
@@ -491,7 +503,9 @@ function Trades({
   return (
     <section className="space-y-3">
       <h2 className="font-display text-2xl tracking-wide">Three calls, and one name you can shop</h2>
-      {season.tradeOffers.map((offer) => (
+      {season.tradeOffers.map((offer) => {
+        const impact = tradeImpactPreview(season, offer);
+        return (
         <article key={offer.id} className="rounded-xl border border-white/10 bg-card p-4">
           <div className="flex items-center justify-between gap-2">
             <p className="font-medium">{offer.fromTeamId} called about {offer.wantName}</p>
@@ -502,9 +516,12 @@ function Trades({
           <p className="mt-1 text-sm text-muted-foreground">{offer.blurb}</p>
           <dl className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
             <div><dt className="inline text-foreground">You send:</dt> <dd className="inline">{offer.wantName}</dd></div>
-            <div><dt className="inline text-foreground">You receive:</dt> <dd className="inline">{offer.incoming ? `${offer.incoming.name} (${offer.incoming.pos} ${offer.incoming.ovr})` : "no player"}{offer.pickRound ? ` · ${offer.pickYear} round ${offer.pickRound}` : ""}</dd></div>
+            <div><dt className="inline text-foreground">You receive:</dt> <dd className="inline">{offer.incoming ? `${tradeIncomingName(offer.incoming)} (${offer.incoming.ovr} ovr)` : "no player"}{offer.pickRound ? ` · ${offer.pickYear} round ${offer.pickRound}` : ""}</dd></div>
           </dl>
           {!offer.incoming ? <p className="mt-2 text-xs text-amber-200">No player comes back. This return is draft compensation only.</p> : null}
+          <p className="mt-2 text-xs text-muted-foreground">
+            If accepted: owner {meterPreview(impact.owner)}, fans {meterPreview(impact.fans)}, locker {meterPreview(impact.locker)}. Cap room {impact.capRoomChange >= 0 ? "increases" : "decreases"} by {money(Math.abs(impact.capRoomChange))}.
+          </p>
           <div className="mt-3 flex gap-2">
             <Button data-testid={`choice-accept-${offer.id}`} onClick={() => dispatch({ type: "trade", offerId: offer.id, accept: true })}>
               Accept
@@ -514,7 +531,8 @@ function Trades({
             </Button>
           </div>
         </article>
-      ))}
+        );
+      })}
       {season.shop ? (
         <article className="rounded-xl border border-primary/40 bg-card p-4">
           <div className="flex items-center justify-between gap-2">

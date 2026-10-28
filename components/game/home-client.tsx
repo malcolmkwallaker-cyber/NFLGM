@@ -108,7 +108,7 @@ export function HomeClient({
           {DAILY_CHALLENGES.filter((challenge) => challenge.fictional).length} clearly labeled original fictional scenarios rotate daily. The Daily Challenge stays free and available.
         </p>
         <Button className="mt-4 !h-11" nativeButton={false} render={<Link href="/daily" />}>
-          Make the call
+          {dailyComplete ? "View today’s result" : "Make the call"}
         </Button>
       </section>
 

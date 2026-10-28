@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ProGate } from "@/components/game/pro-gate";
 import { TeamPicker } from "@/components/game/team-picker";
 import { useGame } from "@/components/profile";
@@ -10,6 +11,7 @@ import { formatPlayoffRound } from "@/lib/format";
 export default function CareerPage() {
   const { profile, ready, startCareer, resumeSave } = useGame();
   const career = profile.career;
+  const [replacingCareer, setReplacingCareer] = useState(false);
 
   return (
     <ProGate
@@ -26,9 +28,22 @@ export default function CareerPage() {
             </p>
           </header>
           {career.status === "active" ? (
-            <Button className="!h-12 !px-4" onClick={() => resumeSave("career")}>
-              {career.season.phase === "recap" ? "Read the year, then continue" : "Back to this career"}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button className="!h-12 !px-4" onClick={() => resumeSave("career")}>
+                {career.season.phase === "recap" ? "Read the year, then continue" : "Back to this career"}
+              </Button>
+              <Button variant="outline" className="!h-12 !px-4" data-testid="career-replace" onClick={() => setReplacingCareer((shown) => !shown)}>
+                {replacingCareer ? "Keep this career" : "Start a new career"}
+              </Button>
+            </div>
+          ) : null}
+          {career.status === "active" && replacingCareer ? (
+            <TeamPicker
+              title="Replace this Career file"
+              body="Choose a team, then confirm the replacement. Your Daily streak and saved Single Season stay untouched."
+              action="Replace Career and start"
+              onStart={startCareer}
+            />
           ) : null}
           <ul className="space-y-2">
             {career.history.map((row) => (

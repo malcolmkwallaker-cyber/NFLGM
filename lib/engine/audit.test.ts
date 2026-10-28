@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeValueLabel, yourRoster } from "@/lib/engine/season";
-import type { Phase, SeasonState } from "@/lib/types";
+import { applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, yourRoster } from "@/lib/engine/season";
+import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
 import { gmSubject, normalizeGmName, titledGmName } from "@/lib/gm-name";
@@ -904,5 +904,72 @@ describe("audit regressions", () => {
     expect(new Set(champions).size).toBeGreaterThanOrEqual(6);
     expect(losingScores.filter((score) => score <= 10).length).toBeLessThanOrEqual(6);
     expect(losingScores.reduce((sum, score) => sum + score, 0) / losingScores.length).toBeGreaterThan(14);
+  });
+
+  it("stops a player-initiated fast-forward when a new desk decision appears and preserves it on reload", () => {
+    let state = advanceTo(createSeason({ teamId: "SEA", gmName: "Fast Forward Audit", seed: 1028, mode: "career" }), "regular");
+    expect(state.activeDecision).toBeTruthy();
+    state = applyAction(state, { type: "decide", choiceId: state.activeDecision?.options[0]?.id ?? "balanced" });
+    state = applyAction(state, { type: "play-week" });
+    expect(state.week).toBe(2);
+    expect(state.activeDecision).toBeNull();
+
+    const stopped = applyAction(state, { type: "sim", until: "playoffs" });
+    expect(stopped.phase).toBe("regular");
+    expect(stopped.week).toBe(4);
+    expect(stopped.activeDecision?.id).toBe("injury");
+    expect(stopped.results.filter((result) => result.round === "regular")).toHaveLength(3 * 16);
+
+    const reloaded = migrateProfile({ ...freshProfile(), active: "season", season: JSON.parse(JSON.stringify(stopped)) });
+    expect(reloaded.season?.week).toBe(4);
+    expect(reloaded.season?.activeDecision?.id).toBe("injury");
+    expect(simulateUntil(state, "playoffs").phase).not.toBe("regular");
+  });
+
+  it("previews exact clamped trade-meter and cap effects and hides replacement identifiers", () => {
+    const state = createSeason({ teamId: "SEA", gmName: "Trade Preview Audit", seed: 2028, mode: "career" });
+    const sent = yourRoster(state).find((player) => player.ovr < 85 && player.pos !== "K");
+    if (!sent) throw new Error("Trade preview fixture missing");
+    state.meters.owner = 96;
+    const incoming = { ...sent, id: "replacement-CIN-2028-21", name: "CIN Replacement RB 21", pos: "RB" as const, cap: sent.cap + 6.6, origin: "replacement" };
+    const offer: TradeOffer = {
+      id: "preview-offer",
+      fromTeamId: "CIN",
+      wantId: sent.id,
+      wantName: sent.name,
+      incoming,
+      pickRound: 2,
+      pickYear: state.year + 1,
+      blurb: "Preview fixture",
+      fair: "fair",
+    };
+    const impact = tradeImpactPreview(state, offer);
+    expect(impact.owner).toEqual({ requested: 1, applied: 0 });
+    expect(impact.fans).toEqual({ requested: 0, applied: 0 });
+    expect(impact.locker).toEqual({ requested: 0, applied: 0 });
+    expect(impact.capRoomChange).toBe(-6.6);
+    expect(tradeIncomingName(incoming)).toBe("depth RB");
+  });
+
+  it("keeps new draft names distinct from the current roster and hides true grades until camp", () => {
+    const baseline = advanceTo(createSeason({ teamId: "SEA", gmName: "Draft Collision Audit", seed: 3028, mode: "career" }), "draft");
+    const collision = baseline.prospects[0]?.name;
+    if (!collision) throw new Error("Draft name fixture missing");
+
+    const withCollision = createSeason({ teamId: "SEA", gmName: "Draft Collision Audit", seed: 3028, mode: "career" });
+    withCollision.teams.SEA.roster.push({ id: "name-collision", name: collision, pos: "CB", ovr: 70, age: 24, cap: 1, years: 2, potential: 74, real: false });
+    let draft = advanceTo(withCollision, "draft");
+    expect(draft.prospects.some((prospect) => prospect.name === collision)).toBe(false);
+    expect(new Set(draft.prospects.map((prospect) => prospect.name)).size).toBe(draft.prospects.length);
+
+    if (draft.pendingDraftTrade) draft = applyAction(draft, { type: "draft-trade", accept: false });
+    const action = suggestAction(draft);
+    if (!action || action.type !== "draft") throw new Error("User draft pick fixture missing");
+    draft = applyAction(draft, action);
+    const latestLog = draft.log.at(-1) ?? "";
+    const analytics = draft.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+    expect(latestLog).toContain("full grade reveals at camp");
+    expect(latestLog).not.toMatch(/truth|player is \d+/i);
+    expect(analytics).not.toContain("truth");
   });
 });

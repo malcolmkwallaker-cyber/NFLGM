@@ -407,16 +407,16 @@ export function applyAction(state: SeasonState, action: Action): SeasonState {
     case "playoff":
       return doPlayoff(next);
     case "sim":
-      return simulateUntil(next, action.until);
+      return simulateUntil(next, action.until, { stopAtDecision: true });
     default:
       return next;
   }
 }
 
 function bump(state: SeasonState, owner = 0, fans = 0, locker = 0) {
-  state.meters.owner = clamp(Math.round(state.meters.owner + owner), 0, 96);
-  state.meters.fans = clamp(Math.round(state.meters.fans + fans), 0, 100);
-  state.meters.locker = clamp(Math.round(state.meters.locker + locker), 0, 96);
+  if (owner !== 0) state.meters.owner = clamp(Math.round(state.meters.owner + owner), 0, 96);
+  if (fans !== 0) state.meters.fans = clamp(Math.round(state.meters.fans + fans), 0, 100);
+  if (locker !== 0) state.meters.locker = clamp(Math.round(state.meters.locker + locker), 0, 96);
   if (state.meters.owner <= FIRING_THRESHOLD && state.phase !== "fired" && state.phase !== "recap") {
     fire(state, "Owner confidence collapsed. The chair is already someone else's problem.");
   }
@@ -877,6 +877,29 @@ export function tradeFairness(returnValue: number, outgoingValue: number): Trade
   return "fleece";
 }
 
+export function tradeIncomingName(player: Player): string {
+  return player.origin === "replacement" || /\bReplacement\b/i.test(player.name)
+    ? `depth ${player.pos}`
+    : `${player.name} · ${player.pos}`;
+}
+
+export function tradeImpactPreview(state: SeasonState, offer: TradeOffer) {
+  const sent = yourRoster(state).find((player) => player.id === offer.wantId);
+  const ownerRequested = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
+  const fansRequested = offer.fair === "fleece" ? -3 : 0;
+  const lockerRequested = sent && sent.ovr >= 85 ? -2 : 0;
+  const effect = (before: number, requested: number, ceiling: number) => ({
+    requested,
+    applied: requested === 0 ? 0 : clamp(Math.round(before + requested), 0, ceiling) - before,
+  });
+  return {
+    owner: effect(state.meters.owner, ownerRequested, 96),
+    fans: effect(state.meters.fans, fansRequested, 100),
+    locker: effect(state.meters.locker, lockerRequested, 96),
+    capRoomChange: Math.round(((sent?.cap ?? 0) - (offer.incoming?.cap ?? 0)) * 10) / 10,
+  };
+}
+
 const TRADE_POSITION_MULTIPLIER: Record<Pos, number> = {
   QB: 1.65, EDGE: 1.18, WR: 1.08, CB: 1.02, OL: 1, DL: 0.96,
   LB: 0.88, S: 0.84, TE: 0.78, RB: 0.65, K: 0.18,
@@ -932,7 +955,7 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
   }
   const swing = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
   bump(state, swing, offer.fair === "fleece" ? -3 : 0, sent.ovr >= 85 ? -2 : 0);
-  const got = offer.incoming ? offer.incoming.name : offer.pickRound ? `a ${offer.pickYear} round ${offer.pickRound}` : "nothing you wanted";
+  const got = offer.incoming ? tradeIncomingName(offer.incoming) : offer.pickRound ? `a ${offer.pickYear} round ${offer.pickRound}` : "nothing you wanted";
   pushDecision(state, "Trade", `Moved ${sent.name}`, `Traded ${sent.name} to ${teamById(offer.fromTeamId, state.directory).abbr} for ${got}.`, swing);
   state.headlines = makeHeadlines(state, swing >= 0 ? "positive" : "negative", {
     beat: `${sent.name} is gone. Coming back: ${got}.`,
@@ -999,6 +1022,7 @@ function makeProspects(state: SeasonState): Prospect[] {
   const prospects: Prospect[] = [];
   const nameCount = FIRSTS.length * LASTS.length;
   const nameOffset = makeRng(hashSeed(state.seed, "draft-names", state.year)).int(nameCount);
+  const usedNames = new Set(yourRoster(state).map((player) => player.name.toLocaleLowerCase()));
   for (let i = 0; i < 110; i++) {
     const pos = POS_CYCLE[i % POS_CYCLE.length] ?? "WR";
     let trueOvr = 64 + rng.int(8);
@@ -1007,8 +1031,13 @@ function makeProspects(state: SeasonState): Prospect[] {
     else if (i < 70) trueOvr = 68 + rng.int(8);
     const noise = rng.int(error * 2 + 1) - error;
     const perceived = clamp(trueOvr + noise, 58, 99);
-    const nameIndex = (nameOffset + i * 37) % nameCount;
-    const name = `${FIRSTS[Math.floor(nameIndex / LASTS.length)]} ${LASTS[nameIndex % LASTS.length]}`;
+    let nameIndex = (nameOffset + i * 37) % nameCount;
+    let name = `${FIRSTS[Math.floor(nameIndex / LASTS.length)]} ${LASTS[nameIndex % LASTS.length]}`;
+    for (let attempt = 0; usedNames.has(name.toLocaleLowerCase()) && attempt < nameCount; attempt += 1) {
+      nameIndex = (nameIndex + 1) % nameCount;
+      name = `${FIRSTS[Math.floor(nameIndex / LASTS.length)]} ${LASTS[nameIndex % LASTS.length]}`;
+    }
+    usedNames.add(name.toLocaleLowerCase());
     // Keep the legacy draft RNG sequence stable so existing seeds retain ratings, ages, and colleges.
     rng.int(FIRSTS.length);
     rng.int(LASTS.length);
@@ -1190,14 +1219,14 @@ function doDraft(state: SeasonState, prospectId: string): SeasonState {
     state,
     "Draft",
     prospect.name,
-    `Round ${pick.round}: ${prospect.name}, ${prospect.pos}. Scout had ${prospect.perceived}, the player is ${prospect.trueOvr}.`,
+    `Round ${pick.round}: ${prospect.name}, ${prospect.pos}. Scout grade ${prospect.perceived}; the full grade reveals at camp.`,
     gap,
   );
   state.draftCursor += 1;
   state.headlines = makeHeadlines(state, gap >= 0 ? "positive" : "neutral", {
     beat: `${prospect.name} is a ${state.directory.find((t) => t.id === state.teamId)?.name ?? "team"} ${prospect.pos}.`,
     national: gap < -4 ? "The building clapped. The grade may not." : "A clean pick, at least on the card you can see.",
-    analytics: `Scout ${prospect.perceived}, truth ${prospect.trueOvr}. Camp will not keep that quiet.`,
+    analytics: `Scout grade ${prospect.perceived}. The full grade reveals at camp.`,
   });
   advanceCpu(state);
   return state;
@@ -2216,11 +2245,16 @@ function staffScore(member: StaffMember, priority: string): number {
   return score;
 }
 
-export function simulateUntil(state: SeasonState, until: "playoffs" | "recap"): SeasonState {
+export function simulateUntil(
+  state: SeasonState,
+  until: "playoffs" | "recap",
+  options: { stopAtDecision?: boolean } = {},
+): SeasonState {
   let current = state;
   for (let i = 0; i < 300; i++) {
     if (current.phase === "fired" || current.phase === "recap") return current;
     if (until === "playoffs" && current.phase === "playoffs") return current;
+    if (options.stopAtDecision && current.phase === "regular" && (current.activeDecision || current.shop)) return current;
     const action = suggestAction(current);
     if (!action || action.type === "sim") return current;
     current = applyAction(current, action);
@@ -2345,9 +2379,14 @@ export function ensureMinimumRoster(state: SeasonState, teamId: string): Player[
   const add = (pos: Pos) => {
     const index = team.roster.length;
     const ovr = teamId === state.teamId ? 60 : 66;
+    const nameRng = makeRng(hashSeed(state.seed, "replacement-name", teamId, state.year, index));
+    let name = `${FIRSTS[nameRng.int(FIRSTS.length)]} ${LASTS[nameRng.int(LASTS.length)]}`;
+    for (let attempt = 0; team.roster.some((player) => player.name === name) && attempt < FIRSTS.length * LASTS.length; attempt += 1) {
+      name = `${FIRSTS[nameRng.int(FIRSTS.length)]} ${LASTS[nameRng.int(LASTS.length)]}`;
+    }
     const player: Player = {
       id: `replacement-${teamId}-${state.year}-${index}`,
-      name: `${teamById(teamId, state.directory).abbr} Replacement ${pos} ${index + 1}`,
+      name,
       pos,
       ovr,
       age: 24,
