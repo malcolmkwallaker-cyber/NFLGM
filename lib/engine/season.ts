@@ -505,7 +505,7 @@ function doHire(state: SeasonState, id: string): SeasonState {
   if (priority === "stars") owner += member.cost === 3 ? 2 : 0;
   const before = { ...state.meters };
   bump(state, owner, fans, locker);
-  pushDecision(state, `Hire ${role.toUpperCase()}`, member.name, `Hired ${member.name} as ${role.toUpperCase()}.`, owner);
+  pushDecision(state, `Hire ${role.toUpperCase()}`, member.name, `Hired ${member.name} as ${role.toUpperCase()}. ${meterChanges(before, state.meters)}`, owner);
   state.staffStep += 1;
   state.headlines = makeHeadlines(state, owner >= 0 ? "positive" : "negative", {
     beat: `${member.name} gets the ${role === "hc" ? "headset" : "office"}. ${member.blurb}`,
@@ -721,7 +721,7 @@ function doSign(state: SeasonState, playerId: string): SeasonState {
   const lockerChange = deal.age >= 31 ? -1 : 1;
   const before = { ...state.meters };
   bump(state, ownerChange, fanChange, lockerChange);
-  pushDecision(state, "Free agency", `Signed ${deal.name}`, `Signed ${deal.name} for $${ask.toFixed(1)}M.`, deal.ovr >= 85 ? 3 : 1);
+  pushDecision(state, "Free agency", `Signed ${deal.name}`, `Signed ${deal.name} for $${ask.toFixed(1)}M. ${meterChanges(before, state.meters)}`, deal.ovr >= 85 ? 3 : 1);
   if (over) queueRipple(state, 3, payrollRipple());
   state.headlines = makeHeadlines(state, "positive", {
     beat: `${deal.name} is yours. $${ask.toFixed(1)}M a year, ${years} years on the sheet.`,

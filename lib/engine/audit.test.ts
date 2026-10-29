@@ -656,6 +656,7 @@ describe("audit regressions", () => {
     expect(hireAnalytics).toContain(`Owner ${beforeHire.owner} → ${staff.meters.owner}`);
     expect(hireAnalytics).toContain(`Fans ${beforeHire.fans} → ${staff.meters.fans}`);
     expect(hireAnalytics).toContain(`Locker ${beforeHire.locker} → ${staff.meters.locker}`);
+    expect(staff.log.at(-1)).toContain(`Owner ${beforeHire.owner} → ${staff.meters.owner}`);
 
     let market = advanceTo(createSeason({ teamId: "NE", gmName: "Market Audit", seed: 1029 }), "fa");
     market = applyAction(market, { type: "next-wave" });
@@ -668,6 +669,7 @@ describe("audit regressions", () => {
     expect(signingAnalytics).toContain(`Owner ${beforeSigning.owner} → ${market.meters.owner}`);
     expect(signingAnalytics).toContain(`Fans ${beforeSigning.fans} → ${market.meters.fans}`);
     expect(signingAnalytics).toContain(`Locker ${beforeSigning.locker} → ${market.meters.locker}`);
+    expect(market.log.at(-1)).toContain(`Fans ${beforeSigning.fans} → ${market.meters.fans}`);
   });
 
   it("does not claim expiring players were retained when none reached the market", () => {
