@@ -248,6 +248,14 @@ export interface SeasonState {
   faWave: number;
   faBoard: Player[];
   faPool?: Player[];
+  faNegotiation?: {
+    playerId: string;
+    status: "open" | "counter";
+    counterAnnual?: number;
+    counterYears?: number;
+    message?: string;
+  } | null;
+  faNegotiatedIds?: string[];
   walked: string[];
   tradeOffers: TradeOffer[];
   recentTradeTargets?: string[];
@@ -382,6 +390,10 @@ export type Action =
   | { type: "hire"; id: string }
   | { type: "cap"; choice: "restructure" | "cut" | "hold"; playerId?: string }
   | { type: "sign"; playerId: string }
+  | { type: "fa-negotiate"; playerId: string }
+  | { type: "fa-cancel-negotiation" }
+  | { type: "fa-offer"; playerId: string; strategy: "ask" | "security" | "team" }
+  | { type: "fa-counter"; accept: boolean }
   | { type: "tag"; playerId: string }
   | { type: "next-wave" }
   | { type: "trade"; offerId: string; accept: boolean }

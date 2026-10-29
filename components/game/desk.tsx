@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, divisionTable, priorityLabel, rosterForDisplay, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, divisionTable, freeAgentNegotiationPreview, priorityLabel, rosterForDisplay, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -405,6 +405,10 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
 function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
   const { dispatch } = useGame();
   const remainingOwnExpiring = season.faBoard.filter((player) => player.origin === season.teamId).length;
+  const negotiatingPlayer = season.faNegotiation
+    ? season.faBoard.find((player) => player.id === season.faNegotiation?.playerId)
+    : undefined;
+  const negotiationPreview = negotiatingPlayer ? freeAgentNegotiationPreview(season, negotiatingPlayer) : null;
   const bestQuarterbackUnderContract = yourRoster(season)
     .filter((player) => player.pos === "QB" && player.years > 0)
     .sort((a, b) => b.ovr - a.ovr)[0];
@@ -435,16 +439,79 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
             : "you do not have a quarterback under contract."} Re-sign or tag an expiring QB now if the board offers one.
         </p>
       ) : null}
+      {negotiatingPlayer && negotiationPreview && season.faNegotiation ? (
+        <article className="rounded-xl border border-primary/40 bg-card p-4" aria-live="polite" data-testid="fa-negotiation-sheet">
+          <p className="text-xs uppercase tracking-[0.16em] text-primary">Contract talks</p>
+          <h3 className="mt-1 font-display text-xl tracking-wide">{negotiatingPlayer.name} · {negotiatingPlayer.pos}</h3>
+          <p className="mt-2 text-sm text-muted-foreground">{negotiationPreview.demandReason} {negotiationPreview.fitReason}</p>
+          {season.faNegotiation.status === "counter" ? (
+            <>
+              <p className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm">
+                Counter: {money(season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual)} per year for {formatContractYears(season.faNegotiation.counterYears ?? negotiationPreview.askYears)}.
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">{season.faNegotiation.message}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  disabled={season.capMode === "hard" && (season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual) > space + 0.05}
+                  data-testid="choice-fa-counter-accept"
+                  onClick={() => dispatch({ type: "fa-counter", accept: true })}
+                >
+                  Accept counter
+                </Button>
+                <Button variant="outline" data-testid="choice-fa-counter-decline" onClick={() => dispatch({ type: "fa-counter", accept: false })}>
+                  Walk away
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <Button
+                  disabled={season.capMode === "hard" && negotiationPreview.askAnnual > space + 0.05}
+                  data-testid="choice-fa-offer-ask"
+                  onClick={() => dispatch({ type: "fa-offer", playerId: negotiatingPlayer.id, strategy: "ask" })}
+                >
+                  Meet ask · {money(negotiationPreview.askAnnual)} × {negotiationPreview.askYears}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={season.capMode === "hard" && negotiationPreview.securityAnnual > space + 0.05}
+                  data-testid="choice-fa-offer-security"
+                  onClick={() => dispatch({ type: "fa-offer", playerId: negotiatingPlayer.id, strategy: "security" })}
+                >
+                  More security · {money(negotiationPreview.securityAnnual)} × {negotiationPreview.securityYears}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={season.capMode === "hard" && negotiationPreview.teamAnnual > space + 0.05}
+                  data-testid="choice-fa-offer-team"
+                  onClick={() => dispatch({ type: "fa-offer", playerId: negotiatingPlayer.id, strategy: "team" })}
+                >
+                  Team-friendly · {money(negotiationPreview.teamAnnual)} × {negotiationPreview.teamYears}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Total commitment: ask {money(negotiationPreview.askAnnual * negotiationPreview.askYears)} · security {money(negotiationPreview.securityAnnual * negotiationPreview.securityYears)} · team-friendly {money(negotiationPreview.teamAnnual * negotiationPreview.teamYears)}. Only the annual charge counts against each season&apos;s cap.
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">Meeting the ask is guaranteed. A lower offer can be accepted, countered, or end talks. You get one submitted offer per player in this market window.</p>
+              <Button className="mt-3" variant="ghost" data-testid="choice-fa-cancel" onClick={() => dispatch({ type: "fa-cancel-negotiation" })}>
+                Not now
+              </Button>
+            </>
+          )}
+        </article>
+      ) : null}
       {season.faBoard.length === 0 ? (
         <p className="rounded-xl border border-dashed border-white/15 px-4 py-6 text-sm text-muted-foreground">
           {season.faWave === 1 ? "No expiring contracts require a decision. Open the outside market." : "No players remain in this modeled market wave. Move the market along."}
         </p>
       ) : (
         season.faBoard.map((player) => {
-          const affordable = season.capMode !== "hard" || player.cap <= space + 0.05;
           const own = player.origin === season.teamId;
           const tagPrice = Math.round((player.cap / 0.95) * 1.08 * 10) / 10;
           const tagAffordable = season.capMode !== "hard" || tagPrice <= space + 0.05;
+          const talksEnded = (season.faNegotiatedIds ?? []).includes(player.id) && season.faNegotiation?.playerId !== player.id;
+          const negotiationMessage = season.flags[`fa-negotiation:${player.id}`];
           return (
           <div key={player.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-card px-3 py-3">
             <div>
@@ -457,13 +524,18 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 {player.age >= 31 ? " · veteran-adjusted annual ask" : ""}
               </p>
               {own && player.ovr >= 76 ? <p className="mt-1 text-xs text-primary">Core retention candidate</p> : null}
+              {talksEnded ? <p className="mt-1 max-w-xl text-xs text-amber-200">{typeof negotiationMessage === "string" ? negotiationMessage : "This player's camp ended talks for this market window."}</p> : null}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button disabled={!affordable} data-testid={`choice-sign-${player.id}`} onClick={() => dispatch({ type: "sign", playerId: player.id })}>
-                {affordable ? (own ? "Re-sign" : "Sign") : `${own ? "Re-sign" : "Sign"}: ${money(player.cap - space)} over cap`}
+              <Button
+                disabled={Boolean(season.faNegotiation) || talksEnded}
+                data-testid={`choice-negotiate-${player.id}`}
+                onClick={() => dispatch({ type: "fa-negotiate", playerId: player.id })}
+              >
+                {talksEnded ? "Talks ended" : season.faNegotiation?.playerId === player.id ? "Reviewing offers" : "Review offers"}
               </Button>
               {own && !season.franchiseTagUsed ? (
-                <Button variant="outline" disabled={!tagAffordable} data-testid={`choice-tag-${player.id}`} onClick={() => dispatch({ type: "tag", playerId: player.id })}>
+                <Button variant="outline" disabled={!tagAffordable || Boolean(season.faNegotiation)} data-testid={`choice-tag-${player.id}`} onClick={() => dispatch({ type: "tag", playerId: player.id })}>
                   {tagAffordable ? `Tag · ${money(tagPrice)}` : "Tag won’t fit"}
                 </Button>
               ) : null}

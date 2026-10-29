@@ -48,6 +48,8 @@ export function migrateProfile(profile: Profile): Profile {
     season.restructuredIds ??= [];
     season.franchiseTagUsed ??= false;
     season.faPool ??= [];
+    season.faNegotiation ??= null;
+    season.faNegotiatedIds ??= [];
     season.teamCapLiabilities ??= {
       [season.teamId]: { deadMoney: season.deadMoney, futureDead: season.futureDead },
     };

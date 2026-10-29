@@ -5,7 +5,7 @@ import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
 import { gmSubject, normalizeGmName, titledGmName } from "@/lib/gm-name";
-import { capHealth, committedPayroll, marketAgeFactor, marketAsk, salaryScale } from "@/lib/engine/cap";
+import { capHealth, committedPayroll, marketAgeFactor, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { effectiveOvr } from "@/lib/engine/ratings";
 import { resultHeadlines } from "@/lib/engine/headlines";
 import { makeRng } from "@/lib/engine/rng";
@@ -486,6 +486,108 @@ describe("audit regressions", () => {
     expect(state.faBoard.every((player) => !firstOutsideWave.includes(player.id))).toBe(true);
   });
 
+  it("opens and cancels free-agent talks without consuming the one submitted offer", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "Negotiation Cancel Audit", seed: 10291 }), "fa");
+    state = applyAction(state, { type: "next-wave" });
+    const player = state.faBoard[0];
+    if (!player) throw new Error("Outside free-agent fixture missing");
+    const before = capSpace(state);
+    state = applyAction(state, { type: "fa-negotiate", playerId: player.id });
+
+    const reloaded = migrateProfile({ ...freshProfile(), active: "season", season: JSON.parse(JSON.stringify(state)) }).season;
+    if (!reloaded) throw new Error("Negotiation save was lost");
+    expect(reloaded.faNegotiation).toEqual({ playerId: player.id, status: "open" });
+    state = applyAction(reloaded, { type: "fa-cancel-negotiation" });
+    expect(state.faNegotiation).toBeNull();
+    expect(state.faNegotiatedIds).toEqual([]);
+    expect(state.faBoard.some((candidate) => candidate.id === player.id)).toBe(true);
+    expect(capSpace(state)).toBe(before);
+
+    state = applyAction(state, { type: "fa-negotiate", playerId: player.id });
+    expect(state.faNegotiation?.playerId).toBe(player.id);
+  });
+
+  it("signs a guaranteed ask with exact annual cap accounting", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "Negotiation Ask Audit", seed: 10292 }), "fa");
+    state.capMode = "payroll";
+    state = applyAction(state, { type: "next-wave" });
+    const player = state.faBoard[0];
+    if (!player) throw new Error("Outside free-agent fixture missing");
+    const before = capSpace(state);
+    const ask = player.cap;
+    const years = offerYears(player);
+
+    state = applyAction(state, { type: "fa-negotiate", playerId: player.id });
+    state = applyAction(state, { type: "fa-offer", playerId: player.id, strategy: "ask" });
+    const signed = yourRoster(state).find((candidate) => candidate.id === player.id);
+    expect(signed?.cap).toBe(ask);
+    expect(signed?.years).toBe(years);
+    expect(capSpace(state)).toBeCloseTo(before - ask, 5);
+    expect(state.faNegotiation).toBeNull();
+    expect(state.faBoard.some((candidate) => candidate.id === player.id)).toBe(false);
+    expect(() => applyAction(state, { type: "fa-offer", playerId: player.id, strategy: "security" })).toThrow("Open this player's negotiation");
+  });
+
+  it("persists one deterministic counter and applies its longer contract exactly once", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "Negotiation Counter Audit", seed: 10293 }), "fa");
+    state.capMode = "payroll";
+    state = applyAction(state, { type: "next-wave" });
+    const player = state.faBoard[0];
+    if (!player) throw new Error("Outside free-agent fixture missing");
+    player.ovr = 90;
+    player.age = 25;
+    player.pos = "QB";
+    player.cap = 20;
+    player.origin = "BUF";
+    const before = capSpace(state);
+
+    state = applyAction(state, { type: "fa-negotiate", playerId: player.id });
+    state = applyAction(state, { type: "fa-offer", playerId: player.id, strategy: "security" });
+    expect(state.faNegotiation?.status).toBe("counter");
+    expect(state.faNegotiatedIds).toContain(player.id);
+    const counter = state.faNegotiation?.counterAnnual;
+    const years = state.faNegotiation?.counterYears;
+    expect(counter).toBeGreaterThan(0);
+    expect(years).toBe(offerYears(player) + 1);
+
+    const reloaded = migrateProfile({ ...freshProfile(), active: "season", season: JSON.parse(JSON.stringify(state)) }).season;
+    if (!reloaded) throw new Error("Counteroffer save was lost");
+    expect(() => applyAction(reloaded, { type: "fa-offer", playerId: player.id, strategy: "team" })).toThrow("Open this player's negotiation");
+    const walkedAway = applyAction(reloaded, { type: "fa-counter", accept: false });
+    expect(walkedAway.faNegotiation).toBeNull();
+    expect(walkedAway.faBoard.some((candidate) => candidate.id === player.id)).toBe(true);
+    expect(() => applyAction(walkedAway, { type: "fa-negotiate", playerId: player.id })).toThrow("ended talks");
+    state = applyAction(reloaded, { type: "fa-counter", accept: true });
+    const signed = yourRoster(state).find((candidate) => candidate.id === player.id);
+    expect(signed?.cap).toBe(counter);
+    expect(signed?.years).toBe(years);
+    expect(capSpace(state)).toBeCloseTo(before - Number(counter), 5);
+    expect(() => applyAction(state, { type: "fa-counter", accept: true })).toThrow("No counteroffer");
+  });
+
+  it("ends talks after a rejected lowball and blocks repeat offer switching", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "Negotiation Lowball Audit", seed: 10294 }), "fa");
+    state.capMode = "payroll";
+    state = applyAction(state, { type: "next-wave" });
+    const player = state.faBoard[0];
+    if (!player) throw new Error("Outside free-agent fixture missing");
+    player.ovr = 95;
+    player.age = 25;
+    player.pos = "QB";
+    player.cap = 30;
+    player.origin = "BUF";
+    const before = capSpace(state);
+
+    state = applyAction(state, { type: "fa-negotiate", playerId: player.id });
+    state = applyAction(state, { type: "fa-offer", playerId: player.id, strategy: "team" });
+    expect(state.faNegotiation).toBeNull();
+    expect(state.faNegotiatedIds).toContain(player.id);
+    expect(state.flags[`fa-negotiation:${player.id}`]).toContain("too far below");
+    expect(capSpace(state)).toBe(before);
+    expect(() => applyAction(state, { type: "fa-negotiate", playerId: player.id })).toThrow("ended talks");
+    expect(() => applyAction(state, { type: "sign", playerId: player.id })).toThrow("ended talks");
+  });
+
   it("recommends retaining affordable core players before opening the outside market", () => {
     let state = rolloverSeason(createSeason({ teamId: "SEA", gmName: "Retention Audit", seed: 1235, mode: "career" }));
     state = advanceTo(state, "fa");
@@ -868,6 +970,8 @@ describe("audit regressions", () => {
     expect(profile.season?.teams.KC.roster).toHaveLength(9);
     expect(migrated.season.restructuredIds).toEqual([]);
     expect(migrated.season.faPool).toEqual([]);
+    expect(migrated.season.faNegotiation).toBeNull();
+    expect(migrated.season.faNegotiatedIds).toEqual([]);
     expect(migrated.season.teams.KC.roster).toHaveLength(22);
     expect(migrated.season.teams.KC.roster.some((player) => player.pos === "QB")).toBe(true);
     expect(migrated.season.campCutIds).toEqual(suggestedCuts(migrated.season));

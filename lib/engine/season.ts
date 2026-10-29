@@ -264,6 +264,8 @@ export function createSeason(input: {
     faWave: 1,
     faBoard: [],
     faPool: [],
+    faNegotiation: null,
+    faNegotiatedIds: [],
     walked: [],
     tradeOffers: [],
     shop: null,
@@ -391,6 +393,14 @@ export function applyAction(state: SeasonState, action: Action): SeasonState {
       return doCap(next, action.choice, action.playerId);
     case "sign":
       return doSign(next, action.playerId);
+    case "fa-negotiate":
+      return doStartFreeAgentNegotiation(next, action.playerId);
+    case "fa-cancel-negotiation":
+      return doCancelFreeAgentNegotiation(next);
+    case "fa-offer":
+      return doFreeAgentOffer(next, action.playerId, action.strategy);
+    case "fa-counter":
+      return doFreeAgentCounter(next, action.accept);
     case "tag":
       return doTag(next, action.playerId);
     case "next-wave":
@@ -604,6 +614,8 @@ function queueRipple(state: SeasonState, week: number, decision: Decision) {
 function openFreeAgency(state: SeasonState): SeasonState {
   state.phase = "fa";
   state.faWave = 1;
+  state.faNegotiation = null;
+  state.faNegotiatedIds = [];
   state.faPool = freeAgentPool(state);
   state.flags.faMarketNames = state.faPool.map((player) => player.name).join("|");
   state.flags.faShown = "";
@@ -694,13 +706,162 @@ function buildBoard(state: SeasonState, wave: number): Player[] {
   return selected;
 }
 
+export function freeAgentNegotiationPreview(state: SeasonState, deal: Player) {
+  const askAnnual = deal.cap;
+  const askYears = offerYears(deal);
+  const ownPlayer = deal.origin === state.teamId;
+  const rosterNeed = needs(yourRoster(state).filter((player) => player.years > 0)).has(deal.pos);
+  const leveragePoints =
+    (deal.ovr >= 88 ? 2 : deal.ovr >= 82 ? 1 : 0) +
+    (deal.pos === "QB" && deal.ovr >= 82 ? 1 : 0) +
+    (ownPlayer && deal.ovr >= 80 ? 1 : 0) -
+    (deal.age >= 34 ? 2 : deal.age >= 31 ? 1 : 0) -
+    (state.faWave === 3 ? 1 : 0);
+  const leverage = leveragePoints >= 2 ? "strong" : leveragePoints <= -1 ? "limited" : "standard";
+  const securityYears = Math.min(4, askYears + 1);
+  const securityAnnual = Math.round(askAnnual * 0.94 * 10) / 10;
+  const teamAnnual = Math.round(askAnnual * 0.86 * 10) / 10;
+  const demandReason = leverage === "strong"
+    ? `${deal.name} has strong leverage because of ${deal.ovr >= 88 ? "top-tier play" : "position value"}${ownPlayer ? " and your retention interest" : ""}.`
+    : leverage === "limited"
+      ? `${deal.name}'s age and this stage of the market limit the alternatives.`
+      : `${deal.name} has a competitive market at this rating, age, and position.`;
+  const fitReason = rosterNeed
+    ? `Your roster has a clear need at ${deal.pos}, which strengthens the pitch.`
+    : `Your roster does not show an urgent ${deal.pos} need, so price and security carry the pitch.`;
+  return {
+    askAnnual,
+    askYears,
+    leverage,
+    rosterNeed,
+    demandReason,
+    fitReason,
+    securityAnnual,
+    securityYears,
+    teamAnnual,
+    teamYears: askYears,
+  } as const;
+}
+
 function doSign(state: SeasonState, playerId: string): SeasonState {
   if (state.phase !== "fa") throw new Error("Free agency is closed");
+  if (state.faNegotiation) throw new Error("Finish or leave the open negotiation first");
+  if ((state.faNegotiatedIds ?? []).includes(playerId)) throw new Error("That player's camp ended talks for this market window");
   const deal = state.faBoard.find((p) => p.id === playerId);
   if (!deal) throw new Error("That player is off the board");
-  const ask = deal.cap;
-  if (state.capMode === "hard" && ask > capSpace(state) + 0.05) throw new Error("Not enough cap room");
-  const years = offerYears(deal);
+  return completeFreeAgentSigning(state, deal, deal.cap, offerYears(deal), "met the asking price");
+}
+
+function doStartFreeAgentNegotiation(state: SeasonState, playerId: string): SeasonState {
+  if (state.phase !== "fa") throw new Error("Free agency is closed");
+  if (state.faNegotiation) throw new Error("Finish or leave the open negotiation first");
+  if ((state.faNegotiatedIds ?? []).includes(playerId)) throw new Error("That player's camp ended talks for this market window");
+  const deal = state.faBoard.find((player) => player.id === playerId);
+  if (!deal) throw new Error("That player is off the board");
+  state.faNegotiation = { playerId, status: "open" };
+  return state;
+}
+
+function doCancelFreeAgentNegotiation(state: SeasonState): SeasonState {
+  if (state.phase !== "fa" || !state.faNegotiation) throw new Error("No negotiation is open");
+  if (state.faNegotiation.status === "counter") throw new Error("Answer the counteroffer or walk away");
+  state.faNegotiation = null;
+  return state;
+}
+
+function doFreeAgentOffer(
+  state: SeasonState,
+  playerId: string,
+  strategy: "ask" | "security" | "team",
+): SeasonState {
+  if (state.phase !== "fa") throw new Error("Free agency is closed");
+  if (!state.faNegotiation || state.faNegotiation.playerId !== playerId || state.faNegotiation.status !== "open") {
+    throw new Error("Open this player's negotiation before making an offer");
+  }
+  if ((state.faNegotiatedIds ?? []).includes(playerId)) throw new Error("That player's camp already answered an offer");
+  const deal = state.faBoard.find((player) => player.id === playerId);
+  if (!deal) throw new Error("That player is off the board");
+  const preview = freeAgentNegotiationPreview(state, deal);
+  const annual = strategy === "ask" ? preview.askAnnual : strategy === "security" ? preview.securityAnnual : preview.teamAnnual;
+  const years = strategy === "security" ? preview.securityYears : strategy === "team" ? preview.teamYears : preview.askYears;
+  if (state.capMode === "hard" && annual > capSpace(state) + 0.05) throw new Error("That offer does not fit under the cap");
+  state.faNegotiatedIds = [...(state.faNegotiatedIds ?? []), playerId];
+  if (strategy === "ask") return completeFreeAgentSigning(state, deal, annual, years, "met the asking price");
+
+  const fitBonus = preview.rosterNeed ? 0.04 : 0;
+  const returnBonus = deal.origin === state.teamId ? 0.01 : 0;
+  const securityBonus = Math.max(0, years - preview.askYears) * (deal.age >= 31 ? 0.025 : 0.035);
+  const offerScore = annual / Math.max(0.1, preview.askAnnual) + fitBonus + returnBonus + securityBonus;
+  const threshold = preview.leverage === "strong" ? 1 : preview.leverage === "limited" ? 0.9 : 0.95;
+  const gap = threshold - offerScore;
+  const offerLabel = strategy === "security" ? "security offer" : "team-friendly offer";
+  if (gap <= 0.0001) {
+    return completeFreeAgentSigning(state, deal, annual, years, `accepted the ${offerLabel}`);
+  }
+  if (gap <= 0.12) {
+    const neededRatio = Math.max(0.9, threshold - fitBonus - returnBonus - securityBonus);
+    const counterAnnual = Math.min(preview.askAnnual, Math.round(preview.askAnnual * neededRatio * 10) / 10);
+    const message = `${preview.demandReason} ${preview.fitReason} The camp countered instead of ending talks.`;
+    state.faNegotiation = {
+      playerId,
+      status: "counter",
+      counterAnnual,
+      counterYears: years,
+      message,
+    };
+    state.log.push(`Offered ${deal.name} ${formatMoney(annual)} per year for ${years} years; the camp countered at ${formatMoney(counterAnnual)} for ${years} years.`);
+    state.headlines = makeHeadlines(state, "neutral", {
+      beat: `${deal.name}'s camp sent back one number.`,
+      national: "A counteroffer is a decision, not an invitation to click forever.",
+      analytics: `${message} The counter is ${formatMoney(counterAnnual)} per year for ${years} years.`,
+    });
+    return state;
+  }
+  const message = `${preview.demandReason} ${preview.fitReason} The offer was too far below the market for a counter.`;
+  state.faNegotiation = null;
+  state.flags[`fa-negotiation:${playerId}`] = message;
+  state.log.push(`Offered ${deal.name} ${formatMoney(annual)} per year for ${years} years; talks ended without a counter.`);
+  state.headlines = makeHeadlines(state, "negative", {
+    beat: `${deal.name}'s camp ended the conversation.`,
+    national: "A low offer can save cap room. It can also save the player a return call.",
+    analytics: message,
+  });
+  return state;
+}
+
+function doFreeAgentCounter(state: SeasonState, accept: boolean): SeasonState {
+  if (state.phase !== "fa" || !state.faNegotiation || state.faNegotiation.status !== "counter") {
+    throw new Error("No counteroffer is waiting");
+  }
+  const negotiation = state.faNegotiation;
+  const deal = state.faBoard.find((player) => player.id === negotiation.playerId);
+  if (!deal) throw new Error("That player is off the board");
+  if (!accept) {
+    const message = negotiation.message ?? "You walked away from the counteroffer.";
+    state.flags[`fa-negotiation:${deal.id}`] = `${message} You walked away.`;
+    state.log.push(`Walked away from ${deal.name}'s counteroffer.`);
+    state.faNegotiation = null;
+    state.headlines = makeHeadlines(state, "neutral", {
+      beat: `You walked away from ${deal.name}'s counter.`,
+      national: "Discipline is still a choice, even after the agent calls back.",
+      analytics: `No contract was added. Space remains ${formatMoney(capSpace(state))}.`,
+    });
+    return state;
+  }
+  const annual = negotiation.counterAnnual ?? deal.cap;
+  const years = negotiation.counterYears ?? offerYears(deal);
+  if (state.capMode === "hard" && annual > capSpace(state) + 0.05) throw new Error("The counteroffer does not fit under the cap");
+  return completeFreeAgentSigning(state, deal, annual, years, "accepted the camp's counteroffer");
+}
+
+function completeFreeAgentSigning(
+  state: SeasonState,
+  deal: Player,
+  annual: number,
+  years: number,
+  negotiationResult: string,
+): SeasonState {
+  if (state.capMode === "hard" && annual > capSpace(state) + 0.05) throw new Error("Not enough cap room");
   if (deal.origin && deal.origin !== state.teamId) {
     const old = state.teams[deal.origin];
     if (old) old.roster = old.roster.filter((p) => p.id !== deal.id);
@@ -708,31 +869,33 @@ function doSign(state: SeasonState, playerId: string): SeasonState {
   const roster = yourRoster(state);
   const existing = roster.find((p) => p.id === deal.id);
   if (existing) {
-    existing.cap = ask;
+    existing.cap = annual;
     existing.years = years;
   } else {
-    roster.push({ ...deal, years, origin: deal.origin, drafted: false });
+    roster.push({ ...deal, cap: annual, years, origin: deal.origin, drafted: false });
   }
   state.flags[`signed:${deal.id}`] = state.year;
-  state.faBoard = state.faBoard.filter((p) => p.id !== playerId);
+  state.faBoard = state.faBoard.filter((p) => p.id !== deal.id);
+  state.faNegotiation = null;
   const over = state.capMode === "payroll" && capSpace(state) < 0;
   const ownerChange = over ? -6 : deal.ovr >= 88 ? 2 : 0;
   const fanChange = deal.ovr >= 85 ? 4 : 1;
   const lockerChange = deal.age >= 31 ? -1 : 1;
   const before = { ...state.meters };
   bump(state, ownerChange, fanChange, lockerChange);
-  pushDecision(state, "Free agency", `Signed ${deal.name}`, `Signed ${deal.name} for $${ask.toFixed(1)}M. ${meterChanges(before, state.meters)}`, deal.ovr >= 85 ? 3 : 1);
+  pushDecision(state, "Free agency", `Signed ${deal.name}`, `Signed ${deal.name} for ${formatMoney(annual)} per year over ${years} years; ${negotiationResult}. ${meterChanges(before, state.meters)}`, deal.ovr >= 85 ? 3 : 1);
   if (over) queueRipple(state, 3, payrollRipple());
   state.headlines = makeHeadlines(state, "positive", {
-    beat: `${deal.name} is yours. $${ask.toFixed(1)}M a year, ${years} years on the sheet.`,
+    beat: `${deal.name} is yours. ${formatMoney(annual)} a year, ${years} years on the sheet.`,
     national: deal.ovr >= 88 ? `${gmSubject(state.gmName)} just bought a headline.` : `${deal.name} is a fit, not a parade.`,
-    analytics: `Space after the deal: ${formatMoney(capSpace(state))}. ${over ? "The owner will read this number." : "The cap still closes."} ${meterChanges(before, state.meters)}`,
+    analytics: `${negotiationResult[0]?.toUpperCase()}${negotiationResult.slice(1)}. Space after the deal: ${formatMoney(capSpace(state))}. ${over ? "The owner will read this number." : "The cap still closes."} ${meterChanges(before, state.meters)}`,
   });
   return state;
 }
 
 function doTag(state: SeasonState, playerId: string): SeasonState {
   if (state.phase !== "fa" || state.faWave !== 1) throw new Error("The franchise-tag window is closed");
+  if (state.faNegotiation) throw new Error("Finish or leave the open negotiation first");
   if (state.franchiseTagUsed) throw new Error("The franchise tag was already used this season");
   const deal = state.faBoard.find((player) => player.id === playerId && player.origin === state.teamId);
   if (!deal) throw new Error("Only your own expiring player can be tagged");
@@ -769,6 +932,7 @@ function payrollRipple(): Decision {
 
 function doNextWave(state: SeasonState): SeasonState {
   if (state.phase !== "fa") throw new Error("Free agency is closed");
+  if (state.faNegotiation) throw new Error("Finish or leave the open negotiation before advancing the market");
   if (state.faWave < 3) {
     state.faWave += 1;
     state.faBoard = buildBoard(state, state.faWave);

@@ -1,5 +1,15 @@
 # NFLGM career-mode audit
 
+## 2026-10-29 free-agent negotiation feature
+
+Source: direct product request to make free-agent negotiations more realistic. The production baseline signed a player immediately at one fixed asking price and term; there was no negotiation state, counteroffer, or repeat-offer guard.
+
+The signing screen now offers three bounded choices: meet the ask for a guaranteed signing, offer an extra year of security for a modest annual discount, or submit a more aggressive team-friendly offer. Acceptance uses only visible model inputs—player quality, position value, age, roster need, retention status, market wave, price, and contract security. A lower offer can be accepted, countered once, or rejected with a specific explanation. No unmodeled outside bidder is claimed. The screen displays annual cap charge and total nominal commitment, while retaining one-click access to the credible guaranteed offer.
+
+One submitted offer per player is enforced in the engine for that market window. Opening and cancelling the sheet does not consume it; an offer, counter, rejection, or walk-away persists through navigation and save/reload. Existing saves migrate with no open negotiation or consumed attempts. Existing signed contracts and player identities are unchanged.
+
+Deterministic regressions cover cancellation, legacy migration, guaranteed-signing cap accounting, a persisted longer-term counter, duplicate counter submission, rejected lowballs, and switching offer paths after submission. A local 390×844 browser flow covered opening/cancelling/reloading, submitting an affordable offer, persisted outcome, and negotiation-sheet layout. The site header retains a pre-existing 24-pixel mobile horizontal overflow at the `Leagues` link; the new negotiation sheet itself did not overflow.
+
 ## 2026-10-29 Daily #232 / Historical / Turnaround report disposition
 
 Source: Google Doc `1rl4Aa2bZ_OEEkC6lkpLNUFNINlbhhyObQ9utM4sGTR8` and matching Slack report posted 2026-10-29. These are duplicate copies of one manual production report against footer build `2e1ff5b`; there were no replies, comments, or save artifact. The report covered Daily #232, a full 2007 New England Historical season, and 2022 Denver Turnaround through Week 4 with seed `2813354582`. Findings were checked against exact production source `2e1ff5bf5f970fd42932df86fd6b5cc703eed128` and treated as leads.
