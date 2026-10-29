@@ -32,7 +32,7 @@ export function Meters({ season }: { season: SeasonState }) {
   const capHint = `${formatMoney(space)} room · ${formatMoney(season.deadMoney)} current dead${season.futureDead ? ` · ${formatMoney(season.futureDead)} pushed to next year` : ""}`;
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <Bar label="Owner" value={season.meters.owner} hint={season.meters.owner <= 35 ? `Hot seat · fired at ${FIRING_THRESHOLD}` : `Fired at ${FIRING_THRESHOLD}`} />
+      <Bar label="Owner" value={season.meters.owner} hint={season.meters.owner <= 35 ? `Hot seat · job ends at ${FIRING_THRESHOLD} or lower` : `Job ends at ${FIRING_THRESHOLD} or lower`} />
       <Bar label="Fans" value={season.meters.fans} />
       <Bar label="Locker" value={season.meters.locker} />
       <Bar label="Cap flexibility" value={health} hint={season.capMode === "payroll" ? `Payroll guide · ${capHint}` : capHint} />

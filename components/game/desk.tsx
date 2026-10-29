@@ -187,13 +187,20 @@ export function Desk() {
       ) : null}
 
       {season.phase === "regular" && season.week > 1 ? (
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={Boolean(season.shop || season.activeDecision)} onClick={() => dispatch({ type: "sim", until: "playoffs" })}>
-            {season.shop ? "Review trade offer first" : season.activeDecision ? "Resolve the desk decision first" : "Sim to the playoffs"}
-          </Button>
-          <Button variant="ghost" disabled={Boolean(season.shop || season.activeDecision)} onClick={() => dispatch({ type: "sim", until: "recap" })}>
-            {season.shop ? "Review trade offer first" : season.activeDecision ? "Resolve the desk decision first" : "Finish the year"}
-          </Button>
+        <div className="space-y-2">
+          {season.shop || season.activeDecision ? (
+            <p role="status" className="text-sm text-amber-100">
+              {season.shop ? "Review the trade offer before fast-forwarding." : "Resolve the desk decision before fast-forwarding."}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" disabled={Boolean(season.shop || season.activeDecision)} onClick={() => dispatch({ type: "sim", until: "playoffs" })}>
+              Sim to the playoffs
+            </Button>
+            <Button variant="ghost" disabled={Boolean(season.shop || season.activeDecision)} onClick={() => dispatch({ type: "sim", until: "recap" })}>
+              Finish the year
+            </Button>
+          </div>
         </div>
       ) : null}
       {season.phase === "playoffs" ? (
@@ -350,7 +357,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
       </p>
       {season.mode === "historical" || season.flags.historicalRosterScenarioId ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
-          Starting dead money is a modeled scenario value for gameplay. It is not presented as the team&apos;s verified historical accounting.
+          Starting dead money is a modeled gameplay input with no claimed historical transaction origin. The cap and contract economy use the game&apos;s modern scale, not that season&apos;s verified cap accounting.
         </p>
       ) : null}
       <p className="text-xs text-muted-foreground">
@@ -600,6 +607,11 @@ function Draft({ season }: { season: SeasonState }) {
       <p className="text-sm text-muted-foreground">
         You are looking at the scout card, not the truth. Camp will show what you actually drafted. Prospects in this class are fictional.
       </p>
+      {season.mode === "historical" || season.flags.historicalRosterScenarioId ? (
+        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
+          Draft order and pick ownership are modeled for gameplay. They are not claimed as that historical team&apos;s verified draft position.
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2 text-sm">
         <label>
           Position
@@ -633,9 +645,14 @@ function Draft({ season }: { season: SeasonState }) {
           </div>
         </article>
       ) : null}
-      {season.extraPicks.length ? (
+      {season.extraPicks.filter((extra) => extra.year === season.year).length ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
-          Extra picks owned: {season.extraPicks.map((extra) => `${extra.year} round ${extra.round}${extra.source ? ` (${extra.source})` : " (earlier trade)"}`).join(" · ")}
+          Current draft extra picks: {season.extraPicks.filter((extra) => extra.year === season.year).map((extra) => `round ${extra.round}${extra.source ? ` (${extra.source})` : " (earlier trade)"}`).join(" · ")}
+        </p>
+      ) : null}
+      {season.extraPicks.filter((extra) => extra.year > season.year).length ? (
+        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
+          Future picks owned: {season.extraPicks.filter((extra) => extra.year > season.year).map((extra) => `${extra.year} round ${extra.round}${extra.source ? ` (${extra.source})` : " (earlier trade)"}`).join(" · ")}
         </p>
       ) : null}
       <div className="grid gap-2">

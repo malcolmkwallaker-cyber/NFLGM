@@ -1,5 +1,50 @@
 # NFLGM career-mode audit
 
+## 2026-10-29 Daily #232 / Historical / Turnaround report disposition
+
+Source: Google Doc `1rl4Aa2bZ_OEEkC6lkpLNUFNINlbhhyObQ9utM4sGTR8` and matching Slack report posted 2026-10-29. These are duplicate copies of one manual production report against footer build `2e1ff5b`; there were no replies, comments, or save artifact. The report covered Daily #232, a full 2007 New England Historical season, and 2022 Denver Turnaround through Week 4 with seed `2813354582`. Findings were checked against exact production source `2e1ff5bf5f970fd42932df86fd6b5cc703eed128` and treated as leads.
+
+| Finding | Disposition |
+| --- | --- |
+| A Poor deadline trade applies owner −2 instead of the chart's apparent −4 | The two values were intentionally different, but the relationship was too compact. Good/Fair/Poor is a modeled asset-value grade; the owner meter follows the stated brief. Deadline copy now says explicitly that the grade does not set the meter change and gives the exact owner, fan, and locker effects. No balance value changed. |
+| Coach hires, free-agent signings, and postseason games lack meter itemization | Confirmed presentation gaps. Hiring and signing analytics now show exact owner, fan, and locker before/after values and applied changes. A user's playoff result writes the same itemization to the ledger and carries it into the next-round or recap analytics. Existing meter arithmetic is unchanged. |
+| 2022 Denver uses a $322M cap and modeled dead money | Confirmed scenario-model limitation, not a historical-cap arithmetic bug. Turnaround uses original names/positions with the game's modern contract and cap scale; salaries, contracts, and dead money are modeled. The cap screen now states this directly and does not claim a historical transaction origin. No unsupported 2022 accounting was invented. |
+| A real 5–12 team receives a late modeled first-round pick | Historical and Turnaround drafts intentionally use the simulation's modeled order and pick ownership, not the real season's draft slot. The draft screen now discloses that limitation. No pick was changed from the unseeded expectation. |
+| A highly rated 2007 New England roster can finish 8–8 | Not a confirmed implementation fault. The game includes injuries, reduced effectiveness, generated opponents, and seeded score variance. One stochastic result does not authorize a simulation rebalance; no outcome was forced. |
+| Outside free-agency Wave 2 conflicts with `Wave 1 of 2` | Confirmed numbering defect. The engine ledger now uses the same outside-market numbering as the board: retention stage, then outside waves 1 and 2. |
+| Closing free agency with no expiring contracts says expiring names were kept | Confirmed false copy. The closing headline now says no unsigned contracts reached the market unless it can name players who actually walked. |
+| A future 2008 pick appears under a generic `Extra picks owned` label during the 2007 draft | Confirmed clarity gap. Current-draft extra picks and future picks now render under separate labels. Pick lifecycle and ownership are unchanged. |
+| Eliminated-team recap is easy to miss and `Patriots's` is malformed | The recap already displays the league Super Bowl above the expandable result list and simulates the remaining bracket after elimination. The possessive formatter is fixed for plural team names; no new postseason simulation was added. |
+| `Fired at 20` is ambiguous | Confirmed copy gap. The owner meter now says the job ends at 20 or lower, with the existing hot-seat warning retained. |
+| Both disabled fast-forward controls repeat `Resolve the desk decision first` | Confirmed duplicated-label gap. One status explanation now sits above the disabled controls while their labels remain `Sim to the playoffs` and `Finish the year`. |
+| The completed Daily home card still says `Make today's call` | Confirmed against production. The completed card title now says `Today's call is in`; its action remains `View today's result`, and the next UTC puzzle resets both. |
+| An unsigned free agent and a drafted player can share the same generated name | Confirmed generator scope gap. New draft classes now avoid exact names on every league roster and the active free-agent pool/board, while preserving IDs, ratings, RNG sequence, and existing saves. Existing duplicate names are not destructively renamed. |
+| The Daily follow-up modal has only a `Not now` dismissal | Not reproduced in source. The shared modal already renders an accessible labeled close button and the underlying dialog primitive provides focus management, Escape, and backdrop dismissal. No duplicate control was added without a failing interaction trace. |
+| Historical starting dead money lacks a transaction origin | The amount is modeled and no verified transaction origin exists. Copy now says it is a gameplay input with no claimed historical transaction origin and uses a modern economy scale. |
+
+This pass preserves saves, free testing, original-roster provenance, the football logo, privacy pages, and the advertisements-off state.
+
+## 2026-10-28 Daily #231 / Career report disposition
+
+Source: Google Doc `1QGb84nASKvDDD-xjh0qb_aizC8fM9bYNNPJbtgUJKaY` and matching Slack report posted 2026-10-28. These are duplicate copies of one manual production report against build `334ca55`; there were no replies, comments, seed, save artifact, or screenshots. The report covered Daily #231 and an existing Dallas-to-Seattle Career through 2031. Findings were checked against exact production source tree `e5c5305581cbe0e6d8f7581b581390d57c33ee0d` and treated as leads.
+
+| Finding | Disposition |
+| --- | --- |
+| Starting a new Career requires wiping Daily progress | Confirmed discoverability defect. The existing replacement operation already changes only the Career slot and presents an in-app confirmation, but its team picker appeared only after retirement. Active Career pages now expose `Start a new career`, explain that Daily and Single Season data remain intact, then use the existing replacement confirmation. The global wipe remains separate. |
+| Sim to playoffs skips decisions that arise during fast-forward | Confirmed engine/UI mismatch. Player-initiated fast-forward reused the internal automation helper, which selected the first option for every new decision. UI fast-forward now stops as soon as an injury, owner, deadline, extension, or other pending desk item appears. Internal deterministic simulation retains its prior auto-resolution behavior. Save/reload preserves the stopped decision. |
+| Positive cap room appears under `Get under the number` | Confirmed conditional-copy defect. Positive room now uses `Put your cap room to work`; the original warning remains for an over-cap sheet. |
+| Trade returns expose `Replacement` names | Confirmed presentation/data defect. Newly generated depth players receive deterministic fictional names. Legacy placeholder players remain save-compatible and display honestly as a `depth` position on trade cards and accepted-trade copy. |
+| Offseason trade cards omit meter and salary impact | Confirmed preview gap. Each card now shows the exact requested/applied owner, fan, and locker changes after meter limits plus the modeled cap-room change from outgoing versus incoming salary. The same calculation drives acceptance. |
+| Generated draft names duplicate names already on the roster | Confirmed deterministic generator gap. New draft classes now avoid exact names already on the user's roster and remain unique within the class without changing rating, age, or college RNG. Existing saved players and classes are unchanged. |
+| Draft ledger reveals the true grade before camp | Confirmed disclosure defect. Draft-time headlines and the ledger now show only the scout grade and say the full grade reveals at camp; underlying simulation ratings remain deterministic. |
+| Completed Daily home card still says `Make the call` | Confirmed duplicate-CTA defect. Both Daily calls to action now use the same date-specific completion state and switch to `View today's result`; the next UTC puzzle resets them naturally. |
+| Free-agency wave labels disagree | Confirmed terminology gap. The UI now names the first step `Retention stage`, followed by `Outside market · Wave 1 of 2` and `Wave 2 of 2`, matching the ledger's outside-market language. |
+| A prior-season signing appears as the current recap's best call | Not reproduced. Season rollover clears the decisions ledger before the next owner meeting, and fired-GM job changes pass through that same reset. No save artifact was supplied, so no speculative filter was added. |
+| Year-end confidence is not itemized | Existing behavior. The recap already displays the stored owner review before/after values and each applicable poor-record, unused-cap, or quarterback penalty under `Why the season ended this way`. The reported fast-forward issue hid intervening weekly decisions; stopping at those decisions restores the intended progression. |
+| Cap inflation, fixed trade-grade mix, confidence farming, strength/results, and backup-QB asks | Deferred as balance leads without deterministic evidence. This pass does not add a broad economy, grading, simulation, or contract redesign. |
+
+This pass preserves saves, free testing, advertisements-off state, original-roster provenance, and all prior fixes.
+
 ## 2026-10-27 Daily #230 / Historical / Turnaround report disposition
 
 Source: Google Doc `1ffEyTnY26eGKR97c1CxOAEO8Y-55qEAkgzSBoBJKVnI` and matching Slack report posted 2026-10-27. These are duplicate copies of one report; there were no Drive comments or Slack replies. The report identifies footer build `4cf6cba` and describes scripted Daily #230, a full 2013 Seattle Historical season, and 2011 Philadelphia Turnaround through Week 6 with seed `1936146732`. It does not include a save fixture or screenshots. Findings were reproduced against exact source `4cf6cba4e67ba035fe42d881a8a1784ec4c976fc` and treated as leads.

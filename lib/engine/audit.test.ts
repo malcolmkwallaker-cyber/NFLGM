@@ -646,6 +646,40 @@ describe("audit regressions", () => {
     expect(() => applyAction(state, { type: "tag", playerId: state.faBoard[0]?.id ?? "missing" })).toThrow();
   });
 
+  it("itemizes staff and free-agent meter changes and keeps outside-wave labels aligned", () => {
+    let staff = applyAction(createSeason({ teamId: "DEN", gmName: "Meter Audit", seed: 1029 }), { type: "intro", choice: "embrace" });
+    const role = ["hc", "oc", "dc"][staff.staffStep] as "hc" | "oc" | "dc";
+    const hire = staff.market[role][0];
+    const beforeHire = { ...staff.meters };
+    staff = applyAction(staff, { type: "hire", id: hire.id });
+    const hireAnalytics = staff.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+    expect(hireAnalytics).toContain(`Owner ${beforeHire.owner} → ${staff.meters.owner}`);
+    expect(hireAnalytics).toContain(`Fans ${beforeHire.fans} → ${staff.meters.fans}`);
+    expect(hireAnalytics).toContain(`Locker ${beforeHire.locker} → ${staff.meters.locker}`);
+
+    let market = advanceTo(createSeason({ teamId: "NE", gmName: "Market Audit", seed: 1029 }), "fa");
+    market = applyAction(market, { type: "next-wave" });
+    expect(market.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain("Outside market · Wave 1 of 2");
+    const freeAgent = market.faBoard[0];
+    const beforeSigning = { ...market.meters };
+    market.capMode = "payroll";
+    market = applyAction(market, { type: "sign", playerId: freeAgent.id });
+    const signingAnalytics = market.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+    expect(signingAnalytics).toContain(`Owner ${beforeSigning.owner} → ${market.meters.owner}`);
+    expect(signingAnalytics).toContain(`Fans ${beforeSigning.fans} → ${market.meters.fans}`);
+    expect(signingAnalytics).toContain(`Locker ${beforeSigning.locker} → ${market.meters.locker}`);
+  });
+
+  it("does not claim expiring players were retained when none reached the market", () => {
+    let state = advanceTo(createSeason({ teamId: "KC", gmName: "Closing Copy Audit", seed: 1029 }), "fa");
+    for (const player of yourRoster(state)) player.years = Math.max(1, player.years);
+    state.faBoard = [];
+    state = applyAction(state, { type: "next-wave" });
+    state = applyAction(state, { type: "next-wave" });
+    state = applyAction(state, { type: "next-wave" });
+    expect(state.headlines.find((headline) => headline.outlet === "beat")?.text).toBe("No unsigned contracts reached the market.");
+  });
+
   it("excludes expired prior contracts from room and preserves that room when unsigned players walk", () => {
     let state = createSeason({ teamId: "NYJ", gmName: "Retention Cap Audit", seed: 1, mode: "career" });
     const roster = yourRoster(state);
@@ -724,6 +758,22 @@ describe("audit regressions", () => {
     const draft = advanceTo(createSeason({ teamId: "DAL", gmName: "Draft Name Audit", seed: 2601, mode: "career" }), "draft");
     const names = draft.prospects.map((prospect) => prospect.name);
     expect(new Set(names).size).toBe(names.length);
+
+    let collision = advanceTo(createSeason({ teamId: "DAL", gmName: "League Name Audit", seed: 2602, mode: "career" }), "trade");
+    const reference = applyAction(JSON.parse(JSON.stringify(collision)) as SeasonState, { type: "trade-done" });
+    const occupiedName = reference.prospects[0].name;
+    const opponent = Object.values(collision.teams).find((team) => team.id !== collision.teamId && team.roster.length > 0);
+    if (!opponent) throw new Error("Opponent roster fixture missing");
+    opponent.roster[0].name = occupiedName;
+    collision = applyAction(collision, { type: "trade-done" });
+    expect(collision.prospects.some((prospect) => prospect.name === occupiedName)).toBe(false);
+
+    let priorMarket = advanceTo(createSeason({ teamId: "DAL", gmName: "Market Name Audit", seed: 2603, mode: "career" }), "trade");
+    const marketReference = applyAction(JSON.parse(JSON.stringify(priorMarket)) as SeasonState, { type: "trade-done" });
+    const marketName = marketReference.prospects[0].name;
+    priorMarket.flags.faMarketNames = marketName;
+    priorMarket = applyAction(priorMarket, { type: "trade-done" });
+    expect(priorMarket.prospects.some((prospect) => prospect.name === marketName)).toBe(false);
   });
 
   it("records the exact owner year-end review and labels a Super Bowl loss as runner-up", () => {

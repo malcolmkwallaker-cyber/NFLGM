@@ -57,7 +57,7 @@ export function HomeClient({
               href="/daily"
               testId="home-daily-cta"
               kicker="Mode 1 · Daily Challenge · Free"
-              title="Make today’s call"
+              title={dailyComplete ? "Today’s call is in" : "Make today’s call"}
               body="One historical or original fictional decision, an instant grade, and a transparent review."
               action={dailyComplete ? "View today’s result →" : `Play Daily #${puzzle} →`}
             />

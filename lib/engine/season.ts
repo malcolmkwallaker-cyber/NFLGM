@@ -433,6 +433,19 @@ function bump(state: SeasonState, owner = 0, fans = 0, locker = 0) {
   }
 }
 
+function meterChanges(
+  before: SeasonState["meters"],
+  after: SeasonState["meters"],
+): string {
+  return (["owner", "fans", "locker"] as const)
+    .map((meter) => `${meter === "owner" ? "Owner" : meter === "fans" ? "Fans" : "Locker"} ${before[meter]} → ${after[meter]} (${formatSigned(after[meter] - before[meter])})`)
+    .join("; ");
+}
+
+function possessive(label: string): string {
+  return label.endsWith("s") ? `${label}'` : `${label}'s`;
+}
+
 function pushDecision(state: SeasonState, title: string, choice: string, log: string, swing: number) {
   state.decisions.push({ week: state.week, title, choice, log, swing });
   state.log.push(log);
@@ -490,13 +503,14 @@ function doHire(state: SeasonState, id: string): SeasonState {
   if (priority === "win") owner += member.aggression >= 4 ? 2 : 0;
   if (priority === "culture") owner += member.culture >= 4 ? 3 : -2;
   if (priority === "stars") owner += member.cost === 3 ? 2 : 0;
+  const before = { ...state.meters };
   bump(state, owner, fans, locker);
   pushDecision(state, `Hire ${role.toUpperCase()}`, member.name, `Hired ${member.name} as ${role.toUpperCase()}.`, owner);
   state.staffStep += 1;
   state.headlines = makeHeadlines(state, owner >= 0 ? "positive" : "negative", {
     beat: `${member.name} gets the ${role === "hc" ? "headset" : "office"}. ${member.blurb}`,
     national: `${gmSubject(state.gmName)} hires ${member.name}. ${member.legend ? "The city already knows the name." : "Nobody outside the building has a strong opinion yet."}`,
-    analytics: `${member.scheme} is the tell. Leadership ${member.leadership}/5, development ${member.development}/5.`,
+    analytics: `${member.scheme} is the tell. Leadership ${member.leadership}/5, development ${member.development}/5. ${meterChanges(before, state.meters)}`,
   });
   if (state.staffStep >= ROLES.length) openCap(state);
   return state;
@@ -591,6 +605,7 @@ function openFreeAgency(state: SeasonState): SeasonState {
   state.phase = "fa";
   state.faWave = 1;
   state.faPool = freeAgentPool(state);
+  state.flags.faMarketNames = state.faPool.map((player) => player.name).join("|");
   state.flags.faShown = "";
   state.faBoard = buildBoard(state, 1);
   state.headlines = makeHeadlines(state, "neutral", {
@@ -701,13 +716,17 @@ function doSign(state: SeasonState, playerId: string): SeasonState {
   state.flags[`signed:${deal.id}`] = state.year;
   state.faBoard = state.faBoard.filter((p) => p.id !== playerId);
   const over = state.capMode === "payroll" && capSpace(state) < 0;
-  bump(state, over ? -6 : deal.ovr >= 88 ? 2 : 0, deal.ovr >= 85 ? 4 : 1, deal.age >= 31 ? -1 : 1);
+  const ownerChange = over ? -6 : deal.ovr >= 88 ? 2 : 0;
+  const fanChange = deal.ovr >= 85 ? 4 : 1;
+  const lockerChange = deal.age >= 31 ? -1 : 1;
+  const before = { ...state.meters };
+  bump(state, ownerChange, fanChange, lockerChange);
   pushDecision(state, "Free agency", `Signed ${deal.name}`, `Signed ${deal.name} for $${ask.toFixed(1)}M.`, deal.ovr >= 85 ? 3 : 1);
   if (over) queueRipple(state, 3, payrollRipple());
   state.headlines = makeHeadlines(state, "positive", {
     beat: `${deal.name} is yours. $${ask.toFixed(1)}M a year, ${years} years on the sheet.`,
     national: deal.ovr >= 88 ? `${gmSubject(state.gmName)} just bought a headline.` : `${deal.name} is a fit, not a parade.`,
-    analytics: `Space after the deal: ${formatMoney(capSpace(state))}. ${over ? "The owner will read this number." : "The cap still closes."}`,
+    analytics: `Space after the deal: ${formatMoney(capSpace(state))}. ${over ? "The owner will read this number." : "The cap still closes."} ${meterChanges(before, state.meters)}`,
   });
   return state;
 }
@@ -756,7 +775,7 @@ function doNextWave(state: SeasonState): SeasonState {
     state.headlines = makeHeadlines(state, "neutral", {
       beat: state.faWave === 2 ? "Your unsigned players are now on the market. The first outside wave is on the board." : "The last outside wave is thinner. The mistakes are cheaper, too.",
       national: "The market always feels slower on day two. It is not kinder.",
-      analytics: `Wave ${state.faWave}. Space ${formatMoney(capSpace(state))}.`,
+      analytics: `Outside market · Wave ${state.faWave - 1} of 2. Space ${formatMoney(capSpace(state))}.`,
     });
     return state;
   }
@@ -770,7 +789,7 @@ function doNextWave(state: SeasonState): SeasonState {
   state.phase = "trade";
   state.tradeOffers = makeOffers(state);
   state.headlines = makeHeadlines(state, walking.length ? "negative" : "neutral", {
-    beat: walking.length ? `${walking.map((p) => p.name).join(", ")} hit the market unsigned.` : "You kept the expiring names you meant to keep.",
+    beat: walking.length ? `${walking.map((p) => p.name).join(", ")} hit the market unsigned.` : "No unsigned contracts reached the market.",
     national: "The phones start. Three teams think you are a seller.",
     analytics: `${cpuSignings} remaining outside free agent${cpuSignings === 1 ? "" : "s"} joined CPU teams. Trade values weigh rating, age, position, contract control, cap cost, and draft-pick value.`,
   });
@@ -1033,7 +1052,14 @@ function makeProspects(state: SeasonState): Prospect[] {
   const prospects: Prospect[] = [];
   const nameCount = FIRSTS.length * LASTS.length;
   const nameOffset = makeRng(hashSeed(state.seed, "draft-names", state.year)).int(nameCount);
-  const usedNames = new Set(yourRoster(state).map((player) => player.name.toLocaleLowerCase()));
+  const usedNames = new Set([
+    ...Object.values(state.teams).flatMap((team) => team.roster),
+    ...(state.faPool ?? []),
+    ...state.faBoard,
+  ].map((player) => player.name.toLocaleLowerCase()));
+  for (const name of String(state.flags.faMarketNames ?? "").split("|").filter(Boolean)) {
+    usedNames.add(name.toLocaleLowerCase());
+  }
   for (let i = 0; i < 110; i++) {
     const pos = POS_CYCLE[i % POS_CYCLE.length] ?? "WR";
     let trueOvr = 64 + rng.int(8);
@@ -1505,7 +1531,7 @@ function deadlineDecision(state: SeasonState): Decision | null {
     body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. The trade chart rates this ${tradeValueLabel(valueGrade).toLowerCase()}. The owner's reaction below reflects the ${priorityLabel(state.owner.priority).toLowerCase()} brief, which is separate from the trade chart. After today the phones are props.`,
     options: [
       { id: "keep", label: `Keep ${player.name}`, detail: "You are trying to win the games on the schedule. Owner +1, fans +2, locker +2.", owner: 1, fans: 2, locker: 2, log: `Kept ${player.name} through the deadline.`, swing: 2 },
-      { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: `Take the pick and the cap. Owner ${youthBrief ? "+4 because the brief prioritizes building young" : `−2 because the ${priorityLabel(state.owner.priority).toLowerCase()} brief does not reward selling low`}; fans −3, locker −2. Trade chart: ${tradeValueLabel(valueGrade)}.`, owner: youthBrief ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
+      { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: `Take the pick and the cap. Trade chart: ${tradeValueLabel(valueGrade)}; that grade does not set the meter change. Owner ${youthBrief ? "+4 because the brief prioritizes building young" : `−2 because the ${priorityLabel(state.owner.priority).toLowerCase()} brief does not reward this sale`}; fans −3, locker −2.`, owner: youthBrief ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
     ],
   };
 }
@@ -1947,6 +1973,7 @@ function doPlayoff(state: SeasonState): SeasonState {
   if (state.phase !== "playoffs" || !state.playoff) throw new Error("You are not in the bracket");
   const playoff = state.playoff;
   for (const game of playoff.pending) {
+    const before = { ...state.meters };
     const played = simulateMatch(state, game.home, game.away, game.id);
     const result = { week: 0, round: game.round, ...played };
     state.results.push(result);
@@ -1961,6 +1988,11 @@ function doPlayoff(state: SeasonState): SeasonState {
       state.log.push(`Season ended in the ${formatPlayoffRound(game.round)}: ${played.homeScore}-${played.awayScore}.`);
     }
     if (state.teamId === winner) state.log.push(`Won the ${formatPlayoffRound(game.round)} ${Math.max(played.homeScore, played.awayScore)}-${Math.min(played.homeScore, played.awayScore)}.`);
+    if (state.teamId === winner || state.teamId === loser) {
+      const explanation = `${formatPlayoffRound(game.round)} meters: ${meterChanges(before, state.meters)}`;
+      state.log.push(explanation);
+      state.flags["last-playoff-meter-change"] = explanation;
+    }
   }
   if (!playoff.userAlive) {
     simRemainingBracket(state);
@@ -1972,7 +2004,7 @@ function doPlayoff(state: SeasonState): SeasonState {
   state.headlines = makeHeadlines(state, "positive", {
     beat: next ? `Next up: ${teamById(next.home === state.teamId ? next.away : next.home, state.directory).abbr}.` : "You have the bye. The other games will sort the path.",
     national: "Win or go home is not a metaphor this week.",
-    analytics: `Still alive. Owner confidence ${state.meters.owner}.`,
+    analytics: `Still alive. ${typeof state.flags["last-playoff-meter-change"] === "string" ? `${state.flags["last-playoff-meter-change"]}. ` : ""}Owner confidence ${state.meters.owner}.`,
   });
   return state;
 }
@@ -2100,10 +2132,10 @@ function toRecap(state: SeasonState): SeasonState {
           : `League champion: ${teamLabel(teamById(champ, state.directory))}. ${
               state.grade.round === "missed"
                 ? `${teamLabel(teamById(state.teamId, state.directory))} missed the playoffs.`
-                : `${teamLabel(teamById(state.teamId, state.directory))}'s run ended in the ${state.grade.round === "wildcard" ? "Wild Card" : state.grade.round} round.`
+                : `${possessive(teamLabel(teamById(state.teamId, state.directory)))} run ended in the ${state.grade.round === "wildcard" ? "Wild Card" : state.grade.round} round.`
             }`
       : "The league title is still being decided; your season is over.",
-    analytics: `GM grade ${state.grade.letter} (${state.grade.score}). Owner year-end review ${ownerBeforeReview} → ${state.meters.owner}: ${reviewExplanation}.`,
+    analytics: `GM grade ${state.grade.letter} (${state.grade.score}). ${typeof state.flags["last-playoff-meter-change"] === "string" ? `${state.flags["last-playoff-meter-change"]}. ` : ""}Owner year-end review ${ownerBeforeReview} → ${state.meters.owner}: ${reviewExplanation}.`,
   });
   return state;
 }
