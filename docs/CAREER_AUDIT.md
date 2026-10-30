@@ -1,5 +1,21 @@
 # NFLGM career-mode audit
 
+## 2026-10-30 Daily #233 / New England Season report disposition
+
+Source: Google Doc `1zYRZBu8-44dIhplY2rw_d7R6Ym9NLrgycLw4X3HOlGM` and matching Slack report posted 2026-10-30. These are duplicate copies of one manual production report against footer build `07192d9`; there were no replies or comments. The report covered Daily #233 and a 2027 New England Single Season. Findings were checked against exact source `07192d9a74773fdea067b378a01d6cd80bcbee95` and treated as leads.
+
+| Finding | Disposition |
+| --- | --- |
+| A newly signed free agent immediately attracts an offseason trade call, then the same player is called about again | Confirmed eligibility gap. Offseason offers now exclude players signed in the current market. A player-level last-contact year also prevents another generated offseason or deadline call in the current and following season; the existing team/target variety history remains intact. No NFL transaction rule is claimed. |
+| The final scouting-director hire changes meters without a visible delta or ledger line | Confirmed presentation-order defect. The hire already recorded exact meter changes, but opening the cap phase immediately replaced its headlines. The final hire now remains the visible headline with exact owner, fan, and locker before/after values plus current cap room; the decision ledger entry remains intact. |
+| A.J. Brown remains out all season with `return date unavailable`; camp has one running back without a warning | Confirmed model/copy mismatch and depth gap. Initial injured roster entries without a return-week flag are season-long in the engine, so the UI now says `Out for the season · no projected return this season`. Generated short injuries retain their projected return week. Camp now warns when the post-cut roster is below the same position targets used by suggested cuts, without blocking the existing 22–26-player rule. |
+| A costly backup quarterback is not flagged as low value in suggested cuts | Deferred. Suggested cuts already weigh rating, cap charge, position minimums, and new-deal protection. One contract example does not justify a new valuation system. |
+| The league Super Bowl is only a line of text after elimination | Confirmed modest presentation gap. The recap now uses the already-recorded result to show a champion/runner-up score card. No result or bracket simulation changed. |
+| `/pro/` renders Home while `/upgrade/` accurately describes free playtest access | Confirmed missing-route fallback. `/pro/` now serves the existing free-playtest access page; no billing or payment code was added. |
+| Single Season does not expose its deterministic seed | Confirmed reproducibility gap. The desk header now displays the saved run seed in every phase. Generation and saves are unchanged. |
+
+The report confirmed earlier Daily, trade-meter, fast-forward, cap, wave-label, free-agent, naming, and meter-itemization fixes. Those were not reopened. Good-value trade acceptance and Historical/Turnaround wave labels remain unverified by this report.
+
 ## 2026-10-29 free-agent negotiation feature
 
 Source: direct product request to make free-agent negotiations more realistic. The production baseline signed a player immediately at one fixed asking price and term; there was no negotiation state, counteroffer, or repeat-offer guard.

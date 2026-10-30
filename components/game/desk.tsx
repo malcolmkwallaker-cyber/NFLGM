@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, divisionTable, freeAgentNegotiationPreview, priorityLabel, rosterForDisplay, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, divisionTable, freeAgentNegotiationPreview, playerAvailabilityLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -109,7 +109,7 @@ export function Desk() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {teamLabel(team)} · {record.wins}-{record.losses}
-              {season.phase === "regular" ? ` · Week ${season.week}` : ""} · {titledGmName(season.gmName)}
+              {season.phase === "regular" ? ` · Week ${season.week}` : ""} · {titledGmName(season.gmName)} · Seed {season.seed}
             </p>
           </div>
         </div>
@@ -217,11 +217,7 @@ export function Desk() {
               <li key={player.id} className="flex justify-between gap-3">
                 <span className={player.injured ? "text-red-300" : ""}>
                   {player.pos} {player.name}
-                  {player.injured
-                    ? typeof season.flags[`return-${player.id}`] === "number"
-                      ? ` · out until Week ${season.flags[`return-${player.id}`]}`
-                      : " · out"
-                    : ""}
+                  {playerAvailabilityLabel(season, player) ? ` · ${playerAvailabilityLabel(season, player)}` : ""}
                 </span>
                 <span className="text-muted-foreground">
                   {visiblePlayerOverall(season, player)} · {money(player.cap)} · {formatContractYears(player.years)}
@@ -786,6 +782,7 @@ function Camp({
   onSubmit: () => void;
   onSuggest: () => void;
 }) {
+  const depthWarnings = rosterDepthWarnings(roster, cutIds);
   return (
     <section className="space-y-3">
       <div className="flex items-end justify-between">
@@ -801,6 +798,11 @@ function Camp({
         <p className="text-xs text-amber-100">Estimated added dead money: {money(campCutDeadMoney(season, cutIds))}. Replacement-level and minimum contracts can be released without a charge.</p>
       ) : null}
       {!keptQb ? <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm">Keep at least one quarterback before opening the season.</p> : null}
+      {depthWarnings.length ? (
+        <p role="status" className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-amber-100">
+          Depth warning: {depthWarnings.map(({ pos, count, target }) => `${pos} ${count}/${target}`).join(" · ")}. You can still open the season with 22–26 players and a quarterback, but these groups are below the suggested depth targets.
+        </p>
+      ) : null}
       <section className="rounded-xl border border-white/10 bg-black/20 p-3" aria-label="Your draft class">
         <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Draft class added to camp</p>
         <ul className="mt-2 space-y-1 text-sm">
@@ -939,11 +941,7 @@ function Regular({
           <ul className="mt-2 space-y-1 text-sm">
             {roster.filter((player) => player.injured || player.limited).map((player) => (
               <li key={player.id} className={player.injured ? "text-red-300" : "text-amber-200"}>
-                {player.pos} {player.name} · {player.injured
-                  ? typeof season.flags[`return-${player.id}`] === "number"
-                    ? `Out · projected return Week ${season.flags[`return-${player.id}`]}`
-                    : "Out · return date unavailable"
-                  : "Active, reduced effectiveness"}
+                {player.pos} {player.name} · {playerAvailabilityLabel(season, player)}
               </li>
             ))}
           </ul>
@@ -1007,6 +1005,10 @@ function Recap({
   const lines = advancedLines(season);
   const rows = standings(season).slice(0, 8);
   const superBowl = season.results.find((game) => game.round === "superbowl");
+  const superBowlWinner = superBowl ? (superBowl.homeScore > superBowl.awayScore ? superBowl.home : superBowl.away) : null;
+  const superBowlRunnerUp = superBowl ? (superBowlWinner === superBowl.home ? superBowl.away : superBowl.home) : null;
+  const winnerScore = superBowl ? (superBowlWinner === superBowl.home ? superBowl.homeScore : superBowl.awayScore) : null;
+  const runnerUpScore = superBowl ? (superBowlRunnerUp === superBowl.home ? superBowl.homeScore : superBowl.awayScore) : null;
   const playoffResults = season.results.filter((game) => ["wildcard", "divisional", "conference", "superbowl"].includes(game.round));
   const playedSuperBowl = Boolean(superBowl && (superBowl.home === season.teamId || superBowl.away === season.teamId));
   const finish = grade?.champ ? "Champion" : grade?.round === "missed" ? "Missed playoffs" : grade?.round ? formatPlayoffRound(grade.round) : "Season complete";
@@ -1029,10 +1031,14 @@ function Recap({
             Historical goal: win the championship. Ultimate: finish undefeated and win it all. These are gameplay targets, not claims about the real season.
           </p>
         ) : null}
-        {superBowl ? (
-          <p className="mt-3 text-sm">
-            {playedSuperBowl ? "Your Super Bowl" : `League Super Bowl (${eliminatedFinish.toLowerCase()})`}: {teamLabel(teamById(superBowl.away, season.directory))} {superBowl.awayScore} · {teamLabel(teamById(superBowl.home, season.directory))} {superBowl.homeScore}
-          </p>
+        {superBowl && superBowlWinner && superBowlRunnerUp ? (
+          <article className="mt-3 rounded-xl border border-primary/30 bg-black/20 p-3" data-testid="super-bowl-recap">
+            <p className="text-xs uppercase tracking-[0.16em] text-primary">{playedSuperBowl ? "Your Super Bowl" : `League Super Bowl · ${eliminatedFinish}`}</p>
+            <p className="mt-1 font-display text-2xl tracking-wide">Champion: {teamLabel(teamById(superBowlWinner, season.directory))}</p>
+            <p className="text-sm text-muted-foreground">
+              {winnerScore}–{runnerUpScore} over runner-up {teamLabel(teamById(superBowlRunnerUp, season.directory))}
+            </p>
+          </article>
         ) : null}
         {playoffResults.length ? (
           <details className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">

@@ -517,12 +517,13 @@ function doHire(state: SeasonState, id: string): SeasonState {
   bump(state, owner, fans, locker);
   pushDecision(state, `Hire ${role.toUpperCase()}`, member.name, `Hired ${member.name} as ${role.toUpperCase()}. ${meterChanges(before, state.meters)}`, owner);
   state.staffStep += 1;
+  const completedStaff = state.staffStep >= ROLES.length;
+  if (completedStaff) openCap(state);
   state.headlines = makeHeadlines(state, owner >= 0 ? "positive" : "negative", {
     beat: `${member.name} gets the ${role === "hc" ? "headset" : "office"}. ${member.blurb}`,
     national: `${gmSubject(state.gmName)} hires ${member.name}. ${member.legend ? "The city already knows the name." : "Nobody outside the building has a strong opinion yet."}`,
-    analytics: `${member.scheme} is the tell. Leadership ${member.leadership}/5, development ${member.development}/5. ${meterChanges(before, state.meters)}`,
+    analytics: `${member.scheme} is the tell. Leadership ${member.leadership}/5, development ${member.development}/5. ${meterChanges(before, state.meters)}${completedStaff ? ` Cap room now ${formatMoney(capSpace(state))}.` : ""}`,
   });
-  if (state.staffStep >= ROLES.length) openCap(state);
   return state;
 }
 
@@ -996,7 +997,13 @@ function makeOffers(state: SeasonState): TradeOffer[] {
   const rng = makeRng(hashSeed(state.seed, "trades", state.year));
   const roster = yourRoster(state).filter((p) => p.pos !== "K");
   const qbs = roster.filter((p) => p.pos === "QB");
-  const eligible = roster.filter((p) => p.ovr >= 74 && p.ovr <= 90 && (p.pos !== "QB" || qbs.length > 1));
+  const eligible = roster.filter((p) =>
+    p.ovr >= 74 &&
+    p.ovr <= 90 &&
+    (p.pos !== "QB" || qbs.length > 1) &&
+    state.flags[`signed:${p.id}`] !== state.year &&
+    !tradeContactedRecently(state, p.id)
+  );
   const recentTargets = new Set(state.recentTradeTargets ?? []);
   const freshTargets = shuffle(eligible.filter((player) => !recentTargets.has(player.id)), rng);
   const fallbackTargets = shuffle(eligible.filter((player) => recentTargets.has(player.id)), rng);
@@ -1055,7 +1062,13 @@ function makeOffers(state: SeasonState): TradeOffer[] {
   });
   state.recentTradeTargets = [...(state.recentTradeTargets ?? []), ...offers.map((offer) => offer.wantId)].slice(-12);
   state.recentTradeTeams = [...(state.recentTradeTeams ?? []), ...offers.map((offer) => offer.fromTeamId)].slice(-12);
+  for (const offer of offers) state.flags[`trade-contact:${offer.wantId}`] = state.year;
   return offers;
+}
+
+function tradeContactedRecently(state: SeasonState, playerId: string): boolean {
+  const lastContact = state.flags[`trade-contact:${playerId}`];
+  return typeof lastContact === "number" && lastContact >= state.year - 1;
 }
 
 export function tradeValueLabel(fair: TradeOffer["fair"]): string {
@@ -1520,10 +1533,7 @@ export function suggestedCuts(state: SeasonState): string[] {
   const roster = yourRoster(state);
   const extra = roster.length - 26;
   if (extra <= 0) return [];
-  const minimums: Partial<Record<Pos, number>> = {
-    QB: 2, RB: 2, WR: 3, TE: 1, OL: 3,
-    DL: 2, EDGE: 2, LB: 2, CB: 3, S: 2, K: 1,
-  };
+  const minimums = CAMP_DEPTH_TARGETS;
   const keep = new Set<string>();
   const keptByPosition = new Map<Pos, number>();
   for (const [pos, minimum] of Object.entries(minimums) as [Pos, number][]) {
@@ -1558,6 +1568,22 @@ export function suggestedCuts(state: SeasonState): string[] {
     roster.filter((player) => !keep.has(player.id)).slice(0, target - keep.size).forEach((player) => keep.add(player.id));
   }
   return roster.filter((player) => !keep.has(player.id)).map((player) => player.id);
+}
+
+const CAMP_DEPTH_TARGETS: Partial<Record<Pos, number>> = {
+  QB: 2, RB: 2, WR: 3, TE: 1, OL: 3,
+  DL: 2, EDGE: 2, LB: 2, CB: 3, S: 2, K: 1,
+};
+
+export function rosterDepthWarnings(roster: Player[], cutIds: string[] = []): { pos: Pos; count: number; target: number }[] {
+  const cut = new Set(cutIds);
+  const counts = new Map<Pos, number>();
+  for (const player of roster) {
+    if (!cut.has(player.id)) counts.set(player.pos, (counts.get(player.pos) ?? 0) + 1);
+  }
+  return (Object.entries(CAMP_DEPTH_TARGETS) as [Pos, number][])
+    .map(([pos, target]) => ({ pos, target, count: counts.get(pos) ?? 0 }))
+    .filter(({ count, target }) => count < target);
 }
 
 function doCampSelection(state: SeasonState, cutIds: string[]): SeasonState {
@@ -1680,9 +1706,15 @@ function ownerCheckpoint(state: SeasonState): Decision {
 }
 
 function deadlineDecision(state: SeasonState): Decision | null {
-  const roster = yourRoster(state).filter((p) => p.pos !== "QB" && p.ovr >= 75 && p.ovr <= 88);
+  const roster = yourRoster(state).filter((p) =>
+    p.pos !== "QB" &&
+    p.ovr >= 75 &&
+    p.ovr <= 88 &&
+    !tradeContactedRecently(state, p.id)
+  );
   const player = roster.sort((a, b) => b.cap - a.cap)[0];
   if (!player) return null;
+  state.flags[`trade-contact:${player.id}`] = state.year;
   const rng = makeRng(hashSeed(state.seed, "deadline", state.year));
   const from = state.directory.filter((t) => t.id !== state.teamId)[rng.int(10)];
   const round = player.ovr >= 84 ? 2 : 3;
@@ -1846,6 +1878,14 @@ function heal(state: SeasonState) {
       delete state.flags[`return-${player.id}`];
     }
   }
+}
+
+export function playerAvailabilityLabel(state: SeasonState, player: Player): string | null {
+  if (player.limited) return "Active · reduced effectiveness";
+  if (!player.injured) return null;
+  const returnWeek = state.flags[`return-${player.id}`];
+  if (typeof returnWeek === "number" && returnWeek <= state.seasonLength) return `Out · projected return Week ${returnWeek}`;
+  return "Out for the season · no projected return this season";
 }
 
 function resolveLimitedPlayers(state: SeasonState) {

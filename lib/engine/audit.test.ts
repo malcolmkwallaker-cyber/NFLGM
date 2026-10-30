@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advancedLines, applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerTradeValue, rolloverSeason, rosterForDisplay, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
+import { advancedLines, applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerAvailabilityLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -160,6 +160,43 @@ describe("audit regressions", () => {
     const state = advanceTo(createSeason({ teamId: "KC", gmName: "Return Audit", seed: 222 }), "trade");
     expect(state.tradeOffers.length).toBeGreaterThan(0);
     expect(state.tradeOffers.every((offer) => Boolean(offer.incoming || offer.pickRound))).toBe(true);
+  });
+
+  it("protects a new signing from offseason calls and remembers contacted players into the next season", () => {
+    let state = advanceTo(createSeason({ teamId: "NE", gmName: "Trade Contact Audit", seed: 10301 }), "fa");
+    state.capMode = "payroll";
+    state = applyAction(state, { type: "next-wave" });
+    const signing = state.faBoard[0];
+    if (!signing) throw new Error("Free-agent signing fixture missing");
+    signing.ovr = 80;
+    signing.pos = "WR";
+    state = applyAction(state, { type: "sign", playerId: signing.id });
+    state = applyAction(state, { type: "next-wave" });
+    state = applyAction(state, { type: "next-wave" });
+    expect(state.phase).toBe("trade");
+    expect(state.tradeOffers.some((offer) => offer.wantId === signing.id)).toBe(false);
+
+    const contacted = state.tradeOffers.find((offer) => yourRoster(state).some((player) => player.id === offer.wantId));
+    if (!contacted) throw new Error("Trade-contact fixture missing");
+    expect(state.flags[`trade-contact:${contacted.wantId}`]).toBe(state.year);
+    const contactedNames = state.tradeOffers.map((offer) => offer.wantName);
+    let deadlineProbe = advanceTo(state, "regular");
+    deadlineProbe.activeDecision = null;
+    deadlineProbe.week = 9;
+    deadlineProbe = applyAction(deadlineProbe, { type: "play-week" });
+    expect(deadlineProbe.week).toBe(10);
+    expect(deadlineProbe.activeDecision?.id).toBe("deadline");
+    expect(contactedNames.some((name) => deadlineProbe.activeDecision?.title.includes(name))).toBe(false);
+
+    let nextSeasonProbe = JSON.parse(JSON.stringify(state)) as SeasonState;
+    nextSeasonProbe.year += 1;
+    nextSeasonProbe.phase = "fa";
+    nextSeasonProbe.faWave = 3;
+    nextSeasonProbe.faBoard = [];
+    nextSeasonProbe.recentTradeTargets = [];
+    nextSeasonProbe.recentTradeTeams = [];
+    nextSeasonProbe = applyAction(nextSeasonProbe, { type: "next-wave" });
+    expect(nextSeasonProbe.tradeOffers.some((offer) => offer.wantId === contacted.wantId)).toBe(false);
   });
 
   it("values age, position, contract control, and protects young franchise quarterbacks in trade calls", () => {
@@ -774,6 +811,28 @@ describe("audit regressions", () => {
     expect(market.log.at(-1)).toContain(`Fans ${beforeSigning.fans} → ${market.meters.fans}`);
   });
 
+  it("keeps the scouting-director meter delta visible after the cap sheet opens", () => {
+    let state = applyAction(createSeason({ teamId: "NE", gmName: "Scout Delta Audit", seed: 10302 }), { type: "intro", choice: "embrace" });
+    while (state.phase === "staff" && state.staffStep < 3) {
+      const role = ["hc", "oc", "dc", "scout"][state.staffStep] as "hc" | "oc" | "dc" | "scout";
+      const candidate = state.market[role][0];
+      state = applyAction(state, { type: "hire", id: candidate.id });
+    }
+    expect(state.phase).toBe("staff");
+    const scout = state.market.scout[0];
+    const before = { ...state.meters };
+    state = applyAction(state, { type: "hire", id: scout.id });
+
+    expect(state.phase).toBe("cap");
+    const analytics = state.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+    expect(analytics).toContain(`Owner ${before.owner} → ${state.meters.owner}`);
+    expect(analytics).toContain(`Fans ${before.fans} → ${state.meters.fans}`);
+    expect(analytics).toContain(`Locker ${before.locker} → ${state.meters.locker}`);
+    expect(analytics).toContain("Cap room now");
+    expect(state.decisions.at(-1)?.title).toBe("Hire SCOUT");
+    expect(state.decisions.at(-1)?.log).toContain(`Owner ${before.owner} → ${state.meters.owner}`);
+  });
+
   it("does not claim expiring players were retained when none reached the market", () => {
     let state = advanceTo(createSeason({ teamId: "KC", gmName: "Closing Copy Audit", seed: 1029 }), "fa");
     for (const player of yourRoster(state)) player.years = Math.max(1, player.years);
@@ -998,6 +1057,22 @@ describe("audit regressions", () => {
     const resolved = yourRoster(state).find((player) => player.id === playerId);
     expect(resolved?.limited).toBe(false);
     expect(state.log.some((line) => line.includes("reduced effectiveness"))).toBe(true);
+  });
+
+  it("labels season-long injuries honestly and warns when camp lacks position depth", () => {
+    const state = createSeason({ teamId: "NE", gmName: "Availability Audit", seed: 10303, mode: "season" });
+    const brown = yourRoster(state).find((player) => player.name === "A.J. Brown");
+    if (!brown) throw new Error("A.J. Brown fixture missing");
+    expect(brown.injured).toBe(true);
+    expect(playerAvailabilityLabel(state, brown)).toBe("Out for the season · no projected return this season");
+    state.flags[`return-${brown.id}`] = 6;
+    expect(playerAvailabilityLabel(state, brown)).toBe("Out · projected return Week 6");
+
+    const underContract = yourRoster(state).filter((player) => player.years > 0);
+    const warnings = rosterDepthWarnings(underContract);
+    expect(warnings).toContainEqual({ pos: "RB", count: 1, target: 2 });
+    const onlyRunningBack = underContract.find((player) => player.pos === "RB");
+    expect(onlyRunningBack?.name).toBe("TreVeyon Henderson");
   });
 
   it("explains dead-money and owner-confidence rollover without losing pushed obligations", () => {
