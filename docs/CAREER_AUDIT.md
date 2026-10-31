@@ -1,5 +1,23 @@
 # NFLGM career-mode audit
 
+## 2026-10-31 Daily #234 / 2008 Detroit Turnaround report disposition
+
+Source: Google Doc `1aCQGp3-0J0a37CmjUFxFuECXF9Sy7_mFO6EtFLxRIWI` and matching Slack report posted 2026-10-31. These are duplicate copies of one production report against footer build `3a02d34`; there were no replies or comments. The report covered Daily #234 and Turnaround #9 (2008 Detroit), seed `1602321443`. Findings were checked against exact source `3a02d347e5e853b49f5b1736bec483cd41ee7d76`. Scoped implementation commit: `e849c6d320b10228f8efc3fb5b148c6e9272808f`.
+
+| Finding | Disposition |
+| --- | --- |
+| The overwrite confirmation does not say whether Daily progress survives | Confirmed copy gap. Every saved-file replacement warning now says that Daily Challenge results and the streak stay untouched. Save-slot behavior did not change. |
+| Trade-call prose says `NO called about Cliff Avril` | Confirmed internal-label leak. Trade cards, contract-year calls, transaction logs, accepted-trade logs, and acquired-pick provenance now use the offering team's city, such as `New Orleans`, instead of its internal abbreviation. Team IDs and saves are unchanged. |
+| The offseason cap sheet does not preview a cut's dead-money charge | Confirmed transparency gap. Every active-contract Cut button now shows the exact current-year dead-money charge that the engine will apply. The shared calculation is regression-tested against the resulting ledger. |
+| A Good-value deadline offer can still lower owner, fan, and locker meters | Arithmetic was correct and already previewed, but the relationship remained easy to misread. Deadline copy now separates `Asset value` from `Brief reaction` and states that the asset grade does not set meter changes. The reported culture-brief effects remain unchanged. |
+| Staff candidates do not preview meter effects before hiring | Confirmed modest presentation gap. Candidate cards now show deterministic owner, fan, and locker effects using the exact shared engine calculation, including applied-versus-requested effects at a meter ceiling. Hiring balance did not change. |
+| Cap limit should appear beside cap room | Already present on the current cap sheet as `Limit $322.0M` directly below room, with current and future dead-money context. No duplicate label was added. |
+| 0–16 Detroit drafts late and uses the game's modern cap | Previously documented scenario adaptations, not newly reproduced arithmetic defects. Turnaround keeps original-team players but uses the modern 17-game schedule, cap economy, and modeled league standings/draft order. No historical-accounting claim or redesign was added. |
+| Quarterly unused-cap penalty and one season's result variance | Insufficient evidence for another balance change. Existing UI identifies the review threshold and affected weeks; one 8–9 run does not establish a formula defect. |
+| Full playoff bracket | Deferred as a major feature proposal outside this maintenance batch. Existing recorded postseason results and champion recap remain available. |
+
+The stale October 30 list, backup-quarterback valuation proposal, and already handled Historical/Turnaround items were not reopened.
+
 ## 2026-10-30 Daily #233 / New England Season report disposition
 
 Source: Google Doc `1zYRZBu8-44dIhplY2rw_d7R6Ym9NLrgycLw4X3HOlGM` and matching Slack report posted 2026-10-30. These are duplicate copies of one manual production report against footer build `07192d9`; there were no replies or comments. The report covered Daily #233 and a 2027 New England Single Season. Findings were checked against exact source `07192d9a74773fdea067b378a01d6cd80bcbee95` and treated as leads.
