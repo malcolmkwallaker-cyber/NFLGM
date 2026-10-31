@@ -504,15 +504,10 @@ function doHire(state: SeasonState, id: string): SeasonState {
   const member = state.market[role].find((s) => s.id === id);
   if (!member) throw new Error("That candidate already left");
   state.staff[role] = member;
-  const priority = String(state.flags.plan ?? state.owner.priority);
-  let owner = 1;
-  const locker = member.culture >= 4 ? 3 : member.culture <= 2 ? -2 : 0;
-  const fans = member.aggression >= 4 ? 2 : 0;
-  if (priority === "fiscal") owner += member.cost === 1 ? 3 : member.cost === 3 ? -3 : 0;
-  if (priority === "youth") owner += member.development >= 4 ? 3 : -1;
-  if (priority === "win") owner += member.aggression >= 4 ? 2 : 0;
-  if (priority === "culture") owner += member.culture >= 4 ? 3 : -2;
-  if (priority === "stars") owner += member.cost === 3 ? 2 : 0;
+  const impact = staffImpactPreview(state, member);
+  const owner = impact.owner.requested;
+  const fans = impact.fans.requested;
+  const locker = impact.locker.requested;
   const before = { ...state.meters };
   bump(state, owner, fans, locker);
   pushDecision(state, `Hire ${role.toUpperCase()}`, member.name, `Hired ${member.name} as ${role.toUpperCase()}. ${meterChanges(before, state.meters)}`, owner);
@@ -525,6 +520,27 @@ function doHire(state: SeasonState, id: string): SeasonState {
     analytics: `${member.scheme} is the tell. Leadership ${member.leadership}/5, development ${member.development}/5. ${meterChanges(before, state.meters)}${completedStaff ? ` Cap room now ${formatMoney(capSpace(state))}.` : ""}`,
   });
   return state;
+}
+
+export function staffImpactPreview(state: SeasonState, member: StaffMember) {
+  const priority = String(state.flags.plan ?? state.owner.priority);
+  let owner = 1;
+  const locker = member.culture >= 4 ? 3 : member.culture <= 2 ? -2 : 0;
+  const fans = member.aggression >= 4 ? 2 : 0;
+  if (priority === "fiscal") owner += member.cost === 1 ? 3 : member.cost === 3 ? -3 : 0;
+  if (priority === "youth") owner += member.development >= 4 ? 3 : -1;
+  if (priority === "win") owner += member.aggression >= 4 ? 2 : 0;
+  if (priority === "culture") owner += member.culture >= 4 ? 3 : -2;
+  if (priority === "stars") owner += member.cost === 3 ? 2 : 0;
+  const effect = (before: number, requested: number, ceiling: number) => ({
+    requested,
+    applied: requested === 0 ? 0 : clamp(Math.round(before + requested), 0, ceiling) - before,
+  });
+  return {
+    owner: effect(state.meters.owner, owner, 96),
+    fans: effect(state.meters.fans, fans, 100),
+    locker: effect(state.meters.locker, locker, 96),
+  };
 }
 
 function openCap(state: SeasonState) {
@@ -575,7 +591,7 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     return state;
   }
   roster.splice(roster.indexOf(player), 1);
-  const dead = Math.round(player.cap * 0.45 * 10) / 10;
+  const dead = capCutDeadMoney(player);
   state.deadMoney = Math.round((state.deadMoney + dead) * 10) / 10;
   persistActiveCapLiabilities(state);
   bump(state, 0, player.ovr >= 80 ? -5 : -2, player.ovr >= 80 ? -4 : -2);
@@ -587,6 +603,10 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     analytics: `Cap space moves to ${formatMoney(capSpace(state))}. Dead money is ${formatMoney(state.deadMoney)}.`,
   });
   return state;
+}
+
+export function capCutDeadMoney(player: Player): number {
+  return Math.round(player.cap * 0.45 * 10) / 10;
 }
 
 function biggestCap(roster: Player[]): Player | undefined {
@@ -1135,7 +1155,7 @@ function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonSt
   const offer = state.tradeOffers.find((o) => o.id === offerId);
   if (!offer) throw new Error("That offer expired");
   if (accept) applyOffer(state, offer);
-  else pushDecision(state, "Trade", `Passed on ${offer.wantName}`, `Declined the ${teamById(offer.fromTeamId, state.directory).abbr} call about ${offer.wantName}.`, 0);
+  else pushDecision(state, "Trade", `Passed on ${offer.wantName}`, `Declined the ${teamById(offer.fromTeamId, state.directory).city} call about ${offer.wantName}.`, 0);
   state.tradeOffers = state.tradeOffers.filter((o) => o.id !== offerId);
   return state;
 }
@@ -1157,13 +1177,13 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
     state.extraPicks.push({
       round: offer.pickRound,
       year: offer.pickYear,
-      source: `Trade with ${teamById(offer.fromTeamId, state.directory).abbr}`,
+      source: `Trade with ${teamById(offer.fromTeamId, state.directory).city}`,
     });
   }
   const swing = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
   bump(state, swing, offer.fair === "fleece" ? -3 : 0, sent.ovr >= 85 ? -2 : 0);
   const got = offer.incoming ? tradeIncomingName(offer.incoming) : offer.pickRound ? `a ${offer.pickYear} round ${offer.pickRound}` : "nothing you wanted";
-  pushDecision(state, "Trade", `Moved ${sent.name}`, `Traded ${sent.name} to ${teamById(offer.fromTeamId, state.directory).abbr} for ${got}.`, swing);
+  pushDecision(state, "Trade", `Moved ${sent.name}`, `Traded ${sent.name} to ${teamById(offer.fromTeamId, state.directory).city} for ${got}.`, swing);
   state.headlines = makeHeadlines(state, swing >= 0 ? "positive" : "negative", {
     beat: `${sent.name} is gone. Coming back: ${got}.`,
     national: offer.fair === "fleece" ? "That is how you lose a locker room and the trade chart." : "The calls are getting sharper.",
@@ -1189,7 +1209,7 @@ function doShop(state: SeasonState, playerId: string): SeasonState {
     incoming: null,
     pickRound,
     pickYear: state.year + 1,
-    blurb: `${from?.abbr ?? "A rival"} will give you a round ${pickRound} next year. No player coming back. Age, position, contract control, and draft value all shape the return. The chart calls this ${tradeValueLabel(fair).toLowerCase()}.`,
+    blurb: `${from?.city ?? "A rival"} will give you a round ${pickRound} next year. No player coming back. Age, position, contract control, and draft value all shape the return. The chart calls this ${tradeValueLabel(fair).toLowerCase()}.`,
     fair,
   };
   state.shopUsed = true;
@@ -1724,10 +1744,10 @@ function deadlineDecision(state: SeasonState): Decision | null {
     id: "deadline",
     kicker: "Trade deadline",
     title: `${from?.abbr ?? "A rival"} calls about ${player.name}`,
-    body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. The trade chart rates this ${tradeValueLabel(valueGrade).toLowerCase()}. The owner's reaction below reflects the ${priorityLabel(state.owner.priority).toLowerCase()} brief, which is separate from the trade chart. After today the phones are props.`,
+    body: `The deadline is this afternoon. ${from?.city ?? "A rival"} will send a ${state.year + 1} round-${round} pick for ${player.name}. Asset value: ${tradeValueLabel(valueGrade)}. Brief reaction: the owner's meter follows the ${priorityLabel(state.owner.priority).toLowerCase()} brief, not the asset grade. After today the phones are props.`,
     options: [
       { id: "keep", label: `Keep ${player.name}`, detail: "You are trying to win the games on the schedule. Owner +1, fans +2, locker +2.", owner: 1, fans: 2, locker: 2, log: `Kept ${player.name} through the deadline.`, swing: 2 },
-      { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: `Take the pick and the cap. Trade chart: ${tradeValueLabel(valueGrade)}; that grade does not set the meter change. Owner ${youthBrief ? "+4 because the brief prioritizes building young" : `−2 because the ${priorityLabel(state.owner.priority).toLowerCase()} brief does not reward this sale`}; fans −3, locker −2.`, owner: youthBrief ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
+      { id: "deal", label: `Trade ${player.name} for a round ${round}`, detail: `Asset value: ${tradeValueLabel(valueGrade)}. Brief reaction: Owner ${youthBrief ? "+4 because the brief prioritizes building young" : `−2 because the ${priorityLabel(state.owner.priority).toLowerCase()} brief does not reward this sale`}; fans −3, locker −2. The asset grade does not set these meter changes.`, owner: youthBrief ? 4 : -2, fans: -3, locker: -2, log: `Traded ${player.name} at the deadline.`, tag: `deadline:${player.id}:${round}`, swing: -1 },
     ],
   };
 }

@@ -33,6 +33,7 @@ describe("independent save slots", () => {
 
     expect(warning).toContain("replaces your saved Single Season file (BUF 2027)");
     expect(warning).toContain("active Career will be paused, not deleted");
+    expect(warning).toContain("Daily Challenge results and streak stay untouched");
   });
 
   it("warns before replacing a career and preserves the season slot when merely switching", () => {
@@ -46,6 +47,7 @@ describe("independent save slots", () => {
 
     expect(warning).toContain("replaces your saved Career file (Two Slot GM)");
     expect(warning).toContain("Single Season will be paused, not deleted");
+    expect(warning).toContain("Daily Challenge results and streak stay untouched");
     expect(resumed.season).toBe(profile.season);
     expect(resumed.career).toBe(profile.career);
   });

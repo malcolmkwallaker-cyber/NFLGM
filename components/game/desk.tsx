@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, divisionTable, freeAgentNegotiationPreview, playerAvailabilityLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, playerAvailabilityLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -309,7 +309,9 @@ function Staff({ season, role }: { season: SeasonState; role: StaffRole }) {
     <section className="space-y-3">
       <h2 className="font-display text-2xl tracking-wide">Hire your {ROLE_LABEL[role].toLowerCase()}</h2>
       <div className="grid gap-2">
-        {season.market[role].map((member) => (
+        {season.market[role].map((member) => {
+          const impact = staffImpactPreview(season, member);
+          return (
           <button
             key={member.id}
             type="button"
@@ -328,8 +330,12 @@ function Staff({ season, role }: { season: SeasonState; role: StaffRole }) {
             <span className="mt-2 block text-xs uppercase tracking-wider text-muted-foreground">
               Lead {member.leadership} · Develop {member.development} · Aggression {member.aggression} · Cost {member.cost}
             </span>
+            <span className="mt-2 block text-xs text-muted-foreground">
+              If hired: owner {meterPreview(impact.owner)}, fans {meterPreview(impact.fans)}, locker {meterPreview(impact.locker)}.
+            </span>
           </button>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -384,7 +390,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
                 {player.years <= 0 ? "Expired — decide in free agency" : alreadyRestructured ? "Already restructured" : "Restructure"}
               </Button>
               <Button variant="ghost" disabled={player.years <= 0} data-testid={`choice-cut-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "cut", playerId: player.id })}>
-                {player.years <= 0 ? "No active deal" : "Cut"}
+                {player.years <= 0 ? "No active deal" : `Cut · ${money(capCutDeadMoney(player))} dead`}
               </Button>
             </div>
           </div>
@@ -583,7 +589,7 @@ function Trades({
         return (
         <article key={offer.id} className="rounded-xl border border-white/10 bg-card p-4">
           <div className="flex items-center justify-between gap-2">
-            <p className="font-medium">{offer.fromTeamId} called about {offer.wantName}</p>
+            <p className="font-medium">{teamById(offer.fromTeamId, season.directory).city} called about {offer.wantName}</p>
             <Badge variant={offer.fair === "fleece" ? "destructive" : "outline"}>
               {offer.fair === "bargain" ? "Good value for you" : offer.fair === "fleece" ? "Poor value for you" : "Fair value for you"}
             </Badge>
@@ -863,7 +869,7 @@ function Regular({
       {season.shop ? (
         <article className="rounded-2xl border border-primary/40 bg-card p-4" aria-label="Contract-year trade offer">
           <p className="text-xs uppercase tracking-[0.16em] text-primary">Trade offer · no move yet</p>
-          <h2 className="mt-1 font-display text-2xl tracking-wide">{season.shop.fromTeamId} called about {season.shop.wantName}</h2>
+          <h2 className="mt-1 font-display text-2xl tracking-wide">{teamById(season.shop.fromTeamId, season.directory).city} called about {season.shop.wantName}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{season.shop.blurb}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button data-testid="choice-contract-trade-accept" onClick={() => dispatch({ type: "shop-resolve", accept: true })}>Accept the offer</Button>

@@ -27,5 +27,7 @@ export function startSaveWarning(profile: Profile, slot: SaveSlot, modeName: str
       warnings.push("Your Single Season will be paused, not deleted, and remains available from Season Mode.");
     }
   }
-  return warnings.length ? `${warnings.join(" ")} Continue?` : null;
+  return warnings.length
+    ? `${warnings.join(" ")} Your Daily Challenge results and streak stay untouched. Continue?`
+    : null;
 }

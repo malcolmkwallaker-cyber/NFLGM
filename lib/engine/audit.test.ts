@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advancedLines, applyAction, campCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerAvailabilityLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
+import { advancedLines, applyAction, campCutDeadMoney, capCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerAvailabilityLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -790,7 +790,11 @@ describe("audit regressions", () => {
     const role = ["hc", "oc", "dc"][staff.staffStep] as "hc" | "oc" | "dc";
     const hire = staff.market[role][0];
     const beforeHire = { ...staff.meters };
+    const preview = staffImpactPreview(staff, hire);
     staff = applyAction(staff, { type: "hire", id: hire.id });
+    expect(staff.meters.owner - beforeHire.owner).toBe(preview.owner.applied);
+    expect(staff.meters.fans - beforeHire.fans).toBe(preview.fans.applied);
+    expect(staff.meters.locker - beforeHire.locker).toBe(preview.locker.applied);
     const hireAnalytics = staff.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
     expect(hireAnalytics).toContain(`Owner ${beforeHire.owner} → ${staff.meters.owner}`);
     expect(hireAnalytics).toContain(`Fans ${beforeHire.fans} → ${staff.meters.fans}`);
@@ -939,6 +943,16 @@ describe("audit regressions", () => {
     expect(priorMarket.prospects.some((prospect) => prospect.name === marketName)).toBe(false);
   });
 
+  it("uses team city names instead of internal abbreviations in trade-call prose", () => {
+    let state = advanceTo(createSeason({ teamId: "DET", gmName: "Trade Prose Audit", seed: 10311 }), "trade");
+    const offer = state.tradeOffers[0];
+    if (!offer) throw new Error("Trade-call fixture missing");
+    offer.fromTeamId = "NO";
+    state = applyAction(state, { type: "trade", offerId: offer.id, accept: false });
+    expect(state.decisions.at(-1)?.log).toContain("New Orleans call");
+    expect(state.decisions.at(-1)?.log).not.toContain("the NO call");
+  });
+
   it("records the exact owner year-end review and labels a Super Bowl loss as runner-up", () => {
     let recap: SeasonState | null = null;
     for (let seed = 1; seed <= 60 && !recap; seed += 1) {
@@ -1014,6 +1028,22 @@ describe("audit regressions", () => {
     expect(regular.deadMoney).toBe(Math.round((before + expected) * 10) / 10);
     expect(regular.teamCapLiabilities?.KC?.deadMoney).toBe(regular.deadMoney);
     expect(regular.decisions[0]?.log).toContain(`$${expected.toFixed(1)}M`);
+  });
+
+  it("previews the exact dead-money charge for an offseason cut", () => {
+    let state = createSeason({ teamId: "DET", gmName: "Cap Cut Preview", seed: 1031, mode: "season" });
+    state = applyAction(state, { type: "intro", choice: "embrace" });
+    while (state.phase === "staff") {
+      const role = ["hc", "oc", "dc", "scout"][state.staffStep] as "hc" | "oc" | "dc" | "scout";
+      state = applyAction(state, { type: "hire", id: state.market[role][0].id });
+    }
+    const player = yourRoster(state).filter((candidate) => candidate.years > 0).sort((a, b) => b.cap - a.cap)[0];
+    if (!player) throw new Error("Cap-cut fixture missing");
+    const expected = capCutDeadMoney(player);
+    const before = state.deadMoney;
+    state = applyAction(state, { type: "cap", choice: "cut", playerId: player.id });
+    expect(state.deadMoney).toBe(Math.round((before + expected) * 10) / 10);
+    expect(state.decisions.at(-1)?.log).toContain(`$${expected.toFixed(1)}M`);
   });
 
   it("migrates an older deadlocked camp save without losing the original", () => {
