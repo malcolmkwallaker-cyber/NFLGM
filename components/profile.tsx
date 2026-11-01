@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
+import { advanceCareer, createCareer, recordCompletedSeason, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
 import { advanceDailyProgress, challengeForDate, optionById } from "@/lib/engine/daily";
 import { applyAction, createSeason } from "@/lib/engine/season";
 import { freshProfile, loadProfile, saveProfile } from "@/lib/storage";
@@ -84,7 +84,7 @@ function currentSeason(profile: Profile): SeasonState | null {
 
 function writeSeason(profile: Profile, season: SeasonState): Profile {
   if (profile.active === "career" && profile.career) {
-    return { ...profile, career: { ...profile.career, season } };
+    return { ...profile, career: recordCompletedSeason({ ...profile.career, season }) };
   }
   return { ...profile, active: "season", season };
 }

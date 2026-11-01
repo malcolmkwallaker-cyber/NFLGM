@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { advanceCareer, createCareer, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
+import { advanceCareer, createCareer, recordCompletedSeason, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
 import { advancedLines, applyAction, campCutDeadMoney, capCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerAvailabilityLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
@@ -37,6 +37,8 @@ describe("audit regressions", () => {
     expect(existing.pro).toBe(false);
     expect(hasFullAccess(existing)).toBe(true);
     if (!existing.career) throw new Error("Existing career save was lost");
+    expect(existing.career.history).toHaveLength(1);
+    expect(recordCompletedSeason(existing.career).history).toHaveLength(1);
     const yearTwo = advanceCareer(existing.career);
     expect(yearTwo.history).toHaveLength(1);
     expect(yearTwo.season.year).toBe(savedCareer.season.year + 1);
@@ -323,6 +325,17 @@ describe("audit regressions", () => {
     state = applyAction(state, { type: "cap", choice: "restructure", playerId: player.id });
     expect(state.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain(`Owner confidence ${before}`);
     expect(state.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain(String(state.meters.owner));
+    expect(state.headlines.find((headline) => headline.outlet === "national")?.text).toContain("does not erase salary");
+  });
+
+  it("does not offer a kicker-based Week 1 plan when the roster has no kicker", () => {
+    let state = advanceTo(createSeason({ teamId: "SEA", gmName: "Kicker Copy Audit", seed: 1101 }), "camp");
+    state.teams.SEA.roster = yourRoster(state).filter((player) => player.pos !== "K");
+    state = applyAction(state, { type: "camp", cutIds: suggestedCuts(state) });
+    expect(state.activeDecision?.id).toBe("identity");
+    const conservative = state.activeDecision?.options.find((option) => option.id === "conservative");
+    expect(conservative?.label).toBe("Trust the defense and field position");
+    expect(conservative?.detail).not.toMatch(/kicker/i);
   });
 
   it("shows the exact weekly owner-confidence change and its components", () => {
@@ -487,7 +500,8 @@ describe("audit regressions", () => {
     delete career.season.faPool;
     const migrated = migrateProfile(JSON.parse(JSON.stringify({ ...freshProfile(), active: "career", career })));
     expect(migrated.career?.season.year).toBe(expectedYear);
-    expect(migrated.career?.history).toHaveLength(19);
+    expect(migrated.career?.history).toHaveLength(20);
+    expect(new Set(migrated.career?.history.map((row) => `${row.year}-${row.teamId}`))).toHaveLength(20);
     expect(migrated.career?.season.capLimit).toBe(expectedCap);
     expect(migrated.career?.season.teams.NYJ.roster.find((player) => player.id === expectedContract?.id)?.cap).toBe(expectedContract?.cap);
   }, 15_000);
@@ -953,6 +967,21 @@ describe("audit regressions", () => {
     expect(state.decisions.at(-1)?.log).not.toContain("the NO call");
   });
 
+  it("replaces an accepted-trade headline after the next call is declined", () => {
+    let state = advanceTo(createSeason({ teamId: "SEA", gmName: "Trade Headline Audit", seed: 11016 }), "trade");
+    expect(state.tradeOffers.length).toBeGreaterThanOrEqual(2);
+    const accepted = state.tradeOffers[0];
+    state = applyAction(state, { type: "trade", offerId: accepted.id, accept: true });
+    const acceptedAnalytics = state.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+    expect(acceptedAnalytics).toContain("Owner confidence");
+    const declined = state.tradeOffers[0];
+    state = applyAction(state, { type: "trade", offerId: declined.id, accept: false });
+    const declinedAnalytics = state.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+    expect(declinedAnalytics).toContain("Declined");
+    expect(declinedAnalytics).toContain(`Owner ${state.meters.owner} → ${state.meters.owner} (0)`);
+    expect(state.headlines.some((headline) => headline.text.includes(accepted.wantName))).toBe(false);
+  });
+
   it("records the exact owner year-end review and labels a Super Bowl loss as runner-up", () => {
     let recap: SeasonState | null = null;
     for (let seed = 1; seed <= 60 && !recap; seed += 1) {
@@ -1210,6 +1239,12 @@ describe("audit regressions", () => {
     expect(impact.locker).toEqual({ requested: 0, applied: 0 });
     expect(impact.capRoomChange).toBe(-6.6);
     expect(tradeIncomingName(incoming)).toBe("depth RB");
+    state.phase = "trade";
+    state.tradeOffers = [offer];
+    const accepted = applyAction(state, { type: "trade", offerId: offer.id, accept: true });
+    const acquired = yourRoster(accepted).find((player) => player.id === incoming.id);
+    expect(acquired?.name).toBe("Cincinnati depth player");
+    expect(acquired?.name).not.toMatch(/Replacement|2028|21/);
   });
 
   it("keeps new draft names distinct from the current roster and hides true grades until camp", () => {

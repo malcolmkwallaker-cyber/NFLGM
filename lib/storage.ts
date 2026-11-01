@@ -1,5 +1,6 @@
 import type { Profile } from "@/lib/types";
 import { ensureMinimumRoster, suggestedCuts } from "@/lib/engine/season";
+import { recordCompletedSeason } from "@/lib/engine/career";
 import { normalizeGmName } from "@/lib/gm-name";
 
 export const STORAGE_KEY = "nfl-gm-career-v1";
@@ -60,6 +61,7 @@ export function migrateProfile(profile: Profile): Profile {
     }
     if (addedToUser.length) season.campCutIds = suggestedCuts(season);
   }
+  if (next.career) next.career = recordCompletedSeason(next.career);
   return next;
 }
 

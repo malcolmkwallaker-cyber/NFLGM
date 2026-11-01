@@ -56,21 +56,24 @@ export function createCareer(gmName: string, teamId: string, seed?: number): Car
   };
 }
 
+export function recordCompletedSeason(career: CareerState): CareerState {
+  const phase = career.season.phase;
+  if (phase !== "recap" && phase !== "fired") return career;
+  const already = career.history.some((row) => row.year === career.season.year && row.teamId === career.season.teamId);
+  if (already) return career;
+  const summary = summarize(career.season);
+  return {
+    ...career,
+    legacy: career.legacy + summary.legacy,
+    superBowls: career.superBowls + (summary.champ ? 1 : 0),
+    fired: career.fired + (summary.fired ? 1 : 0),
+    history: [...career.history, summary],
+  };
+}
+
 export function retireCareer(career: CareerState): CareerState {
   if (career.status === "retired" && career.wikipedia) return career;
-  let next = career;
-  const phase = career.season.phase;
-  const already = career.history.some((row) => row.year === career.season.year && row.teamId === career.season.teamId);
-  if ((phase === "recap" || phase === "fired") && !already) {
-    const summary = summarize(career.season);
-    next = {
-      ...career,
-      legacy: career.legacy + summary.legacy,
-      superBowls: career.superBowls + (summary.champ ? 1 : 0),
-      fired: career.fired + (summary.fired ? 1 : 0),
-      history: [...career.history, summary],
-    };
-  }
+  const next = recordCompletedSeason(career);
   const retired = { ...next, status: "retired" as const, wikipedia: "" };
   retired.wikipedia = writeWikipedia(retired);
   return retired;
@@ -78,13 +81,10 @@ export function retireCareer(career: CareerState): CareerState {
 
 export function advanceCareer(career: CareerState): CareerState {
   if (career.season.phase !== "recap") throw new Error("Finish the season before the next year");
-  const summary = summarize(career.season);
+  const recorded = recordCompletedSeason(career);
   return {
-    ...career,
-    legacy: career.legacy + summary.legacy,
-    superBowls: career.superBowls + (summary.champ ? 1 : 0),
-    history: [...career.history, summary],
-    season: rolloverSeason(career.season),
+    ...recorded,
+    season: rolloverSeason(recorded.season),
     jobOffers: [],
   };
 }
@@ -115,16 +115,13 @@ export function withJobOffers(career: CareerState): CareerState {
 }
 
 export function takeJob(career: CareerState, teamId: string): CareerState {
-  const summary = summarize(career.season);
   if (!career.season.teams[teamId]) throw new Error("That job is no longer available");
-  const previousTeamId = career.season.teamId;
-  const season = prepareNewJob(rolloverSeason(career.season), teamId, previousTeamId);
+  const recorded = recordCompletedSeason(career);
+  const previousTeamId = recorded.season.teamId;
+  const season = prepareNewJob(rolloverSeason(recorded.season), teamId, previousTeamId);
   return {
-    ...career,
-    jobs: career.jobs + 1,
-    fired: career.fired + 1,
-    legacy: career.legacy + summary.legacy,
-    history: [...career.history, summary],
+    ...recorded,
+    jobs: recorded.jobs + 1,
     season,
     jobOffers: [],
     status: "active",

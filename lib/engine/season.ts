@@ -585,7 +585,7 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     pushDecision(state, "Cap", `Restructured ${player.name}`, `Restructured ${player.name}, saving $${saved.toFixed(1)}M now and pushing it forward. Owner ${formatSigned(ownerDelta)}.`, ownerDelta);
     state.headlines = makeHeadlines(state, "neutral", {
       beat: `${player.name}'s number drops this year. The bill does not disappear.`,
-      national: "A restructure is not a savings plan. It is a calendar.",
+      national: "A restructure moves a cap charge into next year. It does not erase salary.",
       analytics: `About ${formatMoney(saved)} moved into future dead money. Space is now ${formatMoney(capSpace(state))}. Owner confidence ${ownerBefore} → ${state.meters.owner} (${formatSigned(ownerDelta)}); locker ${formatSigned(-1)}.`,
     });
     return state;
@@ -1155,7 +1155,15 @@ function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonSt
   const offer = state.tradeOffers.find((o) => o.id === offerId);
   if (!offer) throw new Error("That offer expired");
   if (accept) applyOffer(state, offer);
-  else pushDecision(state, "Trade", `Passed on ${offer.wantName}`, `Declined the ${teamById(offer.fromTeamId, state.directory).city} call about ${offer.wantName}.`, 0);
+  else {
+    const caller = teamById(offer.fromTeamId, state.directory).city;
+    pushDecision(state, "Trade", `Passed on ${offer.wantName}`, `Declined the ${caller} call about ${offer.wantName}.`, 0);
+    state.headlines = makeHeadlines(state, "neutral", {
+      beat: `${caller}'s offer for ${offer.wantName} is off the table. No roster move was made.`,
+      national: `${gmSubject(state.gmName)} passed on the call. The player and pick sheet stay where they were.`,
+      analytics: `Declined ${tradeValueLabel(offer.fair).toLowerCase()}. Owner ${state.meters.owner} → ${state.meters.owner} (0), fans ${state.meters.fans} → ${state.meters.fans} (0), locker ${state.meters.locker} → ${state.meters.locker} (0).`,
+    });
+  }
   state.tradeOffers = state.tradeOffers.filter((o) => o.id !== offerId);
   return state;
 }
@@ -1171,7 +1179,17 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
   from.roster.push({ ...sent, origin: state.teamId });
   if (offer.incoming) {
     from.roster = from.roster.filter((p) => p.id !== offer.incoming?.id);
-    roster.push({ ...offer.incoming, origin: offer.fromTeamId });
+    const internalPlaceholder = /\bReplacement\b/i.test(offer.incoming.name);
+    const caller = teamById(offer.fromTeamId, state.directory).city;
+    const baseDisplayName = `${caller} depth player`;
+    const displayName = roster.some((player) => player.name === baseDisplayName)
+      ? `${caller} depth ${offer.incoming.pos}`
+      : baseDisplayName;
+    roster.push({
+      ...offer.incoming,
+      name: internalPlaceholder ? displayName : offer.incoming.name,
+      origin: offer.fromTeamId,
+    });
   }
   if (offer.pickRound && offer.pickYear) {
     state.extraPicks.push({
@@ -1666,8 +1684,8 @@ function prepareWeek(state: SeasonState) {
 }
 
 function scriptedDecision(state: SeasonState): Decision | null {
-  if (state.week === 1 && !state.ripples.length) return identityDecision();
-  if (state.week === 1 && state.historicalId !== "1999-rams") return identityDecision();
+  if (state.week === 1 && !state.ripples.length) return identityDecision(state);
+  if (state.week === 1 && state.historicalId !== "1999-rams") return identityDecision(state);
   if (state.week === 4) return injuryDecision(state);
   if (state.week === 9) return ownerCheckpoint(state);
   if (state.week === 10) return deadlineDecision(state);
@@ -1676,7 +1694,8 @@ function scriptedDecision(state: SeasonState): Decision | null {
   return null;
 }
 
-function identityDecision(): Decision {
+function identityDecision(state: SeasonState): Decision {
+  const hasKicker = yourRoster(state).some((player) => player.pos === "K");
   return {
     id: "identity",
     kicker: "Week 1",
@@ -1685,7 +1704,7 @@ function identityDecision(): Decision {
     options: [
       { id: "balanced", label: "Stay balanced", detail: "Take the points. Take the shots when the math is real.", owner: 1, fans: 1, locker: 1, identity: "balanced", log: "Set a balanced fourth-down rule.", swing: 1 },
       { id: "aggressive", label: "Go for it", detail: "Fourth-and-short is a play, not a punt.", owner: 0, fans: 3, locker: 1, identity: "aggressive", log: "Told the staff to be aggressive on fourth down.", tag: "mod:0.6", swing: 1 },
-      { id: "conservative", label: "Trust the defense and the kicker", detail: "Field position over heroics.", owner: 2, fans: -1, locker: 0, identity: "conservative", log: "Chose a conservative close-game plan.", tag: "mod:-0.2", swing: 1 },
+      { id: "conservative", label: hasKicker ? "Trust the defense and the kicker" : "Trust the defense and field position", detail: hasKicker ? "Field position over heroics." : "Manage the clock and field position without pretending a missing specialist is part of the plan.", owner: 2, fans: -1, locker: 0, identity: "conservative", log: "Chose a conservative close-game plan.", tag: "mod:-0.2", swing: 1 },
     ],
   };
 }
