@@ -1,5 +1,19 @@
 # NFLGM career-mode audit
 
+## 2026-11-01 Daily #235 / Seattle Career report disposition
+
+Source: Google Doc `1Fyqbd7SP5r9OThQOxTWcGFyfH0zULzfkKrGImKDrOqU` and matching Slack report posted 2026-11-01. These are duplicate copies of one production report against footer build `7f997d2`; there were no replies or comments. The report covered Daily #235 and a Seattle Career with seed `3868239877`, completing 2032 and beginning 2033. Findings were checked against exact source `7f997d29f0074064387599c3576a3f85982dcdd9`. Scoped implementation commit: `71ebfef700eb8c66603e141ee12d069f39c379b6`.
+
+| Finding | Disposition |
+| --- | --- |
+| Completed Seattle 2031 remains on its recap but is absent from Career history | Confirmed persistence-timing defect. A completed or fired Career year is now recorded as soon as the phase reaches recap/fired, rather than waiting for the next-season or new-job action. Legacy saves already sitting on an unrecorded recap are backfilled during ordinary load. Recording is keyed by year and team, and advancing, retiring, changing jobs, reloading, or repeating the helper cannot add the same row twice. |
+| A kicker-free camp reaches a Week 1 option that says to trust the kicker | Confirmed state/copy mismatch. The conservative option now says `Trust the defense and field position` when the active roster has no kicker; rosters with a kicker retain the original copy. No automatic signing or roster-balance rule was added. |
+| Declining a second trade call leaves the first accepted trade's owner-change headline visible | Confirmed stale-headline defect. Passing now writes a fresh neutral result stating that no move occurred and all three meters changed by zero. Repeated accept/pass flows are regression-tested. |
+| An accepted legacy trade return appears as `MIA Replacement LB 22`; two players share the name Felix Brooks | Current generation already replaces emergency placeholders with deterministic names and excludes current league/market names from new draft names, so the exact-name pair is consistent with the older saved league rather than a current generator regression. Newly accepted legacy offers now replace an internal `Replacement` label with an honest city-based depth-player label while preserving the player ID and contract. Existing saved identities are not destructively renamed. |
+| Restructure copy says it is not a savings plan after moving $12.6M forward | The arithmetic and owner/locker changes were correct. Copy now states directly that the move shifts a cap charge into next year and does not erase salary; the exact current-room and future-dead-money values remain visible. No restructure balance changed. |
+
+The repeated build-young trade override, broad cap-room and meter-balance proposals, and OL-depth feature idea were not reopened without new deterministic evidence. The report's correctly working trade deltas, decision stops, negotiation locks, recaps, draft slots, and Daily streak behavior were preserved.
+
 ## 2026-10-31 Daily #234 / 2008 Detroit Turnaround report disposition
 
 Source: Google Doc `1aCQGp3-0J0a37CmjUFxFuECXF9Sy7_mFO6EtFLxRIWI` and matching Slack report posted 2026-10-31. These are duplicate copies of one production report against footer build `3a02d34`; there were no replies or comments. The report covered Daily #234 and Turnaround #9 (2008 Detroit), seed `1602321443`. Findings were checked against exact source `3a02d347e5e853b49f5b1736bec483cd41ee7d76`. Scoped implementation commit: `e849c6d320b10228f8efc3fb5b148c6e9272808f`.
