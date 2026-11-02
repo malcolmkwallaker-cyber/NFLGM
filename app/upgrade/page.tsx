@@ -10,7 +10,7 @@ export default function UpgradePage() {
         <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Public playtest</p>
         <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">The whole file is open.</h1>
         <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-          Career mode, historical teams, advanced stat lines, and private leagues are free while public testing is active.
+          Career mode, historical teams, advanced stat lines, and on-device score rooms are free while public testing is active.
           No payment details are requested, stored, or charged.
         </p>
       </header>
@@ -20,7 +20,7 @@ export default function UpgradePage() {
           "Hired, fired, and hired again, with a transparent in-game legacy score",
           "A generated career retrospective when you retire",
           "1985 Bears, 1993 Cowboys, 1999 Rams, 2007 Patriots, 2013 Seahawks, 1989 49ers",
-          "Private leagues by pasting share cards",
+          "On-device score rooms created by pasting result cards",
         ].map((item) => (
           <li key={item} className="rounded-lg border border-white/10 px-3 py-2">
             {item}

@@ -18,7 +18,20 @@ export default function CareerPage() {
       title="Career mode"
       body="Career mode is open during the public playtest. Contracts age, the cap moves, and a firing can become a job change instead of game over."
     >
-      {!ready ? null : career ? (
+      <div className="space-y-5">
+        <section className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Career GM · Free public playtest</p>
+          <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">Build more than one good season</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+            Start with a real team snapshot and make the front-office decisions year after year. Contracts expire, the cap moves, players age, new draft classes arrive, and a firing can lead to another job instead of ending the file.
+          </p>
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+            <p className="rounded-lg border border-white/10 bg-black/20 p-3"><span className="block font-medium">Build the roster</span><span className="mt-1 block text-muted-foreground">Retain your own players, negotiate with free agents, trade, draft, and cut to a viable depth chart.</span></p>
+            <p className="rounded-lg border border-white/10 bg-black/20 p-3"><span className="block font-medium">Answer to the owner</span><span className="mt-1 block text-muted-foreground">Results matter, but so do the goals and cap choices stated in each season&apos;s owner brief.</span></p>
+            <p className="rounded-lg border border-white/10 bg-black/20 p-3"><span className="block font-medium">Keep one Career file</span><span className="mt-1 block text-muted-foreground">Progress auto-saves in this browser. Starting over replaces this Career slot after confirmation; Daily and Single Season remain separate.</span></p>
+          </div>
+        </section>
+        {!ready ? <p className="text-sm text-muted-foreground" role="status">Opening your saved Career file…</p> : career ? (
         <section className="space-y-4">
           <header>
             <p className="text-[11px] uppercase tracking-[0.18em] text-primary">{hofStatus(career)}</p>
@@ -73,14 +86,15 @@ export default function CareerPage() {
             />
           ) : null}
         </section>
-      ) : (
+        ) : (
         <TeamPicker
           title="A career, not a cameo"
           body="Year one is the same desk as a single season. After the recap you age the roster, roll the cap, and go again. Get fired and three other teams might still want a meeting."
           action="Start the career"
           onStart={startCareer}
         />
-      )}
+        )}
+      </div>
     </ProGate>
   );
 }

@@ -26,7 +26,7 @@ export default function LeaguesPage() {
     };
     update((prev) => ({ ...prev, leagues: [league, ...prev.leagues].slice(0, 8) }));
     setCode(league.code);
-    setNote(`Room ${league.code} is on this device. Send friends the room code and have them use Copy result code on their finished card.`);
+    setNote(`Room ${league.code} is saved only on this device. Ask friends to send their Copy result code, then paste it here.`);
   }
 
   function addEntry() {
@@ -42,16 +42,16 @@ export default function LeaguesPage() {
       ),
     }));
     setPaste("");
-    setNote("Card added. A server will sync this later. For now the board lives in this browser.");
+    setNote("Card added. This score room remains in this browser and is not shared or synchronized.");
   }
 
   return (
     <ProGate
-      title="On-device rooms"
+      title="On-device score rooms"
       body="Everyone runs the same Daily Challenge, or you compare season cards. Rooms do not sync: paste a friend's explicit result code to add it to this browser only."
     >
       <div className="space-y-4">
-        <h1 className="font-display text-4xl tracking-wide">A room for the group chat</h1>
+        <h1 className="font-display text-4xl tracking-wide">Compare result cards on this device</h1>
         <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
           <Input className="!h-11" value={name} onChange={(event) => setName(event.target.value)} />
           <select

@@ -16,8 +16,27 @@ const display = Barlow_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: "Run The Roster",
-  description: "A daily front-office challenge and a season-long NFL general manager sim.",
+  metadataBase: new URL("https://runtheroster.com"),
+  title: {
+    default: "Run The Roster — Football GM Game",
+    template: "%s | Run The Roster",
+  },
+  description: "Make daily front-office decisions, run a complete football season, or build a multi-year general manager career in a free browser simulation.",
+  applicationName: "Run The Roster",
+  openGraph: {
+    type: "website",
+    url: "https://runtheroster.com/",
+    siteName: "Run The Roster",
+    title: "Run The Roster — Football GM Game",
+    description: "Manage contracts, trades, the draft, the cap, and owner expectations in a free browser football GM game.",
+    images: [{ url: "/brand/run-the-roster-football-logo.png", width: 960, height: 640, alt: "Run The Roster football logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Run The Roster — Football GM Game",
+    description: "A free daily, single-season, and career football front-office simulation.",
+    images: ["/brand/run-the-roster-football-logo.png"],
+  },
   other: {
     "google-adsense-account": "ca-pub-3524460167829862",
   },
