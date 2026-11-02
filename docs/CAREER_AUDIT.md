@@ -1,5 +1,22 @@
 # NFLGM career-mode audit
 
+## 2026-11-02 Daily / 1999 Rams Historical report disposition
+
+Source: Google Doc `1ewqa3zWBBgU32b7_1Z-GAOkaAF8PCoT-H3SLB5JQti8` and matching Slack message `1793632678090099`. These are duplicate copies of one report against footer build `7ef0cc0`; there were no later replies or reports. The Slack post and Drive modification precede the report's stated test-end time, so every observation was treated as a lead and checked against exact source `7ef0cc0ba4b7550aca1c5a230e529f38946169e9`. Local-only implementation commit: `43d0cdf259d26a039cfe4a7dcfa87b10b59feca3`.
+
+| Finding | Disposition |
+| --- | --- |
+| A championship changes owner 82 → 92 and fans 91 → 99, while the later year-end review says owner 92 → 92 without explaining the earlier gain | Confirmed explanation gap. The existing championship bonus remains +10 owner, +8 fans, and +4 locker, but it now records exact before/after values in the ledger, recap analytics, and season drivers. The year-end review explicitly identifies itself as a separate later review. A deterministic regression covers the reported meter values. |
+| Owner 73 → 75 when advancing from the cap sheet into free agency | Confirmed overwritten explanation. A fiscal owner's existing +2 cap-discipline reaction was applied but immediately hidden by the free-agency headline. Closing the cap sheet now records and carries the exact meter change into free agency. No meter balance changed. |
+| Injury report says nobody is out while the preseason card says Trent Green is hurt and a Week 3 card says Marshall Faulk is questionable | Confirmed shared-state gaps. The 1999 scenario now marks Green out for the season in roster state and removes copy implying he will soon heal. A pending injury decision now identifies its player as questionable in the injury report before the choice is resolved. |
+| Historical salaries and free-agent asks consume implausibly large shares of the displayed $57.3M cap | Confirmed scaling defect. Historical caps below the modern baseline previously hit a `1×` salary floor, so asks stayed on the modern $322M scale. New market asks now scale to the displayed scenario cap with a conservative lower bound; modern and future cap scales are unchanged, and existing signed contracts/saves are not repriced. Todd Lyght and outside-market regressions cover the low-cap path. The UI states that these remain modeled, not verified historical accounting. |
+| Three Historical offseason trade calls were all Poor | Not reproduced as a systemic defect. The existing 12-seed regression produces Poor plus Fair/Good calls, and the focused local browser run produced Fair, Fair, and Poor. A three-call sample does not support retuning trade value. |
+| Draft shows overall picks 18, 36, and 54 rather than a full historical league order | Confirmed model-label ambiguity, not a pick-arithmetic defect. Historical mode uses a compact modeled league. The draft now shows both modeled overall pick and in-round slot/team count, and explicitly says it is not the original season's verified draft order. |
+| Camp has no punter and the draft filter only shows K | Intentional model boundary. Punting is part of the special-teams abstraction and `P` is not a roster position. The filter now says `K / specialists` and the draft screen explains the abstraction. No new position system was added. |
+| Free-agent buttons such as `More security · $11.9M × 4` are hard to interpret | Confirmed copy ambiguity. Buttons now name the strategy and show `$X/yr · N years`; the existing nominal total-commitment line remains visible. Negotiation economics and guards are unchanged. |
+
+The report's passing save replacement, trade explanations, decision gates, name generation, call variety, playoff flow, and Daily behavior were preserved. Broader trade, punter, and historical-accounting redesigns were not inferred from the single report.
+
 ## 2026-11-01 Daily #235 / Seattle Career report disposition
 
 Source: Google Doc `1Fyqbd7SP5r9OThQOxTWcGFyfH0zULzfkKrGImKDrOqU` and matching Slack report posted 2026-11-01. These are duplicate copies of one production report against footer build `7f997d2`; there were no replies or comments. The report covered Daily #235 and a Seattle Career with seed `3868239877`, completing 2032 and beginning 2033. Findings were checked against exact source `7f997d29f0074064387599c3576a3f85982dcdd9`. Scoped implementation commit: `71ebfef700eb8c66603e141ee12d069f39c379b6`.
