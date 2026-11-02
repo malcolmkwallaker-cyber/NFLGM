@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
+import { AnalyticsListener } from "@/components/analytics-listener";
 
 const LINKS = [
   { href: "/", label: "Home" },
@@ -75,6 +76,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           Build {(process.env.NEXT_PUBLIC_BUILD_SHA ?? "unknown") === "unknown" ? "unknown" : process.env.NEXT_PUBLIC_BUILD_SHA?.slice(0, 7)}
         </p>
       </footer>
+      <AnalyticsListener />
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-white/10 bg-[#0b1018]/95 backdrop-blur md:hidden">
         {[
           { href: "/daily", label: "Daily" },

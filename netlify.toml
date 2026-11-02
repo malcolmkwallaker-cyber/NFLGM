@@ -1,0 +1,8 @@
+# The game stays a static export. This file pins that publish directory and
+# lets Netlify pick up functions in netlify/functions on the next deploy.
+[build]
+  command = "npm run build"
+  publish = "out"
+
+[functions]
+  directory = "netlify/functions"

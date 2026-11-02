@@ -108,6 +108,43 @@ Stubbed or simplified:
 - No login, cloud sync, billing, or server save
 - "Unlimited careers" means you can keep playing year to year and start again after you retire. This build stores one career and one season on the device
 
+## In-house analytics
+
+The game can record cookieless, first-party statistics. Collection is off until a production build is published with the flag below. Nothing here sets a cookie or calls a third party. A failed request cannot interrupt play.
+
+The browser keeps a random id in `sessionStorage` for the open tab. It can also keep a random seed in `localStorage` and send only a hash of that seed plus the UTC date. The seed never leaves the device. Yesterday’s hash and the hash from seven days earlier are sent with it so the dashboard can compute D1 and D7 return without storing a stable visitor id. Do Not Track and Global Privacy Control skip measurement entirely.
+
+Events are `pageview` (path, referrer hostname, and `utm_source` / `utm_medium` / `utm_campaign` / `utm_content`), `game_start` (`Career`, `Season`, `Daily`, `Historical`, or `Turnaround`), `first_action` (once per tab session), `season_complete`, `draft_complete`, `trade_made`, `share_card_click`, and `session_end` with duration. Use `utm_campaign=creator_outreach` and a slug in `utm_content` for each creator, for example `https://runtheroster.com/?utm_source=youtube&utm_medium=creator&utm_campaign=creator_outreach&utm_content=coach-maya`.
+
+Netlify already hosts the static export. This branch adds:
+
+- `POST /api/collect/` as a Netlify Function. The browser ignores failures.
+- A Netlify Database table, `analytics_events`, created by `netlify/database/migrations/20261102020000_create_analytics_events/migration.sql`. The deploy applies it. Rows older than 90 days are deleted by a daily scheduled function.
+- `GET /analytics/`, an operator page protected with HTTP Basic auth. The password is the token below. The username can be anything. The page does not set a cookie.
+
+`@netlify/database` is a dependency, so the next Netlify deploy of this branch provisions a database. Preview deploys get an isolated database branch. Production is unchanged until this is merged and the production deploy succeeds. A failed deploy does not replace the current live site.
+
+### Cost
+
+Netlify Database is included on credit-based plans, including the $0 Free plan (300 credits per month, with a hard stop). It is not available on a legacy plan from before September 4, 2025 until that account moves to a credit-based plan. No separate database vendor account is required.
+
+Published rates: database compute is 10 credits per GB-hour while the database is awake, and bandwidth out of the database is 20 credits per GB. On the Free plan the database sleeps after 5 idle minutes, and the plan caps a database at 48 compute units, 5 GB stored, 5 GB written, and 5 GB of bandwidth per billing period. Storage itself was free through July 1, 2026; check Netlify’s current Database billing page before enabling this, because storage rates may now apply. This table is small anonymous rows, not saves or uploads.
+
+A quiet playtest should stay inside the free credit allotment. An always-awake database can consume credits continuously, and exhausting the Free plan’s credits can pause billable Netlify features. Watch the credit meter for a few days after turning collection on. To stop collection, remove `NEXT_PUBLIC_ANALYTICS` and publish again. The database can then be deleted in the Netlify UI. No paid service was created from this branch.
+
+### What to set in Netlify
+
+Set these in the Netlify UI. Do not commit them.
+
+| Variable | Where it is read | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_ANALYTICS` | Game bundle, at build time | Set to `on` to make the browser send events. Any other value, including unset, keeps the game silent. Changing it requires a new deploy. |
+| `ANALYTICS_DASHBOARD_TOKEN` | Dashboard function, at runtime | Password for `/analytics/`. Use at least 12 characters, for example the output of `openssl rand -base64 24`. |
+
+`netlify.toml` pins the existing static build: `npm run build` publishes `out/`. `public/_redirects` sends `/api/collect/` and `/analytics/` to the functions before the single-page fallback.
+
+After the deploy with `NEXT_PUBLIC_ANALYTICS=on`, open `https://runtheroster.com/analytics/`, sign in with the token as the password, and visit the game in a browser that is not sending Do Not Track. That visit should appear as a visitor and a session. `npm test` covers the collector, the daily hash, the funnel math, and the tracker without a database. `netlify dev` plus `netlify database migrations apply` exercises the function against a local database when you want to try the page before production.
+
 ## Roadmap
 
 1. An operator-approved account and privacy design before any optional cloud save or shared score service.

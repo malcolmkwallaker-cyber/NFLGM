@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { GRADE_EMOJI, GRADE_WORD } from "@/lib/engine/daily";
 import type { GradeColor } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { trackNamed } from "@/lib/analytics/track";
 
 export function ShareCard({
   kicker,
@@ -37,6 +38,7 @@ export function ShareCard({
   }, [codeCopied, copied]);
 
   async function copy() {
+    trackNamed("share_card_click");
     try {
       await navigator.clipboard.writeText(visibleText);
       setCopiedFor(text);
@@ -46,6 +48,7 @@ export function ShareCard({
   }
 
   async function copyResultCode() {
+    trackNamed("share_card_click");
     if (!resultCode) return;
     try {
       await navigator.clipboard.writeText(resultCode);
@@ -56,6 +59,7 @@ export function ShareCard({
   }
 
   async function shareImage() {
+    trackNamed("share_card_click");
     setImageStatus("Creating image…");
     const canvas = document.createElement("canvas");
     canvas.width = 1200;

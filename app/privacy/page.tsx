@@ -4,7 +4,7 @@ export default function PrivacyPage() {
       <header className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
         <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Privacy</p>
         <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">How this playtest handles data</h1>
-        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Current as of October 24, 2026.</p>
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Current as of November 2, 2026.</p>
       </header>
 
       <section className="space-y-4 rounded-2xl border border-white/10 bg-card p-5 text-sm leading-relaxed sm:p-6">
@@ -29,8 +29,33 @@ export default function PrivacyPage() {
           <p className="mt-2 text-muted-foreground">
             Although game saves stay local, hosting and network providers may process ordinary request information such as
             IP address, requested page, date and time, and browser or device details to deliver and protect the site. Run
-            The Roster does not currently operate its own analytics service, account database, or tracking API. Provider
-            logging and retention are controlled by those providers rather than by the game&apos;s browser save.
+            The Roster does not run an account database. The cookieless statistics below are the only measurement the game
+            operates, and only on a build where the operator has turned them on. Provider logging and retention are
+            controlled by those providers rather than by the game&apos;s browser save.
+          </p>
+        </div>
+        <div>
+          <h2 className="font-display text-2xl tracking-wide">Cookieless visit statistics</h2>
+          <p className="mt-2 text-muted-foreground">
+            When a published build has first-party statistics turned on, the browser sends anonymous events to this
+            site&apos;s own collection address. The public build leaves this off until the operator turns it on. While it is
+            off, the game does not send these events. The browser does not set a cookie and does not load a third-party
+            tracker.
+          </p>
+          <p className="mt-2 text-muted-foreground">
+            A random id stays in session storage for the open tab and is discarded when that tab session ends. A second,
+            optional id rotates each UTC day: a random seed remains in local storage on the device and is never sent. Each
+            day the browser sends only that day&apos;s hash, plus the hashes for yesterday and seven days earlier, so return
+            counts can be calculated without a stable visitor id on the server. If storage is blocked, those hashes are
+            left out.
+          </p>
+          <p className="mt-2 text-muted-foreground">
+            The events are page views (the path, the referring site&apos;s hostname, and utm_source, utm_medium, utm_campaign,
+            and utm_content when a link includes them), a game start and its mode, the first action in a tab session, a
+            completed season, a completed draft, a trade, a share-card click, and the end of a tab session with its
+            duration. The server stores those fields and the UTC day. It does not store a name, save file, IP address, or
+            user agent. Browsers that send Do Not Track, and browsers that send Global Privacy Control, are not measured.
+            The operator statistics page is password-protected and is not part of the game.
           </p>
         </div>
         <div>
