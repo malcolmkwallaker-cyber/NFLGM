@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { renderDashboard, dashboardRange } from "@/lib/analytics/dashboard-page";
 import { summarize } from "@/lib/analytics/summary";
 import { addUtcDays, utcDay } from "@/lib/analytics/time";
-import { DAILY_EVENT_CAP, MAX_BODY_BYTES, type StoredEvent } from "@/lib/analytics/types";
+import { MAX_BODY_BYTES, type StoredEvent } from "@/lib/analytics/types";
 import { parseCollectBody } from "@/lib/analytics/validate";
 
 const PRIVATE_HEADERS = {
@@ -13,7 +13,7 @@ const PRIVATE_HEADERS = {
 
 export type CollectDeps = {
   now: Date;
-  countDay: (day: string) => Promise<number>;
+  enabled?: boolean;
   insert: (event: StoredEvent) => Promise<void>;
 };
 
@@ -59,17 +59,16 @@ function empty(status: number, extra?: Record<string, string>): Response {
 
 export async function handleCollect(req: Request, deps: CollectDeps): Promise<Response> {
   if (req.method !== "POST") return empty(405, { allow: "POST" });
+  if (deps.enabled !== true) return empty(204);
   if (!sameSite(req)) return empty(403);
   if (doNotTrackRequest(req)) return empty(204);
 
   const text = await req.text();
-  if (text.length > MAX_BODY_BYTES) return empty(413);
+  if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) return empty(413);
   const parsed = parseCollectBody(text, { now: deps.now, siteHost: requestHost(req)?.split(":")[0]?.toLowerCase() ?? null });
   if (!parsed.ok) return new Response(parsed.error, { status: parsed.status, headers: PRIVATE_HEADERS });
 
   try {
-    const count = await deps.countDay(parsed.event.day);
-    if (count >= DAILY_EVENT_CAP) return empty(204);
     await deps.insert(parsed.event);
   } catch {
     return empty(503);

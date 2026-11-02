@@ -37,16 +37,16 @@ export default function PrivacyPage() {
         <div>
           <h2 className="font-display text-2xl tracking-wide">Cookieless visit statistics</h2>
           <p className="mt-2 text-muted-foreground">
-            When a published build has first-party statistics turned on, the browser sends anonymous events to this
+            When a published build has first-party statistics turned on, the browser sends pseudonymous events to this
             site&apos;s own collection address. The public build leaves this off until the operator turns it on. While it is
             off, the game does not send these events. The browser does not set a cookie and does not load a third-party
             tracker.
           </p>
           <p className="mt-2 text-muted-foreground">
             A random id stays in session storage for the open tab and is discarded when that tab session ends. A second,
-            optional id rotates each UTC day: a random seed remains in local storage on the device and is never sent. Each
+            id rotates each UTC day when local storage is available: a random seed remains in local storage on the device and is never sent. Each
             day the browser sends only that day&apos;s hash, plus the hashes for yesterday and seven days earlier, so return
-            counts can be calculated without a stable visitor id on the server. If storage is blocked, those hashes are
+            counts can be calculated. These hashes can link visits across days, even though the seed stays on your device. If storage is blocked, those hashes are
             left out.
           </p>
           <p className="mt-2 text-muted-foreground">
@@ -55,7 +55,8 @@ export default function PrivacyPage() {
             completed season, a completed draft, a trade, a share-card click, and the end of a tab session with its
             duration. The server stores those fields and the UTC day. It does not store a name, save file, IP address, or
             user agent. Browsers that send Do Not Track, and browsers that send Global Privacy Control, are not measured.
-            The operator statistics page is password-protected and is not part of the game.
+            Event rows older than 90 days are deleted by a daily cleanup. Hosting backups may retain copies under the
+            provider&apos;s separate retention policy. The operator statistics page is password-protected and is not part of the game.
           </p>
         </div>
         <div>

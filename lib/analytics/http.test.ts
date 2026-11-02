@@ -9,9 +9,9 @@ function collectDeps(events: StoredEvent[], overrides?: Partial<CollectDeps>): C
   return {
     events,
     now: new Date("2026-11-02T18:00:00.000Z"),
-    countDay: async () => events.length,
+    enabled: true,
     insert: async (event) => {
-      events.push(event);
+      if (events.length < DAILY_EVENT_CAP) events.push(event);
     },
     ...overrides,
   };
@@ -30,6 +30,17 @@ function auth(password: string): string {
 }
 
 describe("collection endpoint", () => {
+  it("defaults off before reading the body or touching the database", async () => {
+    for (const enabled of [undefined, false]) {
+      const deps = collectDeps([], { enabled, insert: async () => { throw new Error("must not connect"); } });
+      expect((await handleCollect(post("invalid JSON"), deps)).status).toBe(204);
+      expect(deps.events).toEqual([]);
+    }
+  });
+
+  it("limits UTF-8 bytes rather than JavaScript characters", async () => {
+    expect((await handleCollect(post("é".repeat(2500)), collectDeps([]))).status).toBe(413);
+  });
   it("accepts a same-site page view and ignores personal fields", async () => {
     const deps = collectDeps([]);
     const response = await handleCollect(
@@ -58,7 +69,7 @@ describe("collection endpoint", () => {
     expect((await handleCollect(post(body, { origin: "https://evil.example" }), deps)).status).toBe(403);
     expect((await handleCollect(post(body, { dnt: "1" }), deps)).status).toBe(204);
     expect((await handleCollect(post(body, { "sec-gpc": "1" }), deps)).status).toBe(204);
-    const capped = collectDeps([], { countDay: async () => DAILY_EVENT_CAP });
+    const capped = collectDeps([], { insert: async () => {} });
     expect((await handleCollect(post(body), capped)).status).toBe(204);
     expect(deps.events).toEqual([]);
     expect(capped.events).toEqual([]);

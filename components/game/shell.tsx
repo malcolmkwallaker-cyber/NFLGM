@@ -15,7 +15,7 @@ const LINKS = [
   { href: "/career", label: "Career" },
   { href: "/historical", label: "History" },
   { href: "/leaderboard", label: "Scores" },
-  { href: "/leagues", label: "Leagues" },
+  { href: "/leagues", label: "Score rooms" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {

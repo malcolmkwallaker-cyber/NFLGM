@@ -110,27 +110,29 @@ Stubbed or simplified:
 
 ## In-house analytics
 
-The game can record cookieless, first-party statistics. Collection is off until a production build is published with the flag below. Nothing here sets a cookie or calls a third party. A failed request cannot interrupt play.
+The game can record cookieless, first-party statistics. Collection defaults off on both the browser and server. Both switches below must be explicitly enabled after approval. Nothing here sets a cookie or calls a third party. A failed request cannot interrupt play.
 
-The browser keeps a random id in `sessionStorage` for the open tab. It can also keep a random seed in `localStorage` and send only a hash of that seed plus the UTC date. The seed never leaves the device. Yesterday’s hash and the hash from seven days earlier are sent with it so the dashboard can compute D1 and D7 return without storing a stable visitor id. Do Not Track and Global Privacy Control skip measurement entirely.
+The browser keeps a random id in `sessionStorage` for the open tab. It can also keep a random seed in `localStorage` and send only a hash of that seed plus the UTC date. The seed never leaves the device. Yesterday’s hash and the hash from seven days earlier are sent with it so the dashboard can compute D1 and D7 return. These are pseudonymous identifiers: the linked hashes can connect visits across days. Do Not Track and Global Privacy Control skip measurement entirely.
 
 Events are `pageview` (path, referrer hostname, and `utm_source` / `utm_medium` / `utm_campaign` / `utm_content`), `game_start` (`Career`, `Season`, `Daily`, `Historical`, or `Turnaround`), `first_action` (once per tab session), `season_complete`, `draft_complete`, `trade_made`, `share_card_click`, and `session_end` with duration. Use `utm_campaign=creator_outreach` and a slug in `utm_content` for each creator, for example `https://runtheroster.com/?utm_source=youtube&utm_medium=creator&utm_campaign=creator_outreach&utm_content=coach-maya`.
 
 Netlify already hosts the static export. This branch adds:
 
 - `POST /api/collect/` as a Netlify Function. The browser ignores failures.
-- A Netlify Database table, `analytics_events`, created by `netlify/database/migrations/20261102020000_create_analytics_events/migration.sql`. The deploy applies it. Rows older than 90 days are deleted by a daily scheduled function.
+- A Netlify Database table, `analytics_events`, created by `netlify/database/migrations/20261102020000_create_analytics_events/migration.sql`. The deploy applies it. Rows older than 90 days are deleted by a daily scheduled function. A second migration creates `analytics_daily_counts`; a single atomic SQL statement reserves a daily slot and inserts the event, capped at 20,000 per UTC day.
 - `GET /analytics/`, an operator page protected with HTTP Basic auth. The password is the token below. The username can be anything. The page does not set a cookie.
 
-`@netlify/database` is a dependency, so the next Netlify deploy of this branch provisions a database. Preview deploys get an isolated database branch. Production is unchanged until this is merged and the production deploy succeeds. A failed deploy does not replace the current live site.
+`@netlify/database` is a dependency, so the next Netlify deploy of this branch provisions a database. Preview deploys get an isolated database branch initially copied from production. Do not assume a preview starts empty. Production is unchanged until this is merged and the production deploy succeeds. A failed deploy does not replace the current live site.
 
 ### Cost
 
 Netlify Database is included on credit-based plans, including the $0 Free plan (300 credits per month, with a hard stop). It is not available on a legacy plan from before September 4, 2025 until that account moves to a credit-based plan. No separate database vendor account is required.
 
-Published rates: database compute is 10 credits per GB-hour while the database is awake, and bandwidth out of the database is 20 credits per GB. On the Free plan the database sleeps after 5 idle minutes, and the plan caps a database at 48 compute units, 5 GB stored, 5 GB written, and 5 GB of bandwidth per billing period. Storage itself was free through July 1, 2026; check Netlify’s current Database billing page before enabling this, because storage rates may now apply. This table is small anonymous rows, not saves or uploads.
+Published rates: database compute is 10 credits per GB-hour while the database is awake, and bandwidth out of the database is 20 credits per GB. On the Free plan the database sleeps after 5 idle minutes, and the plan caps a database at 48 compute units, 5 GB stored, 5 GB written, and 5 GB of bandwidth per billing period. Storage itself was free through July 1, 2026; check Netlify’s current Database billing page before enabling this, because storage rates may now apply. These rows are pseudonymous events, not saves or uploads.
 
-A quiet playtest should stay inside the free credit allotment. An always-awake database can consume credits continuously, and exhausting the Free plan’s credits can pause billable Netlify features. Watch the credit meter for a few days after turning collection on. To stop collection, remove `NEXT_PUBLIC_ANALYTICS` and publish again. The database can then be deleted in the Netlify UI. No paid service was created from this branch.
+There is no verified cost estimate for this site. At the documented minimum of one compute unit, 30 awake database hours consume 300 credits, before requests, bandwidth, functions and production deploys. A 30-day always-awake database would consume about 7,200 compute credits; the Free plan would hit its limits before that. An always-awake database can consume credits continuously, and exhausting the Free plan’s credits can pause billable Netlify features. Watch the credit meter for a few days after turning collection on. To stop writes, set `ANALYTICS_COLLECTION=off` in the function environment and redeploy as Netlify requires; also set `NEXT_PUBLIC_ANALYTICS=off` and rebuild to stop browser requests. Disabling collection does not remove the database or stop scheduled retention and authenticated dashboard reads from using credits. The row cap limits stored events, not requests or billing. Verify plan, usage, spend limits and any storage charges in the Netlify account before merging. Changing a legacy plan to credit-based is irreversible; obtain separate approval. No account or billing setting was changed during this review.
+
+Official references checked November 2, 2026: [Database billing](https://docs.netlify.com/build/data-and-storage/netlify-database/billing-and-usage/), [credit plans](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/credit-based-pricing-plans/), [migrations](https://docs.netlify.com/build/data-and-storage/netlify-database/migrations/). The storage wording still references July 2026 and is not a confirmed current storage quote.
 
 ### What to set in Netlify
 
@@ -139,11 +141,12 @@ Set these in the Netlify UI. Do not commit them.
 | Variable | Where it is read | Purpose |
 | --- | --- | --- |
 | `NEXT_PUBLIC_ANALYTICS` | Game bundle, at build time | Set to `on` to make the browser send events. Any other value, including unset, keeps the game silent. Changing it requires a new deploy. |
+| `ANALYTICS_COLLECTION` | Collector function, runtime | Must equal `on` before any request body is read or database connection is opened. Unset or `off` rejects collection silently. Keep production off pending approval. |
 | `ANALYTICS_DASHBOARD_TOKEN` | Dashboard function, at runtime | Password for `/analytics/`. Use at least 12 characters, for example the output of `openssl rand -base64 24`. |
 
-`netlify.toml` pins the existing static build: `npm run build` publishes `out/`. `public/_redirects` sends `/api/collect/` and `/analytics/` to the functions before the single-page fallback.
+`netlify.toml` pins the existing static build: `npm run build` publishes `out/`. `public/_redirects` sends `/api/collect/` and `/analytics/` to the functions. There is no catch-all rewrite; exported routes and real 404s are preserved.
 
-After the deploy with `NEXT_PUBLIC_ANALYTICS=on`, open `https://runtheroster.com/analytics/`, sign in with the token as the password, and visit the game in a browser that is not sending Do Not Track. That visit should appear as a visitor and a session. `npm test` covers the collector, the daily hash, the funnel math, and the tracker without a database. `netlify dev` plus `netlify database migrations apply` exercises the function against a local database when you want to try the page before production.
+After approval, test an isolated preview with both `NEXT_PUBLIC_ANALYTICS=on` and `ANALYTICS_COLLECTION=on`. After that deploy, open the preview URL at `/analytics/`, sign in with the token as the password, and visit the game in a browser that is not sending Do Not Track. That visit should appear as a visitor and a session. `npm test` covers the collector, daily hash, dashboard, tracker, function authentication boundaries, and a PGlite Postgres integration test applying both migrations, round-tripping events, enforcing the cap, and deleting expired rows. PGlite does not verify Netlify provisioning, CDN routing, deployed secrets or billing. `netlify dev` plus `netlify database migrations apply` exercises the function against a local database when you want to try the page before production.
 
 ## Roadmap
 

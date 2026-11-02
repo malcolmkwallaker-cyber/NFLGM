@@ -1,5 +1,5 @@
 import type { DatabaseConnection } from "@netlify/database";
-import { DASHBOARD_ROW_CAP, type StoredEvent } from "../../../lib/analytics/types";
+import { DAILY_EVENT_CAP, DASHBOARD_ROW_CAP, type StoredEvent } from "../../../lib/analytics/types";
 
 type EventRow = {
   day: string;
@@ -37,24 +37,23 @@ function rowToEvent(row: EventRow): StoredEvent {
   };
 }
 
-export async function countEventsOnDay(db: DatabaseConnection, day: string): Promise<number> {
-  const rows = await db.sql<{ count: string | number }>`
-    SELECT COUNT(*)::text AS count
-    FROM analytics_events
-    WHERE day = CAST(${day} AS date)
-  `;
-  return Number(rows[0]?.count ?? 0);
-}
-
 export async function insertEvent(db: DatabaseConnection, event: StoredEvent): Promise<void> {
   await db.sql`
+    WITH accepted AS (
+      INSERT INTO analytics_daily_counts (day, event_count)
+      VALUES (CAST(${event.day} AS date), 1)
+      ON CONFLICT (day) DO UPDATE
+      SET event_count = analytics_daily_counts.event_count + 1
+      WHERE analytics_daily_counts.event_count < ${DAILY_EVENT_CAP}
+      RETURNING day
+    )
     INSERT INTO analytics_events (
       day, session_id, visitor_id, visitor_prev, visitor_d7,
       event, path, referrer_host,
       utm_source, utm_medium, utm_campaign, utm_content,
       mode, duration_ms
-    ) VALUES (
-      CAST(${event.day} AS date),
+    ) SELECT
+      day,
       ${event.sessionId},
       ${event.visitorId},
       ${event.visitorPrev},
@@ -68,7 +67,7 @@ export async function insertEvent(db: DatabaseConnection, event: StoredEvent): P
       ${event.utmContent},
       ${event.mode},
       ${event.durationMs}
-    )
+    FROM accepted
   `;
 }
 
@@ -92,4 +91,5 @@ export async function loadEvents(db: DatabaseConnection, from: string, to: strin
 
 export async function deleteExpiredEvents(db: DatabaseConnection): Promise<void> {
   await db.sql`DELETE FROM analytics_events WHERE day < (CURRENT_DATE - INTERVAL '90 days')`;
+  await db.sql`DELETE FROM analytics_daily_counts WHERE day < (CURRENT_DATE - INTERVAL '90 days')`;
 }

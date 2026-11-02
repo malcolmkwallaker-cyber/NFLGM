@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "cn";
 import { FREE_TESTING_MODE } from "@/lib/access";
+import { HomeGuide } from "@/components/game/home-content";
 
 export function HomeClient({
   day,
@@ -124,6 +125,8 @@ export function HomeClient({
           Today’s turnaround
         </Button>
       </section>
+
+      <HomeGuide />
     </div>
   );
 }

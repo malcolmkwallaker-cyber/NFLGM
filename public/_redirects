@@ -1,7 +1,5 @@
-# These rewrites have to stay above the fallback. _redirects is matched first,
-# and the static export otherwise sends every path to the game.
+# Analytics endpoints only. Preserve static page routing and real 404s.
 /api/collect     /.netlify/functions/collect     200
 /api/collect/    /.netlify/functions/collect     200
 /analytics       /.netlify/functions/dashboard   200
 /analytics/      /.netlify/functions/dashboard   200
-/*               /index.html                     200
