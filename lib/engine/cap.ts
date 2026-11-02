@@ -44,7 +44,7 @@ const MULT: Record<string, number> = {
 export const BASE_CAP_LIMIT = 322;
 
 export function salaryScale(capLimit: number): number {
-  return Math.max(1, capLimit / BASE_CAP_LIMIT);
+  return Math.max(0.15, capLimit / BASE_CAP_LIMIT);
 }
 
 export function marketAgeFactor(p: Player): number {

@@ -154,6 +154,21 @@ describe("historic turnaround challenge contract", () => {
     expect(season.shop).toBeNull();
     expect(season.shopUsed).toBe(true);
   });
+
+  it("numbers historical picks within the compact modeled league", () => {
+    let season = createSeason({ teamId: "LAR", gmName: "Draft Number Audit", seed: 1931538838, mode: "historical", historicalId: "1999-rams" });
+    for (let guard = 0; guard < 80 && season.phase !== "draft"; guard += 1) {
+      const action = suggestAction(season);
+      if (!action) throw new Error(`No action available in ${season.phase}`);
+      season = applyAction(season, action);
+    }
+    expect(season.phase).toBe("draft");
+    const userPicks = season.draftPicks.filter((pick) => pick.teamId === season.teamId).slice(0, 3);
+    expect(userPicks).toHaveLength(3);
+    expect(userPicks.map((pick) => pick.slot)).toEqual([userPicks[0]?.slot, userPicks[0]?.slot, userPicks[0]?.slot]);
+    expect(userPicks[1]?.overall).toBe((userPicks[0]?.overall ?? 0) + season.directory.length);
+    expect(userPicks[2]?.overall).toBe((userPicks[1]?.overall ?? 0) + season.directory.length);
+  });
   it("publishes only sourced season records with explicit game targets", () => {
     expect(HISTORIC_TURNAROUNDS).toHaveLength(8);
     for (const scenario of HISTORIC_TURNAROUNDS) {

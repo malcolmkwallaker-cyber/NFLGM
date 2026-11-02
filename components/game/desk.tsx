@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, playerAvailabilityLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, pendingInjuryPlayer, playerAvailabilityLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -359,7 +359,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
       </p>
       {season.mode === "historical" || season.flags.historicalRosterScenarioId ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
-          Starting dead money is a modeled gameplay input with no claimed historical transaction origin. The cap and contract economy use the game&apos;s modern scale, not that season&apos;s verified cap accounting.
+          Starting dead money is a modeled gameplay input with no claimed historical transaction origin. The cap and contract economy use modeled values scaled to the displayed scenario cap or payroll guide; they are not verified historical accounting.
         </p>
       ) : null}
       <p className="text-xs text-muted-foreground">
@@ -473,7 +473,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                   data-testid="choice-fa-offer-ask"
                   onClick={() => dispatch({ type: "fa-offer", playerId: negotiatingPlayer.id, strategy: "ask" })}
                 >
-                  Meet ask · {money(negotiationPreview.askAnnual)} × {negotiationPreview.askYears}
+                  Meet ask · {money(negotiationPreview.askAnnual)}/yr · {negotiationPreview.askYears} years
                 </Button>
                 <Button
                   variant="outline"
@@ -481,7 +481,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                   data-testid="choice-fa-offer-security"
                   onClick={() => dispatch({ type: "fa-offer", playerId: negotiatingPlayer.id, strategy: "security" })}
                 >
-                  More security · {money(negotiationPreview.securityAnnual)} × {negotiationPreview.securityYears}
+                  Longer term · {money(negotiationPreview.securityAnnual)}/yr · {negotiationPreview.securityYears} years
                 </Button>
                 <Button
                   variant="outline"
@@ -489,7 +489,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                   data-testid="choice-fa-offer-team"
                   onClick={() => dispatch({ type: "fa-offer", playerId: negotiatingPlayer.id, strategy: "team" })}
                 >
-                  Team-friendly · {money(negotiationPreview.teamAnnual)} × {negotiationPreview.teamYears}
+                  Lower annual · {money(negotiationPreview.teamAnnual)}/yr · {negotiationPreview.teamYears} years
                 </Button>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
@@ -676,14 +676,18 @@ function Draft({ season }: { season: SeasonState }) {
   return (
     <section className="space-y-3">
       <h2 className="font-display text-2xl tracking-wide">
-        {pick ? `Round ${pick.round}, pick ${pick.overall}` : "The board is moving"}
+        {pick
+          ? season.mode === "historical" || season.flags.historicalRosterScenarioId
+            ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}`
+            : `Round ${pick.round}, pick ${pick.overall}`
+          : "The board is moving"}
       </h2>
       <p className="text-sm text-muted-foreground">
         You are looking at the scout card, not the truth. Camp will show what you actually drafted. Prospects in this class are fictional.
       </p>
       {season.mode === "historical" || season.flags.historicalRosterScenarioId ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
-          Draft order and pick ownership are modeled for gameplay. They are not claimed as that historical team&apos;s verified draft position.
+          This compact historical simulation has {season.directory.length} teams. Overall pick numbers use that modeled league, not the original season&apos;s full league size or verified draft order.
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2 text-sm">
@@ -691,7 +695,7 @@ function Draft({ season }: { season: SeasonState }) {
           Position
           <select className="ml-2 h-10 rounded-lg border border-white/10 bg-black/30 px-2" value={position} onChange={(event) => setPosition(event.target.value as "ALL" | Pos)}>
             <option value="ALL">All</option>
-            {(["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K"] satisfies Pos[]).map((pos) => <option key={pos}>{pos}</option>)}
+            {(["QB", "RB", "WR", "TE", "OL", "DL", "EDGE", "LB", "CB", "S", "K"] satisfies Pos[]).map((pos) => <option key={pos} value={pos}>{pos === "K" ? "K / specialists" : pos}</option>)}
           </select>
         </label>
         <label>
@@ -702,6 +706,7 @@ function Draft({ season }: { season: SeasonState }) {
           </select>
         </label>
       </div>
+      <p className="text-xs text-muted-foreground">Punting is included in the game&apos;s special-teams abstraction; there is no separate punter roster or draft position.</p>
       {season.pendingDraftTrade ? (
         <article className="rounded-xl border border-primary/40 bg-card p-4">
           <p className="font-medium">{season.pendingDraftTrade.from} wants to move you back</p>
@@ -858,6 +863,7 @@ function Regular({
 }) {
   const { dispatch } = useGame();
   const decision = season.activeDecision;
+  const pendingInjury = pendingInjuryPlayer(season);
   const opp = matchup ? (matchup.home === season.teamId ? matchup.away : matchup.home) : null;
   const home = matchup?.home === season.teamId;
   const recentGames = season.results
@@ -943,13 +949,18 @@ function Regular({
       ) : null}
       <section className="rounded-xl border border-white/10 bg-card p-3" aria-label="Injury report">
         <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Injury report</p>
-        {roster.some((player) => player.injured || player.limited) ? (
+        {roster.some((player) => player.injured || player.limited) || pendingInjury ? (
           <ul className="mt-2 space-y-1 text-sm">
             {roster.filter((player) => player.injured || player.limited).map((player) => (
               <li key={player.id} className={player.injured ? "text-red-300" : "text-amber-200"}>
                 {player.pos} {player.name} · {playerAvailabilityLabel(season, player)}
               </li>
             ))}
+            {pendingInjury && !pendingInjury.injured && !pendingInjury.limited ? (
+              <li key={`pending-${pendingInjury.id}`} className="text-amber-200">
+                {pendingInjury.pos} {pendingInjury.name} · Questionable · desk decision pending
+              </li>
+            ) : null}
           </ul>
         ) : <p className="mt-2 text-sm text-emerald-300">No players currently listed out.</p>}
       </section>

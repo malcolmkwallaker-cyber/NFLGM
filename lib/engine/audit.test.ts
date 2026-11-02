@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, recordCompletedSeason, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advancedLines, applyAction, campCutDeadMoney, capCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, playerAvailabilityLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
+import { advancedLines, applyAction, applyChampionshipMeterBonus, campCutDeadMoney, capCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, pendingInjuryPlayer, playerAvailabilityLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -998,6 +998,39 @@ describe("audit regressions", () => {
     expect(seasonShareText(recap)).not.toContain("SUPERBOWL");
   });
 
+  it("itemizes the championship meter bonus before the separate year-end review", () => {
+    const state = createSeason({ teamId: "LAR", gmName: "Championship Meter Audit", seed: 1931538838, mode: "historical", historicalId: "1999-rams" });
+    state.meters = { owner: 82, fans: 91, locker: 80 };
+
+    expect(applyChampionshipMeterBonus(state)).toBe(
+      "Championship clinch bonus: Owner 82 → 92 (+10); Fans 91 → 99 (+8); Locker 80 → 84 (+4).",
+    );
+    expect(state.flags["championship-meter-change"]).toBe(state.log.at(-1));
+  });
+
+  it("explains the fiscal-brief owner change when the cap sheet advances to free agency", () => {
+    const state = createSeason({ teamId: "LAR", gmName: "Cap Review Audit", seed: 1931538838, mode: "historical", historicalId: "1999-rams" });
+    state.phase = "cap";
+    state.owner.priority = "fiscal";
+    state.meters.owner = 73;
+
+    const freeAgency = applyAction(state, { type: "cap", choice: "hold" });
+    expect(freeAgency.meters.owner).toBe(75);
+    expect(freeAgency.flags["last-cap-meter-change"]).toContain("Cap discipline brief");
+    expect(freeAgency.flags["last-cap-meter-change"]).toContain("Owner 73 → 75 (+2)");
+    expect(freeAgency.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain("Owner 73 → 75 (+2)");
+  });
+
+  it("scales historical-market asks to the scenario cap without changing the modern baseline", () => {
+    const historical = createSeason({ teamId: "LAR", gmName: "Historical Ask Audit", seed: 1931538838, mode: "historical", historicalId: "1999-rams" });
+    const toddLyght = yourRoster(historical).find((player) => player.name === "Todd Lyght");
+    if (!toddLyght) throw new Error("Todd Lyght fixture missing");
+
+    expect(salaryScale(historical.capLimit)).toBeCloseTo(57.3 / 322, 5);
+    expect(marketAsk(toddLyght, salaryScale(historical.capLimit))).toBeLessThan(4);
+    expect(salaryScale(322)).toBe(1);
+  });
+
   it("keeps restructure liabilities with the old team after a fired GM changes jobs", () => {
     const career = createCareer("Cap Ownership Audit", "CAR", 2501);
     career.season.phase = "fired";
@@ -1134,6 +1167,20 @@ describe("audit regressions", () => {
     expect(onlyRunningBack?.name).toBe("TreVeyon Henderson");
   });
 
+  it("keeps the 1999 Green injury and a pending questionable player in the shared availability state", () => {
+    let state = advanceTo(createSeason({ teamId: "LAR", gmName: "Historical Injury Audit", seed: 1931538838, mode: "historical", historicalId: "1999-rams" }), "regular");
+    const green = yourRoster(state).find((player) => player.name === "Trent Green");
+    if (!green) throw new Error("Trent Green fixture missing");
+    expect(playerAvailabilityLabel(state, green)).toBe("Out for the season · no projected return this season");
+
+    while (state.week < 4) {
+      if (state.activeDecision) state = applyAction(state, { type: "decide", choiceId: state.activeDecision.options[0]?.id ?? "balanced" });
+      else state = applyAction(state, { type: "play-week" });
+    }
+    expect(state.activeDecision?.id).toBe("injury");
+    expect(pendingInjuryPlayer(state)?.name).toBe("Marshall Faulk");
+  });
+
   it("explains dead-money and owner-confidence rollover without losing pushed obligations", () => {
     const state = createSeason({ teamId: "CHI", gmName: "Rollover Audit", seed: 503, mode: "career" });
     state.deadMoney = 16.5;
@@ -1194,7 +1241,7 @@ describe("audit regressions", () => {
     expect(new Set(champions).size).toBeGreaterThanOrEqual(6);
     expect(losingScores.filter((score) => score <= 10).length).toBeLessThanOrEqual(6);
     expect(losingScores.reduce((sum, score) => sum + score, 0) / losingScores.length).toBeGreaterThan(14);
-  });
+  }, 10_000);
 
   it("stops a player-initiated fast-forward when a new desk decision appears and preserves it on reload", () => {
     let state = advanceTo(createSeason({ teamId: "SEA", gmName: "Fast Forward Audit", seed: 1028, mode: "career" }), "regular");

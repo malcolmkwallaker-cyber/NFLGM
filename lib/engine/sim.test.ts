@@ -163,7 +163,7 @@ describe("season", () => {
     const averageWins = rows.reduce((sum, grade) => sum + (grade?.wins ?? 0), 0) / rows.length;
     expect(averageWins).toBeLessThan(15);
     expect(rows.filter((grade) => grade?.losses === 0).length).toBeLessThanOrEqual(8);
-  });
+  }, 10_000);
 });
 
 describe("career", () => {

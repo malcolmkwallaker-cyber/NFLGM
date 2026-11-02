@@ -350,16 +350,21 @@ export function priorityLabel(priority: string): string {
 
 function seedEraRipples(state: SeasonState) {
   if (state.historicalId === "1999-rams") {
+    const trentGreen = yourRoster(state).find((player) => player.name === "Trent Green");
+    if (trentGreen) {
+      trentGreen.injured = true;
+      state.flags[`return-${trentGreen.id}`] = state.seasonLength + 1;
+    }
     state.ripples.push({
       week: 1,
       decision: {
         id: "warner",
         kicker: "Preseason",
         title: "Trent Green is hurt",
-        body: "The quarterback you paid is out. Kurt Warner knows the offense and has never been the guy. The conservative move is a run-heavy bridge. The other move is to hand him the season.",
+        body: "The quarterback you paid is out for the season. Kurt Warner knows the offense and has never been the guy. The conservative move is a run-heavy bridge. The other move is to hand him the season.",
         options: [
           { id: "warner", label: "Start Kurt Warner", detail: "The cheap backup gets the keys.", owner: 1, fans: 2, locker: 2, log: "Named Kurt Warner the starter.", tag: "mod:2", swing: 4 },
-          { id: "bridge", label: "Run the ball and wait on Green", detail: "Do not rebuild the offense around a backup.", owner: 2, fans: -2, locker: -1, log: "Kept the offense on the ground while Green healed.", swing: -1 },
+          { id: "bridge", label: "Build a run-heavy bridge", detail: "Do not rebuild the offense around a backup.", owner: 2, fans: -2, locker: -1, log: "Kept the offense on the ground after Green was lost for the season.", swing: -1 },
         ],
       },
     });
@@ -560,8 +565,14 @@ function doCap(state: SeasonState, choice: "restructure" | "cut" | "hold", playe
     if (state.capMode === "hard" && capSpace(state) < 0) {
       throw new Error("You cannot leave a hard cap in the red");
     }
-    bump(state, state.owner.priority === "fiscal" ? 2 : 0, 0, 0);
-    pushDecision(state, "Cap", "Stood pat", "Left the cap sheet alone.", 0);
+    const before = { ...state.meters };
+    const ownerDelta = state.owner.priority === "fiscal" ? 2 : 0;
+    bump(state, ownerDelta, 0, 0);
+    const explanation = ownerDelta
+      ? `Cap-sheet review: ${priorityLabel(state.owner.priority)} brief; ${meterChanges(before, state.meters)}.`
+      : `Cap-sheet review: ${meterChanges(before, state.meters)}.`;
+    state.flags["last-cap-meter-change"] = explanation;
+    pushDecision(state, "Cap", "Closed the cap sheet", explanation, ownerDelta);
     return openFreeAgency(state);
   }
   const eligible = roster.filter((candidate) => candidate.years > 0);
@@ -644,7 +655,7 @@ function openFreeAgency(state: SeasonState): SeasonState {
   state.headlines = makeHeadlines(state, "neutral", {
     beat: "Your expiring contracts come first. Re-sign a player, use one franchise tag, or let him reach the market.",
     national: "Every GM says they will be disciplined. The tape from March says otherwise.",
-    analytics: `You enter with ${formatMoney(capSpace(state))}. Asking prices are estimates, not filings.`,
+    analytics: `${typeof state.flags["last-cap-meter-change"] === "string" ? `${state.flags["last-cap-meter-change"]} ` : ""}You enter with ${formatMoney(capSpace(state))}. Asking prices are estimates, not filings.`,
   });
   return state;
 }
@@ -1927,6 +1938,13 @@ export function playerAvailabilityLabel(state: SeasonState, player: Player): str
   return "Out for the season · no projected return this season";
 }
 
+export function pendingInjuryPlayer(state: SeasonState): Player | undefined {
+  if (state.activeDecision?.id !== "injury") return undefined;
+  const tag = state.activeDecision.options.find((option) => option.tag?.startsWith("playhurt:") || option.tag?.startsWith("sit:"))?.tag;
+  const playerId = tag?.split(":")[1];
+  return playerId ? findPlayer(yourRoster(state), playerId) : undefined;
+}
+
 function resolveLimitedPlayers(state: SeasonState) {
   for (const player of yourRoster(state).filter((candidate) => candidate.limited)) {
     const aggravated = state.flags[`aggravate-${player.id}`] === true;
@@ -2262,7 +2280,7 @@ function advanceBracket(state: SeasonState) {
       playoff.round = "done";
       if (playoff.champion === state.teamId) {
         state.flags.exitRound = "champion";
-        bump(state, 10, 8, 4);
+        applyChampionshipMeterBonus(state);
       } else if (playoff.userAlive) {
         state.flags.exitRound = "superbowl";
       }
@@ -2301,6 +2319,15 @@ function advanceBracket(state: SeasonState) {
     return;
   }
   fillRound(state);
+}
+
+export function applyChampionshipMeterBonus(state: SeasonState): string {
+  const before = { ...state.meters };
+  bump(state, 10, 8, 4);
+  const explanation = `Championship clinch bonus: ${meterChanges(before, state.meters)}.`;
+  state.flags["championship-meter-change"] = explanation;
+  state.log.push(explanation);
+  return explanation;
 }
 
 function simRemainingBracket(state: SeasonState) {
@@ -2356,7 +2383,7 @@ function toRecap(state: SeasonState): SeasonState {
     recapPenalties.push(`${record.wins}-${record.losses} performance −${performancePenalty}`);
   }
   const reviewExplanation = recapPenalties.length ? recapPenalties.join("; ") : "no additional year-end penalty";
-  state.flags["owner-year-end-review"] = `Owner year-end review ${ownerBeforeReview} → ${state.meters.owner}: ${reviewExplanation}.`;
+  state.flags["owner-year-end-review"] = `Owner year-end review ${ownerBeforeReview} → ${state.meters.owner}: ${reviewExplanation}. This separate review occurs after playoff and championship meter changes.`;
   state.log.push(String(state.flags["owner-year-end-review"]));
   if (state.meters.owner <= FIRING_THRESHOLD) {
     fire(state, `A ${record.wins}-${record.losses} finish, unresolved roster needs, and lost owner confidence ended the job.`);
@@ -2378,7 +2405,7 @@ function toRecap(state: SeasonState): SeasonState {
                 : `${possessive(teamLabel(teamById(state.teamId, state.directory)))} run ended in the ${state.grade.round === "wildcard" ? "Wild Card" : state.grade.round} round.`
             }`
       : "The league title is still being decided; your season is over.",
-    analytics: `GM grade ${state.grade.letter} (${state.grade.score}). ${typeof state.flags["last-playoff-meter-change"] === "string" ? `${state.flags["last-playoff-meter-change"]}. ` : ""}Owner year-end review ${ownerBeforeReview} → ${state.meters.owner}: ${reviewExplanation}.`,
+    analytics: `GM grade ${state.grade.letter} (${state.grade.score}). ${typeof state.flags["last-playoff-meter-change"] === "string" ? `${state.flags["last-playoff-meter-change"]}. ` : ""}${typeof state.flags["championship-meter-change"] === "string" ? `${state.flags["championship-meter-change"]} ` : ""}Owner year-end review ${ownerBeforeReview} → ${state.meters.owner}: ${reviewExplanation}. This separate review occurs after playoff and championship meter changes.`,
   });
   return state;
 }
@@ -2716,6 +2743,7 @@ export function seasonDrivers(state: SeasonState): string[] {
     drivers.push(`Cap use: ${formatMoney(space)} remained ${timing}${record.wins <= 6 && space >= 25 ? " despite six or fewer wins" : ""}.`);
   }
   if (injured) drivers.push(`Availability: ${injured} roster player${injured === 1 ? " was" : "s were"} injured at the finish.`);
+  if (typeof state.flags["championship-meter-change"] === "string") drivers.push(String(state.flags["championship-meter-change"]));
   if (typeof state.flags["owner-year-end-review"] === "string") drivers.push(String(state.flags["owner-year-end-review"]));
   drivers.push(`Owner confidence finished at ${state.meters.owner}; locker-room confidence finished at ${state.meters.locker}.`);
   return drivers.slice(0, 7);
