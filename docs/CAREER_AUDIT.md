@@ -1,5 +1,23 @@
 # NFLGM career-mode audit
 
+## 2026-11-03 Daily #237 / Seattle Career report disposition
+
+Source: [Google Doc `1y82-77bq7ybCdG9KOhc6em8W5xO7OQMveo48fWIhl0U`](https://docs.google.com/document/d/1y82-77bq7ybCdG9KOhc6em8W5xO7OQMveo48fWIhl0U/edit) and matching [Slack message `1793718654126529`](https://realestate-crm8266.slack.com/archives/C0CBV1ADPMX/p1793718654126529). These are duplicate copies of one manual report covering Daily #237 and an existing Seattle Career in 2033 with seed `3868239877`. Findings were checked against production source `7ef0cc0ba4b7550aca1c5a230e529f38946169e9`, with the separate November 2 local candidate `43d0cdf259d26a039cfe4a7dcfa87b10b59feca3` and its audit commit `8a7ed6c` explicitly treated as queued, not live. Local-only November 3 implementation commit: `38bcc8190aac823aab9010fe919b91e1146e9fee`.
+
+| Finding | Disposition |
+| --- | --- |
+| A Poor deadline trade gives owner +4 under the build-young brief | Existing intentional split between asset grade and owner preference, previously documented and explained in the trade card. Good/Fair/Poor grades the return; the build-young owner can still approve moving an older player. One repeated example does not justify changing that balance. |
+| Career cap room reaches $181M around the 2033 draft | Broad economy lead, not a reproduced arithmetic defect. The prior economy passes index new contracts and improve CPU retention, while existing signed contracts remain save-compatible. No second economy redesign was inferred from one long save. |
+| Quarterly unused-cap penalties appear after free agency closes with substantial room | Existing quarterly review behavior. The report does not establish that useful signings were available or that the stated rebuild was intentional, so no penalty formula changed. Weekly explanations remain visible. |
+| Camp has no kicker or punter | The existing camp screen already warns `K 0/1` and other thin groups before the season. The November 2 local candidate separately clarifies that punting is abstracted and is not a promise of a new punter system. No automatic signing or specialist redesign was added. |
+| Two players named Felix Brooks remain in the existing Career save | Expected legacy-save behavior. Current generation avoids new exact roster/market collisions, but existing player identities are deliberately not rewritten. Prior placeholder-display fixes likewise did not claim to rename saved players. |
+| Fan and locker changes after games lack the owner meter's explanation | Confirmed clarity gap. Weekly analytics and the ledger now show exact before/after values and reasons for owner, fans, and locker, including decisive-result modifiers and applied-versus-requested effects at meter limits. The underlying meter balance is unchanged. |
+| The 2033 draft shows round-one pick 33 after the ordinary round | Not a draft-order arithmetic defect. Acquired picks are appended after the 32 standard picks in that round, so pick 33 is a valid extra pick; intervening CPU selections can advance without another user screen. The on-clock heading now carries the existing acquired-pick provenance so the extra selection is explicit. Ownership and lifecycle are unchanged. |
+| Camp starts below OL, DL, or CB depth targets | Existing behavior already reports exact post-cut depth warnings such as `OL 2/3`, `DL 1/2`, and `CB 2/3`, while permitting a 22–26-player roster with a quarterback. No duplicate warning or mandatory roster action was added. |
+| Daily's best answer appeared third again | Not a fixed-slot defect. Options are deterministically shuffled by date, challenge, and option ID. A 90-day check placed the best answer in slots 1–4 respectively 19, 28, 24, and 19 times; regression coverage now requires every slot to occur. |
+
+The report independently confirms that the November 1 stale-trade-headline and missing-Career-history fixes are working in production. Its preserved injury consistency, Daily streak, and save behavior were not reopened. Free agency/restructure, Good/Fair trades, and fresh-Career replacement remain untested by this report rather than regressed.
+
 ## 2026-11-02 Daily / 1999 Rams Historical report disposition
 
 Source: Google Doc `1ewqa3zWBBgU32b7_1Z-GAOkaAF8PCoT-H3SLB5JQti8` and matching Slack message `1793632678090099`. These are duplicate copies of one report against footer build `7ef0cc0`; there were no later replies or reports. The Slack post and Drive modification precede the report's stated test-end time, so every observation was treated as a lead and checked against exact source `7ef0cc0ba4b7550aca1c5a230e529f38946169e9`. Local-only implementation commit: `43d0cdf259d26a039cfe4a7dcfa87b10b59feca3`.
