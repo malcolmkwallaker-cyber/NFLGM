@@ -1994,7 +1994,16 @@ function doPlayWeek(state: SeasonState): SeasonState {
   }
   heal(state);
   const games = state.schedule.filter((g) => g.week === state.week);
-  let yours: { opp: string; score: string; won: boolean } | null = null;
+  let yours: {
+    opp: string;
+    score: string;
+    won: boolean;
+    meterBefore: SeasonState["meters"];
+    fanRequested: number;
+    fanReasons: string[];
+    lockerRequested: number;
+    lockerReasons: string[];
+  } | null = null;
   for (const game of games) {
     const played = simulateMatch(state, game.home, game.away, `w${state.week}`);
     const result = { week: state.week, round: "regular", ...played };
@@ -2006,19 +2015,36 @@ function doPlayWeek(state: SeasonState): SeasonState {
       const oppId = game.home === state.teamId ? game.away : game.home;
       const yoursScore = game.home === state.teamId ? played.homeScore : played.awayScore;
       const oppScore = game.home === state.teamId ? played.awayScore : played.homeScore;
+      const margin = yoursScore - oppScore;
+      const ownerChange = ownerGameChange(state, won, margin);
+      const meterBefore = { ...state.meters };
+      const fanRequested = (won ? 2 : -2) + (margin >= 14 ? 1 : margin <= -14 ? -1 : 0);
+      const lockerRequested = (won ? 1 : -1) + (margin >= 14 ? 1 : margin <= -14 ? -1 : 0);
+      const fanReasons = [won ? "win +2" : "loss −2"];
+      const lockerReasons = [won ? "win +1" : "loss −1"];
+      if (margin >= 14) {
+        fanReasons.push("decisive win +1");
+        lockerReasons.push("decisive win +1");
+      }
+      if (margin <= -14) {
+        fanReasons.push("decisive loss −1");
+        lockerReasons.push("decisive loss −1");
+      }
       yours = {
         opp: teamById(oppId, state.directory).abbr,
         score: `${yoursScore}-${oppScore}`,
         won,
+        meterBefore,
+        fanRequested,
+        fanReasons,
+        lockerRequested,
+        lockerReasons,
       };
-      const margin = yoursScore - oppScore;
-      const ownerChange = ownerGameChange(state, won, margin);
-      const ownerBeforeGame = state.meters.owner;
       bump(state, ownerChange.delta, won ? 2 : -2, won ? 1 : -1);
       if (margin >= 14) bump(state, 0, 1, 1);
       if (margin <= -14) bump(state, 0, -1, -1);
       state.flags[`owner-week:${state.week}`] = ownerChange.reasons.join(", ");
-      state.flags[`owner-week-before:${state.week}`] = ownerBeforeGame;
+      state.flags[`owner-week-before:${state.week}`] = meterBefore.owner;
       state.flags[`owner-week-requested:${state.week}`] = ownerChange.delta;
     }
   }
@@ -2033,10 +2059,12 @@ function doPlayWeek(state: SeasonState): SeasonState {
     const ownerExplanation = ownerApplied === ownerRequested
       ? ownerReasons
       : `${ownerReasons}; ${meterEffect(ownerBeforeGame, state.meters.owner, ownerRequested, 96)}`;
+    const fanExplanation = `${yours.fanReasons.join(", ")}${state.meters.fans - yours.meterBefore.fans === yours.fanRequested ? "" : `; ${meterEffect(yours.meterBefore.fans, state.meters.fans, yours.fanRequested, 100)}`}`;
+    const lockerExplanation = `${yours.lockerReasons.join(", ")}${state.meters.locker - yours.meterBefore.locker === yours.lockerRequested ? "" : `; ${meterEffect(yours.meterBefore.locker, state.meters.locker, yours.lockerRequested, 96)}`}`;
     const analytics = state.headlines.find((headline) => headline.outlet === "analytics");
-    if (analytics) analytics.text = `Week ${state.week}: owner confidence ${ownerBeforeGame} → ${state.meters.owner}. ${ownerExplanation}.`;
+    if (analytics) analytics.text = `Week ${state.week}: Owner ${ownerBeforeGame} → ${state.meters.owner}: ${ownerExplanation}. Fans ${yours.meterBefore.fans} → ${state.meters.fans}: ${fanExplanation}. Locker ${yours.meterBefore.locker} → ${state.meters.locker}: ${lockerExplanation}.`;
     state.log.push(`${yours.won ? "Beat" : "Lost to"} ${yours.opp} ${yours.score}.`);
-    state.log.push(`Owner confidence ${ownerBeforeGame} → ${state.meters.owner}: ${ownerExplanation}.`);
+    state.log.push(`Week ${state.week} meters: Owner ${ownerBeforeGame} → ${state.meters.owner}: ${ownerExplanation}; Fans ${yours.meterBefore.fans} → ${state.meters.fans}: ${fanExplanation}; Locker ${yours.meterBefore.locker} → ${state.meters.locker}: ${lockerExplanation}.`);
   }
   if (state.meters.owner <= FIRING_THRESHOLD) return state;
   if (state.week >= state.seasonLength) return startPlayoffs(state);

@@ -343,12 +343,16 @@ describe("audit regressions", () => {
     if (state.activeDecision) {
       state = applyAction(state, { type: "decide", choiceId: state.activeDecision.options[0]?.id ?? "" });
     }
-    const before = state.meters.owner;
+    const before = { ...state.meters };
     state = applyAction(state, { type: "play-week" });
     const analytics = state.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
-    expect(analytics).toContain(`owner confidence ${before} → ${state.meters.owner}`);
+    expect(analytics).toContain(`Owner ${before.owner} → ${state.meters.owner}`);
+    expect(analytics).toContain(`Fans ${before.fans} → ${state.meters.fans}`);
+    expect(analytics).toContain(`Locker ${before.locker} → ${state.meters.locker}`);
     expect(analytics).toMatch(/win|loss|quarterly unused-cap review|close result|decisive result/);
-    expect(state.log.at(-1)).toContain(`Owner confidence ${before} → ${state.meters.owner}`);
+    expect(state.log.at(-1)).toContain(`Owner ${before.owner} → ${state.meters.owner}`);
+    expect(state.log.at(-1)).toContain(`Fans ${before.fans} → ${state.meters.fans}`);
+    expect(state.log.at(-1)).toContain(`Locker ${before.locker} → ${state.meters.locker}`);
   });
 
   it("explains requested meter gains that are reduced by the confidence ceiling", () => {

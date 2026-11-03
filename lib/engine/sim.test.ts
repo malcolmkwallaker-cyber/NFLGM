@@ -50,6 +50,15 @@ describe("daily challenge", () => {
     const laterOrders = ["2026-10-25", "2026-10-26", "2026-10-27"].map((day) => dailyOptionOrder(challenge, day).map((option) => option.id));
     expect(replay).toEqual(first);
     expect(laterOrders.some((order) => order.join("|") !== first.join("|"))).toBe(true);
+    const bestAnswerSlots = [0, 0, 0, 0];
+    for (let offset = 0; offset < 90; offset += 1) {
+      const date = new Date(Date.UTC(2026, 9, 24 + offset));
+      const day = date.toISOString().slice(0, 10);
+      const daily = challengeForDate(date).challenge;
+      const slot = dailyOptionOrder(daily, day).findIndex((option) => option.grade === "green");
+      bestAnswerSlots[slot] += 1;
+    }
+    expect(bestAnswerSlots.every((count) => count > 0)).toBe(true);
   });
 
   it("preserves the released 33-item calendar before expanding the rotation", () => {

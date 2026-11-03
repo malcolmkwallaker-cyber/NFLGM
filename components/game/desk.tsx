@@ -678,8 +678,8 @@ function Draft({ season }: { season: SeasonState }) {
       <h2 className="font-display text-2xl tracking-wide">
         {pick
           ? season.mode === "historical" || season.flags.historicalRosterScenarioId
-            ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}`
-            : `Round ${pick.round}, pick ${pick.overall}`
+            ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}${pick.note ? ` · ${pick.note}` : ""}`
+            : `Round ${pick.round}, pick ${pick.overall}${pick.note ? ` · ${pick.note}` : ""}`
           : "The board is moving"}
       </h2>
       <p className="text-sm text-muted-foreground">
