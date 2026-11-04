@@ -12,6 +12,8 @@ import {
   type HistoricTurnaroundScenario,
 } from "@/lib/engine/historic-turnaround";
 import { activateSaveSlot, startSaveWarning, type SaveSlot } from "@/lib/save-slots";
+import { milestoneEvents } from "@/lib/analytics/milestones";
+import { trackFirstAction, trackGameStart, trackNamed } from "@/lib/analytics/track";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -131,8 +133,14 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     const season = currentSeason(currentProfile);
     if (!season) return;
+    const beforePhase = season.phase;
+    const decisionId = season.activeDecision?.id ?? null;
     try {
-      commitProfile(writeSeason(currentProfile, applyAction(season, action)));
+      const nextSeason = applyAction(season, action);
+      const milestones = milestoneEvents({ beforePhase, afterPhase: nextSeason.phase, action, decisionId });
+      commitProfile(writeSeason(currentProfile, nextSeason));
+      for (const name of milestones) trackNamed(name);
+      trackFirstAction();
     } catch (err) {
       setError(err instanceof Error ? err.message : "That move did not go through.");
     }
@@ -153,6 +161,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           });
           return { ...prev, active: "season", season };
         });
+        trackGameStart(historicalId ? "Historical" : "Season");
         router.push("/play");
       };
       if (!warningAccepted && warning) {
@@ -171,6 +180,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         if (!acquireInteractionLock()) return;
         setError(null);
         update((prev) => ({ ...prev, active: "career", career: createCareer(prev.name || "GM", teamId) }));
+        trackGameStart("Career");
         router.push("/play");
       };
       if (warning) {
@@ -192,6 +202,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           const season = createHistoricTurnaroundSeason(scenario, prev.name || "GM", seed, day);
           return { ...prev, active: "season", season };
         });
+        trackGameStart("Turnaround");
         router.push("/play");
       };
       if (warning) {
@@ -270,6 +281,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     (optionId: string, day: string) => {
       setError(null);
       const today = day;
+      const alreadyPlayed = currentProfile.daily.results.some((row) => row.date === today);
       update((prev) => {
         if (prev.daily.results.some((row) => row.date === today)) return prev;
         const { challenge, puzzle } = challengeForDate(new Date(`${today}T12:00:00Z`));
@@ -303,6 +315,10 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           },
         };
       });
+      if (!alreadyPlayed) {
+        trackGameStart("Daily");
+        trackFirstAction();
+      }
     },
     [update],
   );

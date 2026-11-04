@@ -1,0 +1,5 @@
+# Analytics endpoints only. Preserve static page routing and real 404s.
+/api/collect     /.netlify/functions/collect     200
+/api/collect/    /.netlify/functions/collect     200
+/analytics       /.netlify/functions/dashboard   200
+/analytics/      /.netlify/functions/dashboard   200
