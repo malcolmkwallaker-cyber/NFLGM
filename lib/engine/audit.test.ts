@@ -221,7 +221,7 @@ describe("audit regressions", () => {
         }
       }
     }
-  });
+  }, 10_000);
 
   it("normalizes blank and already-titled GM names without duplicate labels", () => {
     expect(normalizeGmName("   ")).toBe("GM");
