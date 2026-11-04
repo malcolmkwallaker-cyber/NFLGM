@@ -328,6 +328,23 @@ describe("audit regressions", () => {
     expect(state.headlines.find((headline) => headline.outlet === "national")?.text).toContain("does not erase salary");
   });
 
+  it("keeps pushed restructure money when the restructured player is later cut", () => {
+    let state = advanceTo(createSeason({ teamId: "PHI", gmName: "Restructure Cut Audit", seed: 1422569074 }), "cap");
+    const player = yourRoster(state).filter((candidate) => candidate.years > 0).sort((a, b) => b.cap - a.cap)[0];
+    if (!player) throw new Error("No active contract fixture");
+    const originalCutDead = capCutDeadMoney(player);
+    state = applyAction(state, { type: "cap", choice: "restructure", playerId: player.id });
+    const restructured = yourRoster(state).find((candidate) => candidate.id === player.id);
+    if (!restructured) throw new Error("Restructured player missing");
+    const pushed = state.futureDead;
+    const currentCutDead = capCutDeadMoney(restructured);
+    expect(currentCutDead).toBeLessThan(originalCutDead);
+    const currentDeadBeforeCut = state.deadMoney;
+    state = applyAction(state, { type: "cap", choice: "cut", playerId: player.id });
+    expect(state.futureDead).toBe(pushed);
+    expect(state.deadMoney).toBe(Math.round((currentDeadBeforeCut + currentCutDead) * 10) / 10);
+  });
+
   it("does not offer a kicker-based Week 1 plan when the roster has no kicker", () => {
     let state = advanceTo(createSeason({ teamId: "SEA", gmName: "Kicker Copy Audit", seed: 1101 }), "camp");
     state.teams.SEA.roster = yourRoster(state).filter((player) => player.pos !== "K");
@@ -384,6 +401,7 @@ describe("audit regressions", () => {
       else state = applyAction(state, { type: "play-week" });
     }
     expect(state.activeDecision?.id).toBe("extension");
+    expect(state.activeDecision?.options.find((choice) => choice.id === "wait")?.detail).toContain("Owner +1; fans −1; locker −2");
     const shopChoice = state.activeDecision?.options.find((choice) => choice.id === "shop");
     const playerId = shopChoice?.tag?.slice("shopstar:".length);
     if (!playerId) throw new Error("Contract-year trade fixture missing");
@@ -604,6 +622,7 @@ describe("audit regressions", () => {
     const years = state.faNegotiation?.counterYears;
     expect(counter).toBeGreaterThan(0);
     expect(years).toBe(offerYears(player) + 1);
+    expect(() => applyAction(state, { type: "next-wave" })).toThrow("Finish or leave the open negotiation");
 
     const reloaded = migrateProfile({ ...freshProfile(), active: "season", season: JSON.parse(JSON.stringify(state)) }).season;
     if (!reloaded) throw new Error("Counteroffer save was lost");

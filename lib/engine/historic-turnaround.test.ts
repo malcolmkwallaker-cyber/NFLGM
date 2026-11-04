@@ -209,6 +209,13 @@ describe("historic turnaround challenge contract", () => {
     });
   });
 
+  it("uses the period-appropriate Washington team name in pre-2020 turnaround seasons", () => {
+    const scenario = HISTORIC_TURNAROUNDS.find((candidate) => candidate.id === "phi-2011");
+    if (!scenario) throw new Error("2011 Philadelphia fixture missing");
+    const season = createHistoricTurnaroundSeason(scenario, "Era Label GM", 1422569074, "2026-11-04");
+    expect(season.directory.find((team) => team.id === "WAS")?.name).toBe("Redskins");
+  });
+
   it("refuses provisional or unsourced scenarios", () => {
     expect(isPublishableHistoricScenario({ ...verifiedFixture, status: "fixture" })).toBe(false);
     expect(isPublishableHistoricScenario({ ...verifiedFixture, sources: [] })).toBe(false);

@@ -390,7 +390,11 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
                 {player.years <= 0 ? "Expired — decide in free agency" : alreadyRestructured ? "Already restructured" : "Restructure"}
               </Button>
               <Button variant="ghost" disabled={player.years <= 0} data-testid={`choice-cut-${player.id}`} onClick={() => dispatch({ type: "cap", choice: "cut", playerId: player.id })}>
-                {player.years <= 0 ? "No active deal" : `Cut · ${money(capCutDeadMoney(player))} dead`}
+                {player.years <= 0
+                  ? "No active deal"
+                  : alreadyRestructured
+                    ? `Cut · ${money(capCutDeadMoney(player))} added current dead · team’s ${money(season.futureDead)} pushed total remains`
+                    : `Cut · ${money(capCutDeadMoney(player))} added current dead`}
               </Button>
             </div>
           </div>
@@ -561,8 +565,23 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           Opening the outside market leaves every unsigned player on this list available to other teams. An unsigned player is not guaranteed to appear again.
         </p>
       ) : null}
-      <Button variant="outline" className="!h-11" data-testid="choice-next-wave" onClick={() => dispatch({ type: "next-wave" })}>
-        {season.faWave === 1 ? "Open the outside market" : season.faWave < 3 ? "Next wave" : "Close free agency"}
+      {season.faNegotiation ? (
+        <p role="status" className="text-sm text-amber-200">
+          {season.faNegotiation.status === "counter"
+            ? "Answer the counteroffer or walk away before advancing the market."
+            : "Finish or close the open negotiation before advancing the market."}
+        </p>
+      ) : null}
+      <Button variant="outline" className="!h-11" disabled={Boolean(season.faNegotiation)} data-testid="choice-next-wave" onClick={() => dispatch({ type: "next-wave" })}>
+        {season.faNegotiation?.status === "counter"
+          ? "Answer counteroffer first"
+          : season.faNegotiation
+            ? "Finish negotiation first"
+            : season.faWave === 1
+              ? "Open the outside market"
+              : season.faWave < 3
+                ? "Next wave"
+                : "Close free agency"}
       </Button>
       {season.walked.length ? <p className="text-xs text-muted-foreground">Already walked: {season.walked.join(", ")}</p> : null}
     </section>

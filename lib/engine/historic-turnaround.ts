@@ -55,6 +55,9 @@ export function createHistoricTurnaroundSeason(
       .map((teamId) => [teamId, teamRatings(season, teamId)]),
   );
   season.teams[scenario.teamId].roster = structuredClone(definition.roster);
+  if (scenario.season < 2020) {
+    season.directory = season.directory.map((team) => team.id === "WAS" ? { ...team, name: "Redskins" } : team);
+  }
   for (const [teamId, ratings] of Object.entries(opponentRatings)) {
     season.teams[teamId].roster = [];
     season.teams[teamId].lockOff = ratings.off;

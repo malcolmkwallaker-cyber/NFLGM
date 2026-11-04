@@ -1794,9 +1794,9 @@ function extensionDecision(state: SeasonState): Decision | null {
     title: `${player.name} wants it done`,
     body: `${player.name} is playing on a deal that ends soon and wants $${ask.toFixed(1)}M a year. Waiting is allowed. So is a trade conversation that will leak.`,
     options: [
-      { id: "pay", label: `Pay $${ask.toFixed(1)}M`, detail: "Buy the peace and the player.", owner: state.owner.priority === "fiscal" ? -3 : 2, fans: 3, locker: 3, log: `Extended ${player.name}.`, tag: `extend:${player.id}:${ask}`, swing: 2 },
-      { id: "wait", label: "Wait until the offseason", detail: "You will not negotiate against yourself in December.", owner: 1, fans: -1, locker: -2, log: `Tabled the ${player.name} extension.`, swing: 0 },
-      { id: "shop", label: "Tell the agent you will listen to calls", detail: "This only requests an offer. You will review it before any trade is made.", owner: 0, fans: -2, locker: -3, log: `Asked the market for an offer on ${player.name}.`, tag: `shopstar:${player.id}`, swing: -2 },
+      { id: "pay", label: `Pay $${ask.toFixed(1)}M`, detail: `Buy the peace and the player. Owner ${formatSigned(state.owner.priority === "fiscal" ? -3 : 2)}; fans +3; locker +3.`, owner: state.owner.priority === "fiscal" ? -3 : 2, fans: 3, locker: 3, log: `Extended ${player.name}.`, tag: `extend:${player.id}:${ask}`, swing: 2 },
+      { id: "wait", label: "Wait until the offseason", detail: "You will not negotiate against yourself in December. Owner +1; fans −1; locker −2.", owner: 1, fans: -1, locker: -2, log: `Tabled the ${player.name} extension.`, swing: 0 },
+      { id: "shop", label: "Tell the agent you will listen to calls", detail: "This only requests an offer. You will review it before any trade is made. Owner 0; fans −2; locker −3.", owner: 0, fans: -2, locker: -3, log: `Asked the market for an offer on ${player.name}.`, tag: `shopstar:${player.id}`, swing: -2 },
     ],
   };
 }
