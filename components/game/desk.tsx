@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, pendingInjuryPlayer, playerAvailabilityLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeValueLabel, unusedCapUnderReview, visiblePlayerOverall, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -220,7 +220,7 @@ export function Desk() {
                   {playerAvailabilityLabel(season, player) ? ` · ${playerAvailabilityLabel(season, player)}` : ""}
                 </span>
                 <span className="text-muted-foreground">
-                  {visiblePlayerOverall(season, player)} · {money(player.cap)} · {formatContractYears(player.years)}
+                  {playerRatingLabel(season, player)} · {money(player.cap)} · {playerContractLabel(season, player)}
                 </span>
               </li>
             ))}
@@ -382,7 +382,7 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
                 {player.pos} {player.name}
               </p>
               <p className="text-xs text-muted-foreground">
-                {player.ovr} ovr · {money(player.cap)} · {formatContractYears(player.years)}
+                {playerRatingLabel(season, player)} · {money(player.cap)} · {playerContractLabel(season, player)}
               </p>
             </div>
             <div className="flex gap-2">
@@ -605,17 +605,18 @@ function Trades({
       <h2 className="font-display text-2xl tracking-wide">Three calls, and one name you can shop</h2>
       {season.tradeOffers.map((offer) => {
         const impact = tradeImpactPreview(season, offer);
+        const outgoing = tradeOutgoingLabel(season, offer);
         return (
         <article key={offer.id} className="rounded-xl border border-white/10 bg-card p-4">
           <div className="flex items-center justify-between gap-2">
-            <p className="font-medium">{teamById(offer.fromTeamId, season.directory).city} called about {offer.wantName}</p>
+            <p className="font-medium">{teamById(offer.fromTeamId, season.directory).city} called about {outgoing}</p>
             <Badge variant={offer.fair === "fleece" ? "destructive" : "outline"}>
               {offer.fair === "bargain" ? "Good value for you" : offer.fair === "fleece" ? "Poor value for you" : "Fair value for you"}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{offer.blurb}</p>
           <dl className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-            <div><dt className="inline text-foreground">You send:</dt> <dd className="inline">{offer.wantName}</dd></div>
+            <div><dt className="inline text-foreground">You send:</dt> <dd className="inline">{outgoing}</dd></div>
             <div><dt className="inline text-foreground">You receive:</dt> <dd className="inline">{offer.incoming ? `${tradeIncomingName(offer.incoming)} (${offer.incoming.ovr} ovr)` : "no player"}{offer.pickRound ? ` · ${offer.pickYear} round ${offer.pickRound}` : ""}</dd></div>
           </dl>
           {!offer.incoming ? <p className="mt-2 text-xs text-amber-200">No player comes back. This return is draft compensation only.</p> : null}
@@ -636,7 +637,7 @@ function Trades({
       {season.shop ? (
         <article className="rounded-xl border border-primary/40 bg-card p-4">
           <div className="flex items-center justify-between gap-2">
-            <p className="font-medium">The market answered on {season.shop.wantName}</p>
+            <p className="font-medium">The market answered on {tradeOutgoingLabel(season, season.shop)}</p>
             <Badge variant={season.shop.fair === "fleece" ? "destructive" : "outline"}>{tradeValueLabel(season.shop.fair)}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{season.shop.blurb}</p>
@@ -857,8 +858,7 @@ function Camp({
                 </span>
               </span>
               <span className="text-xs text-muted-foreground">
-                {player.ovr}
-                {player.drafted && player.perceived ? ` · scout ${player.perceived}` : ""} · {money(player.cap)}
+                {playerRatingLabel(season, player)} · {money(player.cap)}
               </span>
             </label>
           );
@@ -894,7 +894,7 @@ function Regular({
       {season.shop ? (
         <article className="rounded-2xl border border-primary/40 bg-card p-4" aria-label="Contract-year trade offer">
           <p className="text-xs uppercase tracking-[0.16em] text-primary">Trade offer · no move yet</p>
-          <h2 className="mt-1 font-display text-2xl tracking-wide">{teamById(season.shop.fromTeamId, season.directory).city} called about {season.shop.wantName}</h2>
+          <h2 className="mt-1 font-display text-2xl tracking-wide">{teamById(season.shop.fromTeamId, season.directory).city} called about {tradeOutgoingLabel(season, season.shop)}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{season.shop.blurb}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button data-testid="choice-contract-trade-accept" onClick={() => dispatch({ type: "shop-resolve", accept: true })}>Accept the offer</Button>

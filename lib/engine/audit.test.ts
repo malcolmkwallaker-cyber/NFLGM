@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, recordCompletedSeason, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advancedLines, applyAction, applyChampionshipMeterBonus, campCutDeadMoney, capCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, pendingInjuryPlayer, playerAvailabilityLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
+import { advancedLines, applyAction, applyChampionshipMeterBonus, campCutDeadMoney, capCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -417,6 +417,84 @@ describe("audit regressions", () => {
     const accepted = applyAction(state, { type: "shop-resolve", accept: true });
     expect(yourRoster(accepted).some((player) => player.id === playerId)).toBe(false);
     expect(accepted.extraPicks.some((pick) => pick.year === state.year + 1 && pick.round === state.shop?.pickRound && pick.source?.includes("Trade with"))).toBe(true);
+  });
+
+  it("identifies the exact outgoing player when a legacy save has duplicate names", () => {
+    const state = createSeason({ teamId: "SEA", gmName: "Duplicate Name Audit", seed: 1105, mode: "career" });
+    const cb = { ...yourRoster(state)[0], id: "legacy-felix-cb", name: "Felix Brooks", pos: "CB" as const, ovr: 82, cap: 18.9 };
+    const edge = { ...yourRoster(state)[1], id: "legacy-felix-edge", name: "Felix Brooks", pos: "EDGE" as const, ovr: 74, cap: 2.8 };
+    state.teams.SEA.roster.push(cb, edge);
+    const offer: TradeOffer = {
+      id: "legacy-duplicate-offer",
+      fromTeamId: "CLE",
+      wantId: edge.id,
+      wantName: edge.name,
+      incoming: null,
+      pickRound: 3,
+      pickYear: 2035,
+      blurb: "Legacy duplicate-name fixture.",
+      fair: "fleece",
+    };
+
+    expect(tradeOutgoingLabel(state, offer)).toBe("EDGE Felix Brooks · 74 OVR · $2.8M");
+  });
+
+  it("labels unsigned market players and separates scout, actual, and current ratings", () => {
+    const state = createSeason({ teamId: "SEA", gmName: "Label Audit", seed: 11051, mode: "career" });
+    const drafted = {
+      ...yourRoster(state)[0],
+      id: "draft-label-fixture",
+      drafted: true,
+      perceived: 91,
+      ovr: 88,
+      years: 0,
+    };
+
+    state.phase = "draft";
+    expect(playerRatingLabel(state, drafted)).toBe("scout 91");
+    state.phase = "camp";
+    expect(playerRatingLabel(state, drafted)).toBe("actual 88 · scout 91");
+    state.phase = "regular";
+    drafted.ovr = 86;
+    expect(playerRatingLabel(state, drafted)).toBe("current 86 · draft scout 91");
+    expect(playerContractLabel(state, drafted)).toBe("Expiring");
+    state.phase = "fa";
+    state.faWave = 2;
+    expect(playerContractLabel(state, drafted)).toBe("Unsigned · on market until free agency closes");
+  });
+
+  it("explains offseason meter resets using the actual formulas", () => {
+    const state = createSeason({ teamId: "SEA", gmName: "Rollover Audit", seed: 11052, mode: "career" });
+    state.meters = { owner: 76, fans: 98, locker: 95 };
+    const next = rolloverSeason(state);
+    const analytics = next.headlines.find((headline) => headline.outlet === "analytics")?.text ?? "";
+
+    expect(next.meters).toEqual({ owner: 73, fans: 90, locker: 90 });
+    expect(analytics).toContain("owner confidence moved from 76 to 73 (70% prior, 30% baseline 66)");
+    expect(analytics).toContain("fans 98 → 90 (80% prior, 20% baseline 58)");
+    expect(analytics).toContain("locker 95 → 90 (85% prior, 15% baseline 64)");
+    expect(next.log.at(-1)).toContain("Offseason reset");
+  });
+
+  it("discloses when an extension replaces a larger current annual charge", () => {
+    let state = advanceTo(createSeason({ teamId: "SEA", gmName: "Extension Audit", seed: 11053, mode: "career" }), "regular");
+    const player = yourRoster(state).filter((candidate) => candidate.pos !== "K").sort((a, b) => b.ovr - a.ovr)[0];
+    if (!player) throw new Error("Extension fixture missing");
+    player.name = "Justin Jefferson";
+    player.ovr = 99;
+    player.years = 1;
+    player.cap = 47;
+
+    for (let guard = 0; guard < 30 && state.activeDecision?.id !== "extension"; guard += 1) {
+      if (state.activeDecision) state = applyAction(state, { type: "decide", choiceId: state.activeDecision.options[0]?.id ?? "" });
+      else state = applyAction(state, { type: "play-week" });
+    }
+
+    expect(state.activeDecision?.id).toBe("extension");
+    const pay = state.activeDecision?.options.find((option) => option.id === "pay");
+    expect(state.activeDecision?.body).toContain("replaces the current annual cap charge immediately");
+    expect(pay?.detail).toContain("replace the current $47.0M annual charge");
+    expect(pay?.detail).toMatch(/Current cap room (increases|decreases|is unchanged)/);
   });
 
   it("keeps acquired picks through their draft and logs late-round staff selections", () => {

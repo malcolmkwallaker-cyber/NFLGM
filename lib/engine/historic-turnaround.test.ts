@@ -77,6 +77,21 @@ describe("historic turnaround challenge contract", () => {
     }
   });
 
+  it("keeps the kicker-based Week 1 option when the 2010 Dallas roster has a kicker", () => {
+    const scenario = HISTORIC_TURNAROUNDS.find((item) => item.id === "dal-2010");
+    if (!scenario) throw new Error("2010 Dallas fixture missing");
+    let season = createHistoricTurnaroundSeason(scenario, "Specialist Audit", 3062602313, "2026-11-05");
+    expect(season.teams.DAL.roster.some((player) => player.name === "David Buehler" && player.pos === "K")).toBe(true);
+    for (let guard = 0; guard < 60 && season.phase !== "regular"; guard += 1) {
+      const action = suggestAction(season);
+      if (!action) throw new Error(`No action available in ${season.phase}`);
+      season = applyAction(season, action);
+    }
+    expect(season.phase).toBe("regular");
+    expect(season.activeDecision?.options.find((option) => option.id === "conservative")?.label)
+      .toBe("Trust the defense and the kicker");
+  });
+
   it("provides deterministic fictional outside markets without leaking modern players into historical modes", () => {
     const cle = HISTORIC_TURNAROUNDS.find((item) => item.id === "cle-2019");
     if (!cle) throw new Error("Cleveland fixture missing");

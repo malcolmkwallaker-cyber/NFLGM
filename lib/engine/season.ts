@@ -9,7 +9,7 @@ import { interpretFreeText } from "@/lib/engine/keywords";
 import { teamRatings } from "@/lib/engine/ratings";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { clamp, hashSeed, makeRng, shuffle } from "@/lib/engine/rng";
-import { formatMoney, formatPlayoffRound } from "@/lib/format";
+import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
 import { gmSubject, normalizeGmName } from "@/lib/gm-name";
 import type {
   Action,
@@ -86,6 +86,22 @@ export function visiblePlayerOverall(state: SeasonState, player: Player): number
     return player.perceived;
   }
   return player.ovr;
+}
+
+export function playerRatingLabel(state: SeasonState, player: Player): string {
+  if (!player.drafted || typeof player.perceived !== "number" || player.perceived <= 0) {
+    return `${player.ovr} OVR`;
+  }
+  if (state.phase === "draft") return `scout ${player.perceived}`;
+  if (state.phase === "camp") return `actual ${player.ovr} · scout ${player.perceived}`;
+  return `current ${player.ovr} · draft scout ${player.perceived}`;
+}
+
+export function playerContractLabel(state: SeasonState, player: Player): string {
+  if (player.years <= 0 && state.phase === "fa" && state.faWave > 1) {
+    return "Unsigned · on market until free agency closes";
+  }
+  return formatContractYears(player.years);
 }
 
 export function rosterForDisplay(state: SeasonState): Player[] {
@@ -1121,6 +1137,13 @@ export function tradeIncomingName(player: Player): string {
     : `${player.name} · ${player.pos}`;
 }
 
+export function tradeOutgoingLabel(state: SeasonState, offer: TradeOffer): string {
+  const player = yourRoster(state).find((candidate) => candidate.id === offer.wantId);
+  return player
+    ? `${player.pos} ${player.name} · ${player.ovr} OVR · ${formatMoney(player.cap)}`
+    : offer.wantName;
+}
+
 export function tradeImpactPreview(state: SeasonState, offer: TradeOffer) {
   const sent = yourRoster(state).find((player) => player.id === offer.wantId);
   const ownerRequested = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
@@ -1788,13 +1811,19 @@ function extensionDecision(state: SeasonState): Decision | null {
     .sort((a, b) => b.ovr - a.ovr)[0];
   if (!player) return null;
   const ask = Math.round(marketAsk(player, salaryScale(state.capLimit)) * 1.12 * 10) / 10;
+  const capRoomChange = Math.round((player.cap - ask) * 10) / 10;
+  const capEffect = capRoomChange > 0
+    ? `Current cap room increases by ${formatMoney(capRoomChange)}.`
+    : capRoomChange < 0
+      ? `Current cap room decreases by ${formatMoney(Math.abs(capRoomChange))}.`
+      : "Current cap room is unchanged.";
   return {
     id: "extension",
     kicker: "Contract",
     title: `${player.name} wants it done`,
-    body: `${player.name} is playing on a deal that ends soon and wants $${ask.toFixed(1)}M a year. Waiting is allowed. So is a trade conversation that will leak.`,
+    body: `${player.name} is playing on a deal that ends soon and wants $${ask.toFixed(1)}M a year. In this model, an extension replaces the current annual cap charge immediately. Waiting is allowed. So is a trade conversation that will leak.`,
     options: [
-      { id: "pay", label: `Pay $${ask.toFixed(1)}M`, detail: `Buy the peace and the player. Owner ${formatSigned(state.owner.priority === "fiscal" ? -3 : 2)}; fans +3; locker +3.`, owner: state.owner.priority === "fiscal" ? -3 : 2, fans: 3, locker: 3, log: `Extended ${player.name}.`, tag: `extend:${player.id}:${ask}`, swing: 2 },
+      { id: "pay", label: `Pay $${ask.toFixed(1)}M`, detail: `Three years replace the current ${formatMoney(player.cap)} annual charge with ${formatMoney(ask)}. ${capEffect} Owner ${formatSigned(state.owner.priority === "fiscal" ? -3 : 2)}; fans +3; locker +3.`, owner: state.owner.priority === "fiscal" ? -3 : 2, fans: 3, locker: 3, log: `Extended ${player.name} for three years at ${formatMoney(ask)} annually, replacing ${formatMoney(player.cap)}. ${capEffect}`, tag: `extend:${player.id}:${ask}`, swing: 2 },
       { id: "wait", label: "Wait until the offseason", detail: "You will not negotiate against yourself in December. Owner +1; fans −1; locker −2.", owner: 1, fans: -1, locker: -2, log: `Tabled the ${player.name} extension.`, swing: 0 },
       { id: "shop", label: "Tell the agent you will listen to calls", detail: "This only requests an offer. You will review it before any trade is made. Owner 0; fans −2; locker −3.", owner: 0, fans: -2, locker: -3, log: `Asked the market for an offer on ${player.name}.`, tag: `shopstar:${player.id}`, swing: -2 },
     ],
@@ -2659,9 +2688,11 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   next.futureDead = activeLiability.futureDead;
   next.teamMod = 0;
   next.capLimit = Math.round(next.capLimit * 1.05 * 10) / 10;
+  const priorMeters = { ...next.meters };
   next.meters.owner = clamp(Math.round(next.meters.owner * 0.7 + 66 * 0.3), 35, 90);
   next.meters.fans = clamp(Math.round(next.meters.fans * 0.8 + 58 * 0.2), 30, 90);
   next.meters.locker = clamp(Math.round(next.meters.locker * 0.85 + 64 * 0.15), 30, 90);
+  const meterReset = `Offseason reset: owner confidence moved from ${priorMeters.owner} to ${next.meters.owner} (70% prior, 30% baseline 66); fans ${priorMeters.fans} → ${next.meters.fans} (80% prior, 20% baseline 58); locker ${priorMeters.locker} → ${next.meters.locker} (85% prior, 15% baseline 64).`;
   for (const team of Object.values(next.teams)) {
     team.wins = 0;
     team.losses = 0;
@@ -2703,12 +2734,12 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   next.log = [
     `${next.year}: ${next.owner.name} wants the plan again.`,
     `Cap rollover: ${formatMoney(currentDeadCleared)} of prior current-year dead money cleared; ${formatMoney(pushedDeadBecomingCurrent)} of pushed money became this year's dead charge.`,
-    `Owner confidence moved from ${state.meters.owner} to ${next.meters.owner} in the offseason reset toward the league baseline.`,
+    meterReset,
   ];
   next.headlines = makeHeadlines(next, "neutral", {
     beat: `Year ${next.year}. The owner already has a version of this meeting on the calendar.`,
     national: `${gmSubject(next.gmName)} is back. The roster is a year older and the cap moved.`,
-    analytics: `Cap ${formatMoney(next.capLimit)}. Prior dead cleared ${formatMoney(currentDeadCleared)}; pushed money now charged ${formatMoney(next.deadMoney)}. Owner confidence reset ${state.meters.owner} → ${next.meters.owner}.`,
+    analytics: `Cap ${formatMoney(next.capLimit)}. Prior dead cleared ${formatMoney(currentDeadCleared)}; pushed money now charged ${formatMoney(next.deadMoney)}. ${meterReset}`,
   });
   return next;
 }
