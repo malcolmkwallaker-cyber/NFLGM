@@ -1,5 +1,27 @@
 # NFLGM career-mode audit
 
+## 2026-11-06 QA infrastructure report disposition
+
+Source: Google Doc `1vwAscGSyg9TtUKa8GQPfLQ-ZO8KC2X3F23wkM6Pmajc`. The scheduled QA browser tunnel failed before gameplay coverage began, so this report supplies no new game-build, save, or interaction evidence and is not treated as an independent regression. No code change is inferred from the tunnel failure.
+
+The repeated November 5 observations remain under their existing dispositions below: large unused cap is a broad balance lead without a reproduced arithmetic defect; a Poor asset grade can intentionally coexist with owner +4 under a build-young brief; restructure owner reactions vary with the stated owner brief; and the 2010 Dallas Turnaround roster already includes a kicker. None authorizes an economy, trade, meter, or specialist redesign in this release.
+
+## 2026-11-05 Daily #239 / Seattle Career / 2010 Dallas Turnaround report disposition
+
+Source: [Google Doc `1NH5M0qC8t3U1gxH7xjZs8V02fPNDrlc2FfuXiPfmrq0`](https://docs.google.com/document/d/1NH5M0qC8t3U1gxH7xjZs8V02fPNDrlc2FfuXiPfmrq0/edit) and matching Slack message `1793891641006439` plus reply `1793891645.211719`. These are one two-part report against footer build `d2b1f70`, covering an existing Seattle Career from 2033 Week 10 through 2034 Week 10, the 2010 Dallas Turnaround with seed `3062602313`, and Daily #239. The 9:14 AM post precedes the report's stated 9:45 AM coverage end, so observations were treated as leads and checked against exact source `d2b1f707bea5f5a37f02b89abbdb23c6ecde7967`. This Thursday pass is local-only pending the Friday release review.
+
+| Finding | Disposition |
+| --- | --- |
+| Two legacy players share the name Felix Brooks, and a Cleveland trade card does not identify which one is offered | Confirmed presentation ambiguity. Existing saved identities remain unchanged, but trade, shopping, and contract-year offer cards now resolve the stable player ID and show position, current overall, and annual cap charge. A regression with CB and EDGE players sharing the exact name verifies that the EDGE offer is labeled correctly. |
+| Owner 76 → 73, fans 98 → 90, and locker 95 → 90 at season rollover lack a complete explanation | Confirmed explanation gap, not a balance defect. The existing reset remains unchanged: owner is 70% prior value plus 30% baseline 66, fans are 80% prior plus 20% baseline 58, and locker is 85% prior plus 15% baseline 64, with existing rounding and limits. The new-year analytics and ledger now show all three formulas and values. |
+| An unsigned Witherspoon still appears as expiring during outside-market waves, then leaves when free agency closes | Confirmed lifecycle-label gap. The engine deliberately keeps unsigned players available for final market allocation until the market closes, then removes or assigns them. During outside waves the roster now says `Unsigned · on market until free agency closes` instead of implying another retention decision is available. Save and roster lifecycle behavior did not change. |
+| 2010 Dallas offers `Trust the defense and the kicker` | Not a defect. The sourced compact roster contains kicker David Buehler, and the shared Week 1 decision already switches to field-position copy when a roster actually lacks a kicker. An exact scenario regression preserves this distinction; no punter or automatic specialist system was added. |
+| Draft/camp/cap screens make scout and actual grades difficult to distinguish | Confirmed labeling ambiguity. Draft displays now identify the scout grade, camp labels the revealed actual grade beside the scout grade, and later phases label the current grade beside the original draft-scout grade. Ratings, development, aging, sorting, and save data are unchanged. |
+| A three-year Justin Jefferson extension replaces a $47.0M annual charge with $39.8M and creates $7.2M of room | The arithmetic is the existing modeled market extension, not a reproduced math error. The contract option now states that the three-year extension immediately replaces the current modeled annual charge and shows whether current room rises, falls, or stays flat. Meter effects and contract valuation did not change. |
+| `/pro/`, modern cap growth, brief-based reactions, restructure reactions, draft value, and single-season variance | `/pro/` intentionally explains free public playtest access. The remaining observations are previously documented model or balance leads without new deterministic evidence. No paid access, economy, trade, meter, schedule, playoff, or simulation redesign was made. |
+
+The report's passing retention, one-use restructure guard, old-dead rollover, cut-charge preview, trade effects, future-dead explanation, and Daily behavior were preserved. No code from this Thursday batch was pushed, merged, previewed, or deployed.
+
 ## 2026-11-04 Daily #238 / 2011 Philadelphia Turnaround report disposition
 
 Source: [Google Doc `1cQH6bWnmdPjOsVlvSyIHcj-LBRmq-VFIQ9ZX7alNc4U`](https://docs.google.com/document/d/1cQH6bWnmdPjOsVlvSyIHcj-LBRmq-VFIQ9ZX7alNc4U/edit) and matching [Slack message `1793804845716689`](https://realestate-crm8266.slack.com/archives/C0CBV1ADPMX/p1793804845716689). These are duplicate copies of one manual production report against footer build `7ef0cc0`, covering Daily #238 and the 2011 Philadelphia Turnaround with seed `1422569074`. Findings were checked against the current source and the combined November 2–3 release candidate. Scoped November 4 implementation commit: `a2d4b77a1748601c0769bc93c2205eb74b175d39`.
