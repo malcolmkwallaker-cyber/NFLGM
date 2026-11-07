@@ -730,6 +730,37 @@ function freeAgentPool(state: SeasonState): Player[] {
       pool.push(player);
     }
   }
+  const hasKickerUnderContract = yourRoster(state).some((player) => player.pos === "K" && player.years > 0);
+  if (!hasKickerUnderContract && !pool.some((player) => player.pos === "K")) {
+    const rng = makeRng(hashSeed(state.seed, state.year, "modeled-kicker-market"));
+    const existingNames = new Set([
+      ...Object.values(state.teams).flatMap((team) => team.roster.map((player) => player.name)),
+      ...pool.map((player) => player.name),
+    ]);
+    let name = "Market Kicker";
+    for (let attempt = 0; attempt < FIRSTS.length * 2; attempt += 1) {
+      const candidate = `${FIRSTS[rng.int(FIRSTS.length)]} ${LASTS[rng.int(LASTS.length)]}`;
+      if (!existingNames.has(candidate)) {
+        name = candidate;
+        break;
+      }
+    }
+    const kicker: Player = {
+      id: `modeled-kicker-${state.year}-${state.seed}`,
+      name,
+      pos: "K",
+      ovr: 68 + rng.int(8),
+      age: 24 + rng.int(8),
+      cap: 0,
+      years: 0,
+      potential: 76,
+      real: false,
+      drafted: false,
+      origin: historicalMarket ? "modeled-historical-market" : "modeled-open-market",
+    };
+    kicker.cap = Math.round(marketAsk(kicker, salaryScale(state.capLimit)) * 10) / 10;
+    pool.push(kicker);
+  }
   return pool.sort((a, b) => b.ovr - a.ovr);
 }
 
@@ -745,11 +776,16 @@ function buildBoard(state: SeasonState, wave: number): Player[] {
   const shown = new Set(String(state.flags.faShown ?? "").split(",").filter(Boolean));
   const available = pool.filter((player) => !shown.has(player.id));
   const board = available.slice(0, OUTSIDE_BOARD_SIZE);
+  const needsKicker = !yourRoster(state).some((player) => player.pos === "K" && player.years > 0);
+  const availableKicker = needsKicker ? available.find((player) => player.pos === "K") : undefined;
+  const specialistBoard = availableKicker && !board.some((player) => player.id === availableKicker.id) && board.length
+    ? [...board.slice(0, -1), availableKicker]
+    : board;
   const space = capSpace(state);
-  const affordable = state.capMode === "hard" && !board.some((player) => player.cap <= space + 0.05)
+  const affordable = state.capMode === "hard" && !specialistBoard.some((player) => player.cap <= space + 0.05)
     ? available.slice(OUTSIDE_BOARD_SIZE).find((player) => player.cap <= space + 0.05)
     : undefined;
-  const selected = affordable && board.length ? [...board.slice(0, -1), affordable] : board;
+  const selected = affordable && specialistBoard.length ? [...specialistBoard.slice(0, -1), affordable] : specialistBoard;
   state.flags.faShown = [...shown, ...selected.map((player) => player.id)].join(",");
   return selected;
 }
@@ -1188,7 +1224,14 @@ function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonSt
   if (state.phase !== "trade") throw new Error("The trade window is shut");
   const offer = state.tradeOffers.find((o) => o.id === offerId);
   if (!offer) throw new Error("That offer expired");
-  if (accept) applyOffer(state, offer);
+  if (accept) {
+    const capRoomChange = tradeImpactPreview(state, offer).capRoomChange;
+    const projectedSpace = Math.round((capSpace(state) + capRoomChange) * 10) / 10;
+    if (state.capMode === "hard" && projectedSpace < -0.05 && capRoomChange < -0.05) {
+      throw new Error(`That trade would put the club ${formatMoney(Math.abs(projectedSpace))} over the hard cap`);
+    }
+    applyOffer(state, offer);
+  }
   else {
     const caller = teamById(offer.fromTeamId, state.directory).city;
     pushDecision(state, "Trade", `Passed on ${offer.wantName}`, `Declined the ${caller} call about ${offer.wantName}.`, 0);
@@ -1604,7 +1647,7 @@ function finishDraft(state: SeasonState) {
 export function suggestedCuts(state: SeasonState): string[] {
   const roster = yourRoster(state);
   const extra = roster.length - 26;
-  if (extra <= 0) return [];
+  if (extra <= 0 && (state.capMode !== "hard" || capSpace(state) >= -0.05)) return [];
   const minimums = CAMP_DEPTH_TARGETS;
   const keep = new Set<string>();
   const keptByPosition = new Map<Pos, number>();
@@ -1639,7 +1682,28 @@ export function suggestedCuts(state: SeasonState): string[] {
   if (keep.size < target) {
     roster.filter((player) => !keep.has(player.id)).slice(0, target - keep.size).forEach((player) => keep.add(player.id));
   }
-  return roster.filter((player) => !keep.has(player.id)).map((player) => player.id);
+  const cuts = roster.filter((player) => !keep.has(player.id)).map((player) => player.id);
+  if (state.capMode === "hard") {
+    while (campCapSpaceAfterCuts(state, cuts) < -0.05 && roster.length - cuts.length > MIN_ROSTER) {
+      const remaining = roster.filter((player) => !cuts.includes(player.id));
+      const positionCounts = new Map<Pos, number>();
+      for (const player of remaining) positionCounts.set(player.pos, (positionCounts.get(player.pos) ?? 0) + 1);
+      const candidates = remaining
+        .filter((player) => player.pos !== "QB" || (positionCounts.get("QB") ?? 0) > 1)
+        .sort((a, b) => {
+          const surplus = (player: Player) => (positionCounts.get(player.pos) ?? 0) - (minimums[player.pos] ?? 0);
+          const netSavings = (player: Player) => player.cap - campCutDeadMoney(state, [player.id]);
+          return Number(surplus(b) > 0) - Number(surplus(a) > 0)
+            || Number(state.flags[`signed:${a.id}`] === state.year) - Number(state.flags[`signed:${b.id}`] === state.year)
+            || netSavings(b) - netSavings(a)
+            || a.ovr - b.ovr;
+        });
+      const next = candidates[0];
+      if (!next || next.cap - campCutDeadMoney(state, [next.id]) <= 0) break;
+      cuts.push(next.id);
+    }
+  }
+  return cuts;
 }
 
 const CAMP_DEPTH_TARGETS: Partial<Record<Pos, number>> = {
@@ -1677,6 +1741,13 @@ export function campCutDeadMoney(state: SeasonState, cutIds: string[]): number {
     }, 0) * 10) / 10;
 }
 
+export function campCapSpaceAfterCuts(state: SeasonState, cutIds: string[]): number {
+  const selected = new Set(cutIds);
+  const remaining = yourRoster(state).filter((player) => !selected.has(player.id));
+  const projectedDead = state.deadMoney + campCutDeadMoney(state, cutIds);
+  return Math.round((state.capLimit - committedPayroll(remaining) - projectedDead) * 10) / 10;
+}
+
 function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
   if (state.phase !== "camp") throw new Error("Camp cuts are done");
   const roster = yourRoster(state);
@@ -1685,6 +1756,10 @@ function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
   const qbs = remaining.filter((p) => p.pos === "QB");
   if (remaining.length > 26 || remaining.length < 22 || qbs.length < 1) {
     throw new Error("The camp roster has to land between 22 and 26, with a quarterback");
+  }
+  const projectedSpace = campCapSpaceAfterCuts(state, unique);
+  if (state.capMode === "hard" && projectedSpace < -0.05) {
+    throw new Error(`Clear ${formatMoney(Math.abs(projectedSpace))} more cap room before opening the season`);
   }
   const cut = roster.filter((p) => unique.includes(p.id));
   const addedDead = campCutDeadMoney(state, unique);

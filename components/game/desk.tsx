@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCapSpaceAfterCuts, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -89,7 +89,9 @@ export function Desk() {
   const matchup = weekMatchup(season);
   const remaining = roster.length - (season.phase === "camp" ? cutIds.length : 0);
   const keptQb = roster.some((player) => player.pos === "QB" && !cutIds.includes(player.id));
-  const campOk = remaining >= 22 && remaining <= 26 && keptQb;
+  const campCapSpace = season.phase === "camp" ? campCapSpaceAfterCuts(season, cutIds) : space;
+  const campCapOk = season.capMode !== "hard" || campCapSpace >= -0.05;
+  const campOk = remaining >= 22 && remaining <= 26 && keptQb && campCapOk;
 
   return (
     <div className={`space-y-4 ${interactionLocked ? "pointer-events-none select-none" : ""}`} aria-busy={interactionLocked}>
@@ -156,6 +158,7 @@ export function Desk() {
           cutIds={cutIds}
           remaining={remaining}
           campOk={campOk}
+          campCapSpace={campCapSpace}
           keptQb={keptQb}
           onToggle={(id) => {
             const next = cutIds.includes(id) ? cutIds.filter((item) => item !== id) : [...cutIds, id];
@@ -284,7 +287,7 @@ function Intro({
       <div className="grid gap-2">
         {[
           ["embrace", "Embrace the brief", "Match the owner's stated plan. Owner confidence +8."],
-          ["balance", "Split the difference", "Wins, but not at any price. Owner confidence +2."],
+          ["balance", "Split the difference", "Keep the owner's brief on the board, but run a balanced plan. Owner confidence +2."],
           ["defy", "Push back", "Tell the owner the brief is wrong. Owner confidence −6."],
         ].map(([id, label, detail]) => (
           <button
@@ -456,6 +459,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 Counter: {money(season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual)} per year for {formatContractYears(season.faNegotiation.counterYears ?? negotiationPreview.askYears)}.
               </p>
               <p className="mt-2 text-xs text-muted-foreground">{season.faNegotiation.message}</p>
+              {season.capMode === "hard" && (season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual) > space + 0.05 ? (
+                <p role="status" className="mt-2 text-sm text-amber-200">
+                  This counter is {money((season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual) - space)} above your cap room. Walk away or create room before accepting it.
+                </p>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   disabled={season.capMode === "hard" && (season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual) > space + 0.05}
@@ -605,6 +613,8 @@ function Trades({
       <h2 className="font-display text-2xl tracking-wide">Three calls, and one name you can shop</h2>
       {season.tradeOffers.map((offer) => {
         const impact = tradeImpactPreview(season, offer);
+        const projectedSpace = Math.round((capSpace(season) + impact.capRoomChange) * 10) / 10;
+        const fitsHardCap = season.capMode !== "hard" || projectedSpace >= -0.05 || impact.capRoomChange >= -0.05;
         const outgoing = tradeOutgoingLabel(season, offer);
         return (
         <article key={offer.id} className="rounded-xl border border-white/10 bg-card p-4">
@@ -623,8 +633,9 @@ function Trades({
           <p className="mt-2 text-xs text-muted-foreground">
             If accepted: owner {meterPreview(impact.owner)}, fans {meterPreview(impact.fans)}, locker {meterPreview(impact.locker)}. Cap room {impact.capRoomChange >= 0 ? "increases" : "decreases"} by {money(Math.abs(impact.capRoomChange))}.
           </p>
+          {!fitsHardCap ? <p role="status" className="mt-2 text-sm text-red-200">Cannot accept: this would put the club {money(Math.abs(projectedSpace))} over the hard cap.</p> : null}
           <div className="mt-3 flex gap-2">
-            <Button data-testid={`choice-accept-${offer.id}`} onClick={() => dispatch({ type: "trade", offerId: offer.id, accept: true })}>
+            <Button disabled={!fitsHardCap} data-testid={`choice-accept-${offer.id}`} onClick={() => dispatch({ type: "trade", offerId: offer.id, accept: true })}>
               Accept
             </Button>
             <Button variant="outline" onClick={() => dispatch({ type: "trade", offerId: offer.id, accept: false })}>
@@ -762,7 +773,10 @@ function Draft({ season }: { season: SeasonState }) {
             disabled={Boolean(season.pendingDraftTrade)}
             data-testid={`choice-draft-${prospect.id}`}
             className="rounded-xl border border-white/10 bg-card px-4 py-3 text-left hover:border-primary/60 disabled:opacity-50"
-            onClick={() => dispatch({ type: "draft", prospectId: prospect.id })}
+            onClick={() => {
+              dispatch({ type: "draft", prospectId: prospect.id });
+              setPosition("ALL");
+            }}
           >
             <span className="flex items-center justify-between">
               <span className="font-medium">
@@ -798,6 +812,7 @@ function Camp({
   cutIds,
   remaining,
   campOk,
+  campCapSpace,
   keptQb,
   onToggle,
   onSubmit,
@@ -808,6 +823,7 @@ function Camp({
   cutIds: string[];
   remaining: number;
   campOk: boolean;
+  campCapSpace: number;
   keptQb: boolean;
   onToggle: (id: string) => void;
   onSubmit: () => void;
@@ -821,6 +837,7 @@ function Camp({
         <p className={campOk ? "text-emerald-300" : "text-red-300"}>{remaining} kept</p>
       </div>
       <p className="text-sm text-muted-foreground">Check the players you are cutting. Land between 22 and 26, and keep a quarterback.</p>
+      <p className="text-xs text-muted-foreground">Drafted rookie contracts already count against the cap. Projected room after these cuts and their dead-money charges: {money(campCapSpace)}.</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={onSuggest}>Select suggested cuts</Button>
         <span className="text-xs text-muted-foreground">{cutIds.length ? `${cutIds.length} selected to cut` : "No cuts selected yet"}</span>
@@ -829,6 +846,11 @@ function Camp({
         <p className="text-xs text-amber-100">Estimated added dead money: {money(campCutDeadMoney(season, cutIds))}. Replacement-level and minimum contracts can be released without a charge.</p>
       ) : null}
       {!keptQb ? <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm">Keep at least one quarterback before opening the season.</p> : null}
+      {season.capMode === "hard" && campCapSpace < -0.05 ? (
+        <p role="status" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+          Hard-cap hold: clear {money(Math.abs(campCapSpace))} more room before opening the season. Select additional cuts; suggested cuts will try to clear the deficit while keeping at least 22 players and a quarterback.
+        </p>
+      ) : null}
       {depthWarnings.length ? (
         <p role="status" className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-amber-100">
           Depth warning: {depthWarnings.map(({ pos, count, target }) => `${pos} ${count}/${target}`).join(" · ")}. You can still open the season with 22–26 players and a quarterback, but these groups are below the suggested depth targets.
