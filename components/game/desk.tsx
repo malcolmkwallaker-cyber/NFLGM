@@ -1034,7 +1034,9 @@ function Playoffs({ season }: { season: SeasonState }) {
       </ul>
       {yours ? (
         <p className="text-sm">
-          Your game: {teamById(yours.away, season.directory).abbr} at {teamById(yours.home, season.directory).abbr}
+          {yours.round === "superbowl"
+            ? `Your Super Bowl (neutral site): ${teamById(yours.away, season.directory).abbr} vs ${teamById(yours.home, season.directory).abbr}`
+            : `Your game: ${teamById(yours.away, season.directory).abbr} at ${teamById(yours.home, season.directory).abbr}`}
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">The other games sort the path. Advance the round when you are ready.</p>
@@ -1104,7 +1106,7 @@ function Recap({
             <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
               {playoffResults.map((game, index) => (
                 <li key={`${game.round}-${game.home}-${game.away}-${index}`}>
-                  {formatPlayoffRound(game.round as "wildcard" | "divisional" | "conference" | "superbowl")}: {teamById(game.away, season.directory).abbr} {game.awayScore} at {teamById(game.home, season.directory).abbr} {game.homeScore}
+                  {formatPlayoffRound(game.round as "wildcard" | "divisional" | "conference" | "superbowl")}: {teamById(game.away, season.directory).abbr} {game.awayScore} {game.round === "superbowl" ? "vs" : "at"} {teamById(game.home, season.directory).abbr} {game.homeScore}{game.round === "superbowl" ? " · neutral site" : ""}
                 </li>
               ))}
             </ul>

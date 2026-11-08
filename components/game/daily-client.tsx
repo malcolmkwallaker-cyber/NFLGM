@@ -9,15 +9,6 @@ import { useGame } from "@/components/profile";
 import { ShareCard } from "@/components/game/share-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import type { GradeColor } from "@/lib/types";
 
 const MODE_PROMPT_KEY = "nfl-gm-mode-prompt-v1";
@@ -214,6 +205,58 @@ export function DailyClient({
               optionId: option.id,
             })}
           />
+          {showModes ? (
+            <section
+              data-testid="daily-mode-prompt"
+              aria-label="More game modes"
+              className="rounded-2xl border border-primary/30 bg-primary/5 p-4"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Your result is saved</p>
+                  <h2 className="mt-1 font-display text-2xl tracking-wide">
+                    {option.grade === "green" ? "Ready to run the whole team?" : "Make the next call from the big chair."}
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Try a one-year run or build a multi-season career. Both are free during the public playtest.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="daily-mode-dismiss"
+                  aria-label="Dismiss game-mode suggestions"
+                  onClick={() => setShowModes(false)}
+                >
+                  Dismiss
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Button
+                  className="!h-auto min-h-20 items-start justify-start whitespace-normal px-4 py-3 text-left"
+                  nativeButton={false}
+                  render={<Link href="/season" data-testid="daily-mode-season" />}
+                >
+                  <span>
+                    <span className="block font-display text-xl tracking-wide">Mode 2 · Single Season</span>
+                    <span className="mt-1 block text-xs font-normal opacity-80">One team, one year, one shot at the title.</span>
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="!h-auto min-h-20 items-start justify-start whitespace-normal px-4 py-3 text-left"
+                  nativeButton={false}
+                  render={<Link href="/career" data-testid="daily-mode-career" />}
+                >
+                  <span>
+                    <span className="block font-display text-xl tracking-wide">Mode 3 · Career GM</span>
+                    <span className="mt-1 block text-xs font-normal text-muted-foreground">Keep the job, change teams, build a legacy.</span>
+                  </span>
+                </Button>
+              </div>
+            </section>
+          ) : null}
         </div>
       ) : null}
 
@@ -247,52 +290,6 @@ export function DailyClient({
         </p>
       </section>
 
-      <Dialog open={showModes} onOpenChange={setShowModes}>
-        <DialogContent
-          data-testid="daily-mode-prompt"
-          finalFocus={resultRef}
-          className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg"
-        >
-          <DialogHeader className="pr-8">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Your result is saved</p>
-            <DialogTitle className="font-display text-3xl tracking-wide">
-              {option?.grade === "green" ? "Ready to run the whole team?" : "Make the next call from the big chair."}
-            </DialogTitle>
-            <DialogDescription>
-              The explanation and share card stay on this page. Choose a one-year run or build a multi-season career—both
-              are free during the public playtest.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Button
-              className="!h-auto min-h-24 items-start justify-start whitespace-normal px-4 py-3 text-left"
-              nativeButton={false}
-              render={<Link href="/season" data-testid="daily-mode-season" />}
-            >
-              <span>
-                <span className="block font-display text-xl tracking-wide">Mode 2 · Single Season</span>
-                <span className="mt-1 block text-xs font-normal opacity-80">One team, one year, one shot at the title.</span>
-              </span>
-            </Button>
-            <Button
-              variant="outline"
-              className="!h-auto min-h-24 items-start justify-start whitespace-normal px-4 py-3 text-left"
-              nativeButton={false}
-              render={<Link href="/career" data-testid="daily-mode-career" />}
-            >
-              <span>
-                <span className="block font-display text-xl tracking-wide">Mode 3 · Career GM</span>
-                <span className="mt-1 block text-xs font-normal text-muted-foreground">Keep the job, change teams, build a legacy.</span>
-              </span>
-            </Button>
-          </div>
-          <DialogFooter>
-            <DialogClose render={<Button variant="ghost" data-testid="daily-mode-dismiss" />}>
-              Not now—keep reading
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

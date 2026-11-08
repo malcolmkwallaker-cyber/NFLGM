@@ -305,6 +305,34 @@ describe("audit regressions", () => {
     expect(kept.filter((player) => player.pos === "K")).toHaveLength(1);
   });
 
+  it("protects early draft picks in suggested cuts while still preserving position depth", () => {
+    let state = advanceTo(createSeason({ teamId: "SEA", gmName: "Draft Cut Audit", seed: 3868239877, mode: "career" }), "draft");
+    for (let guard = 0; guard < 200 && state.phase === "draft"; guard += 1) {
+      const action = suggestAction(state);
+      if (!action) throw new Error("Draft fixture could not advance");
+      state = applyAction(state, action);
+    }
+    expect(state.phase).toBe("camp");
+    const earlyIds = state.draftPicks
+      .filter((pick) => pick.teamId === state.teamId && pick.round <= 2 && pick.prospectId)
+      .map((pick) => `draft-${pick.prospectId}`);
+    expect(earlyIds.length).toBeGreaterThan(0);
+    for (const id of earlyIds) {
+      const rookie = yourRoster(state).find((player) => player.id === id);
+      if (rookie) rookie.ovr = 61;
+    }
+    while (yourRoster(state).length < 36) {
+      const index = yourRoster(state).length;
+      yourRoster(state).push({ id: `veteran-cut-${index}`, name: `Veteran Depth ${index}`, pos: index % 2 ? "WR" : "TE", ovr: 64, age: 28, cap: 1, years: 1, potential: 64, real: false });
+    }
+    state.capLimit = committedPayroll(yourRoster(state)) + state.deadMoney + 100;
+
+    const cuts = new Set(suggestedCuts(state));
+    expect(earlyIds.filter((id) => cuts.has(id))).toEqual([]);
+    const kept = yourRoster(state).filter((player) => !cuts.has(player.id));
+    expect(rosterDepthWarnings(kept)).toEqual([]);
+  });
+
   it("allows only one restructure per player per season", () => {
     const state = createSeason({ teamId: "KC", gmName: "Contract Audit", seed: 22 });
     state.phase = "cap";
@@ -1308,6 +1336,39 @@ describe("audit regressions", () => {
     expect(capHealth(next)).toBeLessThan(100);
     expect(next.owner.note).toContain("missed the playoffs");
     expect(next.owner.note).not.toContain("a Missed");
+  });
+
+  it("discloses modeled veteran retirements instead of silently dropping them from retention", () => {
+    const state = createSeason({ teamId: "SEA", gmName: "Retirement Audit", seed: 3868239877, mode: "career" });
+    const quarterbacks = yourRoster(state).filter((player) => player.pos === "QB").slice(0, 2);
+    expect(quarterbacks).toHaveLength(2);
+    quarterbacks[0].name = "Josh Allen";
+    quarterbacks[1].name = "Joe Burrow";
+    for (const player of quarterbacks) {
+      player.age = 38;
+      player.years = 1;
+      player.ovr = 88;
+    }
+
+    const next = rolloverSeason(state);
+    expect(yourRoster(next).some((player) => quarterbacks.some((quarterback) => quarterback.id === player.id))).toBe(false);
+    expect(next.log.some((line) => line.includes("Modeled retirements") && line.includes("Josh Allen") && line.includes("Joe Burrow") && line.includes("not free agents"))).toBe(true);
+    expect(next.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain("Modeled retirements");
+  });
+
+  it("explains free-agent fan and locker reactions from actual rating and age inputs", () => {
+    let state = advanceTo(createSeason({ teamId: "SEA", gmName: "FA Reaction Audit", seed: 1108, mode: "career" }), "fa");
+    state = applyAction(state, { type: "next-wave" });
+    const player = state.faBoard[0];
+    if (!player) throw new Error("Outside free-agent fixture missing");
+    player.ovr = 86;
+    player.age = 32;
+    player.cap = 8;
+    state = applyAction(state, { type: "sign", playerId: player.id });
+
+    expect(state.decisions.at(-1)?.log).toContain("star arrival: fans +4");
+    expect(state.decisions.at(-1)?.log).toContain("veteran competition: locker −1");
+    expect(state.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain("star arrival: fans +4");
   });
 
   it("identifies the league champion without implying a missed-playoff team won the trophy", () => {
