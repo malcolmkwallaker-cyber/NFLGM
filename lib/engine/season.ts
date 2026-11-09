@@ -1251,6 +1251,7 @@ function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonSt
 }
 
 function applyOffer(state: SeasonState, offer: TradeOffer) {
+  const roomBefore = capSpace(state);
   const roster = yourRoster(state);
   const idx = roster.findIndex((p) => p.id === offer.wantId);
   if (idx < 0) throw new Error("That player is not on the roster");
@@ -1283,11 +1284,14 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
   const swing = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
   bump(state, swing, offer.fair === "fleece" ? -3 : 0, sent.ovr >= 85 ? -2 : 0);
   const got = offer.incoming ? tradeIncomingName(offer.incoming) : offer.pickRound ? `a ${offer.pickYear} round ${offer.pickRound}` : "nothing you wanted";
-  pushDecision(state, "Trade", `Moved ${sent.name}`, `Traded ${sent.name} to ${teamById(offer.fromTeamId, state.directory).city} for ${got}.`, swing);
+  const roomAfter = capSpace(state);
+  const roomDelta = Math.round((roomAfter - roomBefore) * 10) / 10;
+  const roomExplanation = `Cap room ${formatMoney(roomBefore)} → ${formatMoney(roomAfter)} (${roomDelta > 0 ? `increased by ${formatMoney(roomDelta)}` : roomDelta < 0 ? `decreased by ${formatMoney(Math.abs(roomDelta))}` : "unchanged"}) from the annual charges exchanged.`;
+  pushDecision(state, "Trade", `Moved ${sent.name}`, `Traded ${sent.name} to ${teamById(offer.fromTeamId, state.directory).city} for ${got}. ${roomExplanation}`, swing);
   state.headlines = makeHeadlines(state, swing >= 0 ? "positive" : "negative", {
     beat: `${sent.name} is gone. Coming back: ${got}.`,
     national: offer.fair === "fleece" ? "That is how you lose a locker room and the trade chart." : "The calls are getting sharper.",
-    analytics: `Trade chart: ${tradeValueLabel(offer.fair)}. This trade's draft compensation is on your board; restructure dead money remains with the club that created it. Owner confidence ${formatSigned(swing)}.`,
+    analytics: `Trade chart: ${tradeValueLabel(offer.fair)}. ${roomExplanation} This trade's draft compensation is on your board; restructure dead money remains with the club that created it. Owner confidence ${formatSigned(swing)}.`,
   });
 }
 

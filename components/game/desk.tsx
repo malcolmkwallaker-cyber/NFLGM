@@ -872,14 +872,21 @@ function Camp({
         {roster.map((player) => {
           const cut = cutIds.includes(player.id);
           return (
-            <label key={player.id} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5">
+            <label key={player.id} className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5 ${cut ? "bg-red-500/5 ring-1 ring-inset ring-red-300/20" : ""}`}>
               <span className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={cut} onChange={() => onToggle(player.id)} />
+                <input
+                  type="checkbox"
+                  checked={cut}
+                  aria-label={`Cut ${player.pos} ${player.name}`}
+                  className="h-4 w-4 shrink-0 accent-primary"
+                  onChange={() => onToggle(player.id)}
+                />
                 <span className={cut ? "text-muted-foreground line-through" : ""}>
                   {player.pos} {player.name}
                 </span>
               </span>
               <span className="text-xs text-muted-foreground">
+                {cut ? <span className="mr-1 text-red-200">Selected cut ·</span> : null}
                 {playerRatingLabel(season, player)} · {money(player.cap)}
               </span>
             </label>

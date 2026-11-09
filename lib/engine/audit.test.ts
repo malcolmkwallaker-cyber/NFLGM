@@ -1465,6 +1465,9 @@ describe("audit regressions", () => {
     const acquired = yourRoster(accepted).find((player) => player.id === incoming.id);
     expect(acquired?.name).toBe("Cincinnati depth player");
     expect(acquired?.name).not.toMatch(/Replacement|2028|21/);
+    expect(accepted.decisions.at(-1)?.log).toContain(`Cap room $${capSpace(state).toFixed(1)}M → $${capSpace(accepted).toFixed(1)}M`);
+    expect(accepted.decisions.at(-1)?.log).toContain("decreased by $6.6M");
+    expect(accepted.headlines.find((headline) => headline.outlet === "analytics")?.text).toContain("annual charges exchanged");
   });
 
   it("rejects a trade that would cross the hard cap without moving either player", () => {
