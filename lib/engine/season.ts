@@ -1424,7 +1424,7 @@ function makeDraftOrder(state: SeasonState): DraftPick[] {
         slot: ranked.length + 1,
         overall,
         teamId: state.teamId,
-        note: extra.source ? `Acquired · ${extra.source}` : "Acquired in an earlier trade",
+        note: extra.source ? `Acquired for ${extra.year} draft · ${extra.source}` : `Acquired for ${extra.year} draft in an earlier trade`,
       });
       overall += 1;
     }
@@ -1636,7 +1636,7 @@ function finishDraft(state: SeasonState) {
       teamId: state.teamId,
       prospectId: prospect.id,
       prospectName: prospect.name,
-      note: `Acquired · ${extra.source ?? "earlier trade"} · staff auto-pick`,
+      note: `Acquired for ${extra.year} draft · ${extra.source ?? "earlier trade"} · staff auto-pick`,
     });
     late.push(`Acquired round ${extra.round}: ${prospect.name} (${prospect.pos})`);
     need.delete(prospect.pos);
@@ -2581,9 +2581,7 @@ function buildGrade(state: SeasonState, fired: boolean) {
   if (historical && (!champ || record.wins < state.seasonLength)) score = Math.min(score, 92);
   if (fired) score = Math.min(score, 47);
   score = Math.round(clamp(score, 20, 99));
-  const swings = state.decisions.slice().sort((a, b) => b.swing - a.swing);
-  const best = swings[0]?.log ?? "You kept the building standing.";
-  const worst = swings[swings.length - 1]?.log ?? "Nothing on the tape was fatal.";
+  const { best, worst } = recapDecisionLines(state);
   const headline = champ
     ? "A champion, and the roster still has a pulse."
     : fired
@@ -2603,6 +2601,21 @@ function buildGrade(state: SeasonState, fired: boolean) {
     headline,
     best,
     worst,
+  };
+}
+
+export function recapDecisionLines(state: SeasonState): { best: string; worst: string } {
+  const survivingNames = new Set(yourRoster(state).map((player) => player.name));
+  const draftedNames = new Set(state.draftPicks
+    .filter((pick) => pick.teamId === state.teamId && pick.prospectName)
+    .map((pick) => pick.prospectName as string));
+  const swings = state.decisions
+    .filter((decision) => decision.title !== "Draft" || !draftedNames.has(decision.choice) || survivingNames.has(decision.choice))
+    .slice()
+    .sort((a, b) => b.swing - a.swing);
+  return {
+    best: swings[0]?.log ?? "You kept the building standing.",
+    worst: swings[swings.length - 1]?.log ?? "Nothing on the tape was fatal.",
   };
 }
 

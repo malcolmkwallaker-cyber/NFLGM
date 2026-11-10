@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, recordCompletedSeason, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advancedLines, applyAction, applyChampionshipMeterBonus, campCapSpaceAfterCuts, campCutDeadMoney, capCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, playerTradeValue, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
+import { advancedLines, applyAction, applyChampionshipMeterBonus, campCapSpaceAfterCuts, campCutDeadMoney, capCutDeadMoney, capSpace, createSeason, ensureMinimumRoster, ownerGameChange, payroll, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, playerTradeValue, recapDecisionLines, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -333,6 +333,22 @@ describe("audit regressions", () => {
     expect(rosterDepthWarnings(kept)).toEqual([]);
   });
 
+  it("does not celebrate or blame a drafted player in the recap after that player was cut", () => {
+    const state = createSeason({ teamId: "SEA", gmName: "Recap Roster Audit", seed: 1110, mode: "career" });
+    state.draftPicks.push({ round: 2, slot: 2, overall: 34, teamId: "SEA", prospectId: "beau-delgado", prospectName: "Beau Delgado" });
+    state.decisions = [
+      { week: 0, title: "Owner", choice: "Stay patient", log: "Stayed patient with the plan.", swing: 1 },
+      { week: 0, title: "Draft", choice: "Beau Delgado", log: "Round 2: Beau Delgado, CB. Scout grade 78; the full grade reveals at camp.", swing: -5 },
+    ];
+
+    expect(recapDecisionLines(state)).toEqual({
+      best: "Stayed patient with the plan.",
+      worst: "Stayed patient with the plan.",
+    });
+    yourRoster(state).push({ id: "draft-beau-delgado", name: "Beau Delgado", pos: "CB", ovr: 73, age: 22, cap: 2, years: 4, potential: 78, real: false, drafted: true });
+    expect(recapDecisionLines(state).worst).toContain("Round 2: Beau Delgado");
+  });
+
   it("allows only one restructure per player per season", () => {
     const state = createSeason({ teamId: "KC", gmName: "Contract Audit", seed: 22 });
     state.phase = "cap";
@@ -535,7 +551,7 @@ describe("audit regressions", () => {
     state = applyAction(state, { type: "trade-done" });
     expect(state.draftPicks.some((pick) => pick.round === 2 && pick.teamId === "LV" && pick.note?.includes("Trade with TB"))).toBe(true);
     state = advanceTo(state, "camp");
-    expect(state.draftPicks.some((pick) => pick.round === 4 && pick.teamId === "LV" && pick.note?.includes("Acquired · Trade with TB"))).toBe(true);
+    expect(state.draftPicks.some((pick) => pick.round === 4 && pick.teamId === "LV" && pick.note?.includes(`Acquired for ${state.year} draft · Trade with TB`))).toBe(true);
     expect(state.extraPicks.some((pick) => pick.year === state.year)).toBe(false);
   });
 
@@ -1044,7 +1060,7 @@ describe("audit regressions", () => {
       { round: 3, year: state.year + 1 },
     ];
     state = applyAction(state, { type: "trade-done" });
-    expect(state.draftPicks.some((pick) => pick.note === "Acquired · Draft-day trade with BUF" && pick.round === 2)).toBe(true);
+    expect(state.draftPicks.some((pick) => pick.note === `Acquired for ${state.year} draft · Draft-day trade with BUF` && pick.round === 2)).toBe(true);
     expect(state.extraPicks).toEqual([{ round: 3, year: state.year + 1 }]);
   });
 

@@ -370,6 +370,9 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
           ? "Hard cap: only active contracts and current dead money count. Expired deals use no room until you re-sign or tag them. Current dead money clears at rollover; restructure money becomes next year's dead charge."
           : "Historical payroll guide: overspending is allowed, but the owner will penalize it."}
       </p>
+      <p className="text-xs text-muted-foreground">
+        Showing the {Math.min(8, roster.length)} highest-rated players from a {roster.length}-player roster. Open <Link href="/stats" className="text-primary underline-offset-2 hover:underline">Stats &amp; contracts</Link> for the complete roster and contract outlook.
+      </p>
       {season.capMode === "hard" && expiring.length ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
           Opening room excludes {expiring.length} expired contract{expiring.length === 1 ? "" : "s"}. Retaining all of them at modeled asks would use about {money(modeledRetention)}; you will choose those deals in the next step.
