@@ -1582,6 +1582,7 @@ describe("audit regressions", () => {
     expect(draftedBeforeCamp.ovr).toBe(prospect.trueOvr);
     expect(visiblePlayerOverall(draft, draftedBeforeCamp)).toBe(prospect.perceived);
     expect(advancedLines(draft).rosterValue).toBe(yourRoster(draft).reduce((sum, player) => sum + visiblePlayerOverall(draft, player), 0));
+    expect(advancedLines(draft).rosterCount).toBe(yourRoster(draft).length);
 
     const orderingFixture = structuredClone(draft);
     const hiddenRookie = yourRoster(orderingFixture).find((player) => player.id === `draft-${prospect.id}`);

@@ -2940,6 +2940,7 @@ export function advancedLines(state: SeasonState) {
     dead: state.deadMoney,
     health: capHealth(state),
     rosterValue: roster.reduce((sum, player) => sum + visiblePlayerOverall(state, player), 0),
+    rosterCount: roster.length,
     top: roster.slice().sort((a, b) => b.cap - a.cap).slice(0, 5),
     byPos: [...byPos.entries()],
   };

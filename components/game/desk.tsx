@@ -24,10 +24,10 @@ function signed(value: number): string {
   return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
 }
 
-function meterPreview(effect: { requested: number; applied: number }): string {
+function meterPreview(effect: { requested: number; applied: number }, ceiling: number): string {
   return effect.requested === effect.applied
     ? signed(effect.applied)
-    : `${signed(effect.applied)} applied (${signed(effect.requested)} requested; meter limit)`;
+    : `${signed(effect.applied)} applied (${signed(effect.requested)} requested; capped at ${ceiling})`;
 }
 
 const PHASE_TITLE: Record<Phase, string> = {
@@ -334,7 +334,7 @@ function Staff({ season, role }: { season: SeasonState; role: StaffRole }) {
               Lead {member.leadership} · Develop {member.development} · Aggression {member.aggression} · Cost {member.cost}
             </span>
             <span className="mt-2 block text-xs text-muted-foreground">
-              If hired: owner {meterPreview(impact.owner)}, fans {meterPreview(impact.fans)}, locker {meterPreview(impact.locker)}.
+              If hired: owner {meterPreview(impact.owner, 96)}, fans {meterPreview(impact.fans, 100)}, locker {meterPreview(impact.locker, 96)}.
             </span>
           </button>
           );
@@ -634,7 +634,7 @@ function Trades({
           </dl>
           {!offer.incoming ? <p className="mt-2 text-xs text-amber-200">No player comes back. This return is draft compensation only.</p> : null}
           <p className="mt-2 text-xs text-muted-foreground">
-            If accepted: owner {meterPreview(impact.owner)}, fans {meterPreview(impact.fans)}, locker {meterPreview(impact.locker)}. Cap room {impact.capRoomChange >= 0 ? "increases" : "decreases"} by {money(Math.abs(impact.capRoomChange))}.
+            If accepted: owner {meterPreview(impact.owner, 96)}, fans {meterPreview(impact.fans, 100)}, locker {meterPreview(impact.locker, 96)}. Cap room {impact.capRoomChange >= 0 ? "increases" : "decreases"} by {money(Math.abs(impact.capRoomChange))}.
           </p>
           {!fitsHardCap ? <p role="status" className="mt-2 text-sm text-red-200">Cannot accept: this would put the club {money(Math.abs(projectedSpace))} over the hard cap.</p> : null}
           <div className="mt-3 flex gap-2">
@@ -1142,7 +1142,8 @@ function Recap({
           <p className="text-xs uppercase tracking-[0.16em] text-primary">Advanced</p>
           <p className="mt-2">Pythagorean wins {lines.pythWins}</p>
           <p>Point differential {lines.diff}</p>
-          <p>Roster value {lines.rosterValue}</p>
+          <p>Roster rating total {lines.rosterValue} · {lines.rosterCount} players</p>
+          <p className="text-xs text-muted-foreground">Sum of the current visible overall ratings on your roster—not dollars, a league rank, or a separate grade.</p>
           <p>
             Cap space {money(lines.cap)} · current dead {money(lines.dead)} · pushed to next year {money(season.futureDead)}
           </p>
