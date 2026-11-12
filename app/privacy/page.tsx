@@ -4,7 +4,7 @@ export default function PrivacyPage() {
       <header className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
         <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Privacy</p>
         <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">How this playtest handles data</h1>
-        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Current as of November 2, 2026.</p>
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Current as of November 12, 2026.</p>
       </header>
 
       <section className="space-y-4 rounded-2xl border border-white/10 bg-card p-5 text-sm leading-relaxed sm:p-6">
@@ -14,6 +14,19 @@ export default function PrivacyPage() {
             Run The Roster stores your GM name, game settings, Daily results and streaks, Single Season file, Career file,
             and local score-room entries in your browser&apos;s local storage. The current game has no player account, cloud
             sync, or score server, and the game does not upload those save contents.
+          </p>
+        </div>
+        <div>
+          <h2 className="font-display text-2xl tracking-wide">Optional Google Analytics page views</h2>
+          <p className="mt-2 text-muted-foreground">
+            A published build may offer optional Google Analytics 4 audience measurement. The Google tag is not loaded
+            unless the build has a valid measurement ID and you expressly choose Allow. Declining, Do Not Track, or
+            Global Privacy Control prevents it from loading. You can change the choice from Settings.
+          </p>
+          <p className="mt-2 text-muted-foreground">
+            When allowed, Run The Roster sends route page views without URL query strings. It does not send your GM name,
+            save contents, gameplay choices, or advertising signals. The Google tag may attach standard browser, device,
+            and request context under the <a className="text-primary underline-offset-4 hover:underline" href="https://policies.google.com/privacy">Google Privacy Policy</a>.
           </p>
         </div>
         <div>

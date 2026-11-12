@@ -9,6 +9,7 @@ import { AnalyticsListener } from "@/components/analytics-listener";
 import { SoundEffects } from "@/components/game/sound-effects";
 import { useGame } from "@/components/profile";
 import { Button } from "@/components/ui/button";
+import { GoogleAnalytics } from "@/components/google-analytics";
 
 const LINKS = [
   { href: "/", label: "Home" },
@@ -97,6 +98,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </footer>
       <AnalyticsListener />
       <SoundEffects />
+      <GoogleAnalytics />
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-white/10 bg-[#0b1018]/95 backdrop-blur md:hidden">
         {[
           { href: "/daily", label: "Daily" },

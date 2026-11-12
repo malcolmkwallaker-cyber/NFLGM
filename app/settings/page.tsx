@@ -5,6 +5,7 @@ import { freshProfile } from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { GoogleAnalyticsSettings } from "@/components/google-analytics";
 
 export default function SettingsPage() {
   const { profile, ready, update, confirmAction } = useGame();
@@ -78,6 +79,7 @@ export default function SettingsPage() {
           />
         </label>
       </section>
+      <GoogleAnalyticsSettings />
       <Button
         variant="destructive"
         onClick={() => {
