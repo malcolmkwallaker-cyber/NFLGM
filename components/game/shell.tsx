@@ -4,7 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
+import { Volume2, VolumeX } from "lucide-react";
 import { AnalyticsListener } from "@/components/analytics-listener";
+import { SoundEffects } from "@/components/game/sound-effects";
+import { useGame } from "@/components/profile";
+import { Button } from "@/components/ui/button";
 
 const LINKS = [
   { href: "/", label: "Home" },
@@ -20,6 +24,8 @@ const LINKS = [
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
+  const { profile, update, ready } = useGame();
+  const soundEnabled = profile.settings.soundEnabled ?? true;
 
   return (
     <div className="flex min-h-full flex-col">
@@ -54,6 +60,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            data-sound="none"
+            className="shrink-0 border border-white/10"
+            aria-label={soundEnabled ? "Mute interface sounds" : "Turn on interface sounds"}
+            title={soundEnabled ? "Mute interface sounds" : "Turn on interface sounds"}
+            disabled={!ready}
+            onClick={() => update((prev) => ({ ...prev, settings: { ...prev.settings, soundEnabled: !soundEnabled } }))}
+          >
+            {soundEnabled ? <Volume2 aria-hidden="true" /> : <VolumeX aria-hidden="true" />}
+          </Button>
           <p className="ml-auto text-[10px] uppercase tracking-[0.16em] text-primary md:ml-2">Free playtest</p>
         </div>
       </header>
@@ -77,6 +96,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </p>
       </footer>
       <AnalyticsListener />
+      <SoundEffects />
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-white/10 bg-[#0b1018]/95 backdrop-blur md:hidden">
         {[
           { href: "/daily", label: "Daily" },

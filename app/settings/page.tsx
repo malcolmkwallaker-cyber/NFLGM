@@ -48,6 +48,36 @@ export default function SettingsPage() {
           aria-label="Tester mode"
         />
       </label>
+      <section className="space-y-4 rounded-xl border border-white/10 px-4 py-4" aria-labelledby="sound-settings-title">
+        <div className="flex items-center justify-between gap-3">
+          <span>
+            <span id="sound-settings-title" className="block text-sm">Interface sounds</span>
+            <span className="text-xs text-muted-foreground">Short selection, reveal, and success cues. No music or autoplay.</span>
+          </span>
+          <Switch
+            checked={profile.settings.soundEnabled ?? true}
+            onCheckedChange={(on) => update((prev) => ({ ...prev, settings: { ...prev.settings, soundEnabled: on } }))}
+            aria-label="Interface sounds"
+          />
+        </div>
+        <label className="block text-xs text-muted-foreground">
+          Volume {Math.round((profile.settings.soundVolume ?? 0.45) * 100)}%
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={profile.settings.soundVolume ?? 0.45}
+            disabled={!(profile.settings.soundEnabled ?? true)}
+            onChange={(event) => {
+              const soundVolume = Number(event.target.value);
+              update((prev) => ({ ...prev, settings: { ...prev.settings, soundVolume } }));
+            }}
+            className="mt-2 block w-full accent-primary disabled:opacity-50"
+            aria-label="Interface sound volume"
+          />
+        </label>
+      </section>
       <Button
         variant="destructive"
         onClick={() => {

@@ -141,10 +141,11 @@ export function DailyClient({
               key={item.id}
               type="button"
               data-testid={`daily-option-${item.id}`}
+              data-sound="reveal"
               disabled={revealed}
               onClick={() => choose(item.id)}
               className={`block w-full rounded-xl border px-4 py-3 text-left ${
-                show ? GRADE_CLASS[item.grade] : "border-white/10 bg-card hover:border-primary/50"
+                show ? GRADE_CLASS[item.grade] : "position-slot border-white/10 bg-card hover:border-primary/50"
               } disabled:cursor-default`}
             >
               <span className="flex items-start justify-between gap-3">
@@ -170,7 +171,7 @@ export function DailyClient({
             ref={resultRef}
             tabIndex={-1}
             data-testid="daily-result"
-            className="scroll-mt-20 rounded-2xl border border-white/10 bg-card p-4 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="reveal-panel scroll-mt-20 rounded-2xl border bg-card p-4 outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <p data-testid="daily-result-verdict" className="font-display text-2xl tracking-wide" role="status">
               {option.grade === "green" ? "You got the call right." : "Not the best call this time."}

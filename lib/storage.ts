@@ -11,7 +11,7 @@ export function freshProfile(name = "GM"): Profile {
     name: normalizeGmName(name),
     pro: false,
     email: "",
-    settings: { experimentalNarrative: false, testerMode: false },
+    settings: { experimentalNarrative: false, testerMode: false, soundEnabled: true, soundVolume: 0.45 },
     daily: { streak: 0, bestStreak: 0, lastPlayed: null, freezeTokens: 0, frozenDates: [], results: [] },
     active: null,
     season: null,
@@ -42,6 +42,8 @@ export function migrateProfile(profile: Profile): Profile {
     next.career.season.gmName = normalizeGmName(next.career.season.gmName || next.career.gmName);
   }
   next.settings = { ...freshProfile().settings, ...next.settings };
+  next.settings.soundEnabled ??= true;
+  next.settings.soundVolume = Math.max(0, Math.min(1, Number(next.settings.soundVolume ?? 0.45)));
   next.daily.freezeTokens ??= 0;
   next.daily.frozenDates ??= [];
   const seasons = [next.season, next.career?.season].filter((season) => season !== null && season !== undefined);

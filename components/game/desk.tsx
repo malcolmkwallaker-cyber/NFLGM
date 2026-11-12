@@ -62,7 +62,7 @@ export function Desk() {
   if (!ready) return <p className="text-sm text-muted-foreground">Pulling the binder…</p>;
   if (!season) {
     return (
-      <section className="yard-lines rounded-2xl border border-white/10 bg-card p-6">
+      <section className="stadium-panel yard-lines rounded-2xl border bg-card p-6">
         <p className="text-xs uppercase tracking-[0.18em] text-primary">Empty desk</p>
         <h1 className="mt-2 font-display text-4xl tracking-wide">Nobody has given you the keys.</h1>
         <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
@@ -95,7 +95,7 @@ export function Desk() {
 
   return (
     <div className={`space-y-4 ${interactionLocked ? "pointer-events-none select-none" : ""}`} aria-busy={interactionLocked}>
-      <section className="yard-lines overflow-hidden rounded-2xl border border-white/10 bg-card">
+      <section className="stadium-panel yard-lines overflow-hidden rounded-2xl border bg-card">
         <div className="flex items-start gap-3 border-b border-white/10 px-4 py-4">
           <TeamMark team={team} size="lg" />
           <div className="min-w-0 flex-1">
@@ -271,7 +271,7 @@ function Intro({
 }) {
   const { dispatch } = useGame();
   return (
-    <section className="space-y-3 rounded-2xl border border-white/10 bg-card p-4">
+    <section className="stadium-panel space-y-3 rounded-2xl border p-4">
       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{season.owner.name}</p>
       <h2 className="font-display text-2xl tracking-wide">The owner wants {priorityLabel(season.owner.priority).toLowerCase()}.</h2>
       <p className="text-sm leading-relaxed text-muted-foreground">{season.owner.note}</p>
@@ -749,7 +749,7 @@ function Draft({ season }: { season: SeasonState }) {
           </p>
           <p className="mt-2 text-xs text-amber-200">Answer this offer before selecting a prospect. The board is dimmed, not gone.</p>
           <div className="mt-3 flex gap-2">
-            <Button data-testid="choice-trade-down" onClick={() => dispatch({ type: "draft-trade", accept: true })}>
+            <Button data-sound="reveal" data-testid="choice-trade-down" onClick={() => dispatch({ type: "draft-trade", accept: true })}>
               Trade down
             </Button>
             <Button variant="outline" onClick={() => dispatch({ type: "draft-trade", accept: false })}>
@@ -773,6 +773,7 @@ function Draft({ season }: { season: SeasonState }) {
           <button
             key={prospect.id}
             type="button"
+            data-sound="reveal"
             disabled={Boolean(season.pendingDraftTrade)}
             data-testid={`choice-draft-${prospect.id}`}
             className="rounded-xl border border-white/10 bg-card px-4 py-3 text-left hover:border-primary/60 disabled:opacity-50"
@@ -896,7 +897,7 @@ function Camp({
           );
         })}
       </div>
-      <Button className="!h-12 !px-4" disabled={!campOk} data-testid="choice-camp" onClick={onSubmit}>
+      <Button className="!h-12 !px-4" data-sound="success" disabled={!campOk} data-testid="choice-camp" onClick={onSubmit}>
         Open the season
       </Button>
     </section>
@@ -954,7 +955,7 @@ function Regular({
           <p role="status" className="text-xs text-muted-foreground">Resolve this desk decision before playing or simming ahead.</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-white/10 bg-card p-4">
+        <div className="reveal-panel rounded-2xl border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Week {season.week}</p>
           <h2 className="mt-1 font-display text-4xl tracking-wide">
             {opp ? (
@@ -968,7 +969,7 @@ function Regular({
           <p className="mt-2 text-sm text-muted-foreground">
             The rest of the league plays the same week. A win moves the owner. A collapse can end the job before February.
           </p>
-          <Button className="mt-4 !h-12 !px-5" disabled={Boolean(season.shop)} data-testid="play-week" onClick={() => dispatch({ type: "play-week" })}>
+          <Button className="mt-4 !h-12 !px-5" data-sound="reveal" disabled={Boolean(season.shop)} data-testid="play-week" onClick={() => dispatch({ type: "play-week" })}>
             {season.shop ? "Review the trade offer first" : "Play the week"}
           </Button>
         </div>
@@ -1051,7 +1052,7 @@ function Playoffs({ season }: { season: SeasonState }) {
       ) : (
         <p className="text-sm text-muted-foreground">The other games sort the path. Advance the round when you are ready.</p>
       )}
-      <Button className="!h-12 !px-4" data-testid="play-week" onClick={() => dispatch({ type: "playoff" })}>
+      <Button className="!h-12 !px-4" data-sound="reveal" data-testid="play-week" onClick={() => dispatch({ type: "playoff" })}>
         {yours ? "Play your game" : "Advance the round"}
       </Button>
     </section>
@@ -1086,7 +1087,7 @@ function Recap({
   const drivers = seasonDrivers(season);
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-primary/40 bg-card p-5">
+      <div className="reveal-panel rounded-2xl border bg-card p-5">
         <p className="text-xs uppercase tracking-[0.18em] text-primary">GM grade</p>
         <p className="font-display text-7xl leading-none tracking-wide">{grade?.letter ?? "—"}</p>
         <p className="mt-2 font-display text-2xl tracking-wide">
@@ -1162,7 +1163,7 @@ function Recap({
       </ul>
       {career ? (
         <div className="flex flex-wrap gap-2">
-          <Button className="!h-12 !px-4" onClick={onNext}>
+          <Button className="!h-12 !px-4" data-sound="success" onClick={onNext}>
             Open the next season
           </Button>
           <Button variant="outline" className="!h-12 !px-4" onClick={onRetire}>

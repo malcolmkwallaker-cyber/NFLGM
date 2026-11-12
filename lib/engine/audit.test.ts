@@ -23,6 +23,24 @@ function advanceTo(state: SeasonState, phase: Phase): SeasonState {
 }
 
 describe("audit regressions", () => {
+  it("adds accessible sound defaults without changing legacy save progress", () => {
+    const legacy = freshProfile("Sound Migration");
+    legacy.settings = { experimentalNarrative: false, testerMode: true };
+    legacy.daily.streak = 12;
+    const migrated = migrateProfile(JSON.parse(JSON.stringify(legacy)));
+    expect(migrated.settings.soundEnabled).toBe(true);
+    expect(migrated.settings.soundVolume).toBe(0.45);
+    expect(migrated.settings.testerMode).toBe(true);
+    expect(migrated.daily.streak).toBe(12);
+
+    const clamped = migrateProfile({
+      ...freshProfile(),
+      settings: { experimentalNarrative: false, soundEnabled: false, soundVolume: 3 },
+    });
+    expect(clamped.settings.soundEnabled).toBe(false);
+    expect(clamped.settings.soundVolume).toBe(1);
+  });
+
   it("opens public testing for anonymous and existing free saves without changing entitlement data", () => {
     const anonymous = freshProfile();
     expect(FREE_TESTING_MODE).toBe(true);

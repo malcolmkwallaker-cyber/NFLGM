@@ -26,7 +26,7 @@ export function HomeClient({
 
   return (
     <div className="space-y-8">
-      <section className="yard-lines overflow-hidden rounded-2xl border border-white/10 bg-card">
+      <section className="stadium-panel yard-lines overflow-hidden rounded-2xl border bg-card">
         <div className="border-b border-primary/30 bg-primary/10 px-5 py-3 text-[11px] uppercase tracking-[0.22em] text-primary">
           Live from the war room
         </div>
@@ -93,7 +93,7 @@ export function HomeClient({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-card p-5">
+      <section className="reveal-panel rounded-2xl border bg-card p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Today · {day}</p>
@@ -113,7 +113,7 @@ export function HomeClient({
         </Button>
       </section>
 
-      <section className="rounded-2xl border border-primary/30 bg-card p-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
+      <section className="stadium-panel rounded-2xl border p-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
         <div>
           <p className="text-[11px] uppercase tracking-[0.18em] text-primary">New daily mode</p>
           <h2 className="mt-1 font-display text-3xl tracking-wide">Rewrite a historic season</h2>
@@ -150,7 +150,7 @@ function HomeMode({
     <Link
       href={href}
       data-testid={testId}
-      className="flex min-h-52 flex-col rounded-xl border border-primary/40 bg-black/20 p-4 transition-transform hover:-translate-y-0.5 hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      className="mode-reel flex min-h-52 flex-col rounded-xl border p-4 transition-transform hover:-translate-y-0.5 hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
     >
       <span className="text-[11px] uppercase tracking-[0.18em] text-primary">{kicker}</span>
       <span className="mt-2 block font-display text-3xl tracking-wide">{title}</span>

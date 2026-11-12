@@ -370,7 +370,12 @@ export interface Profile {
   name: string;
   pro: boolean;
   email: string;
-  settings: { experimentalNarrative: boolean; testerMode?: boolean };
+  settings: {
+    experimentalNarrative: boolean;
+    testerMode?: boolean;
+    soundEnabled?: boolean;
+    soundVolume?: number;
+  };
   daily: {
     streak: number;
     bestStreak: number;
