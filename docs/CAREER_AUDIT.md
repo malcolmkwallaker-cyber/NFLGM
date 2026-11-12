@@ -1,5 +1,21 @@
 # NFLGM career-mode audit
 
+## 2026-11-12 Daily #246 / Seattle Career report disposition
+
+Source: [Google Doc `1bVypDgOqwjzXuCBkHORLtkHcenxV1A9tiFy-2ayqDV4`](https://docs.google.com/document/d/1bVypDgOqwjzXuCBkHORLtkHcenxV1A9tiFy-2ayqDV4/edit). This is one manual production report against footer build `a45c689`, covering the existing Seattle Career with seed `3868239877` through the 2041 season and 2042 owner meeting, plus Daily #246. It confirms production still predates the cumulative November 7–11 local queue. Thursday work is local-only; no branch, preview, merge, hook, or deployment was created.
+
+| Finding | Disposition |
+| --- | --- |
+| Career can draft and open the season over the hard cap | Reproduces the production defect already fixed locally in `fb98de49db99fec5005a1c4215620247f8bb9223`. The queued candidate rejects incoming-salary trades that create or worsen a deficit, includes rookie charges and cut dead money in camp projections, selects additional compliant cuts where possible, and refuses to open the season while room is negative. Existing saves are not rewritten. |
+| Camp reports `K 0/1` but offers no kicker | Reproduces the production supply defect already fixed in the same queued commit. A kicker-free roster gets one deterministic, affordable modeled kicker on the outside market. Punting remains an explicit special-teams abstraction; no punter position or automatic signing was added. |
+| Suggested cuts choose six of eight draftees | Reproduces the production valuation gap already fixed locally in `25a2f9747e5e17edb905f3818e45fbc6a8b7e36a`. Rounds 1–3 receive descending draft-capital protection and staff picks smaller protection, while hard-cap compliance, the roster floor, quarterback retention, and position depth still take precedence. The protection is intentionally not absolute when no compliant alternative exists. |
+| Intentional free-agent spending and Poor-value/build-young explanation | Reported as passing on production. The existing mechanics and explanation remain unchanged. |
+| Allen/Burrow rollover disappearance and one 9–8 champion | Unconfirmed lifecycle lead and single-run balance observation. The queued retirement explanation covers modeled players who actually retire, but no unsupported save-specific diagnosis or outcome rebalance was added without a fixture or deterministic reproduction. |
+
+The separate AdSense-readiness work remains outside this candidate. The referenced commit `690bd3f` is not present in this checkout's object database or remote refs, and publication was explicitly withheld; nothing from it was merged. The graphics reference recording was resolved in Library, but two supported byte-materialization attempts (the second with explicit network access) both failed during download, so no frames were inspected and no visual substitute was invented. Graphics and sound therefore remain a separate, unimplemented workstream; sound also lacks an approved behavior/asset specification.
+
+Release status: remote and production remain `a45c689fc7694c7b80dc529ef0e9bec08d14b124`. The cumulative QA candidate is local only. Netlify credit restoration remains unverifiable because available billing sessions require sign-in and the last verified production pause is still in force. Per the Thursday cadence and credit hold, no push or deployment was attempted.
+
 ## 2026-11-11 Daily #245 / Seattle Career report disposition
 
 Source: [Google Doc `1A_JZkp1mvb3zSKQkcINUaZVVmq34Plbl3CvQ6Nmic0I`](https://docs.google.com/document/d/1A_JZkp1mvb3zSKQkcINUaZVVmq34Plbl3CvQ6Nmic0I/edit) and matching Slack message `1794410924127319`. These are one report against live footer build `a45c689`, covering the existing Seattle Career with seed `3868239877` from the 2040 offseason through a 12–5 championship and into the 2041 owner meeting, plus Daily #245. The repeated hard-cap, early-pick, and kicker observations were deduplicated against the cumulative November 7–10 local queue. Wednesday implementation commit `63404c56667151b23ebd57fce11242c3a5b8d61a` is ready locally but publication remains blocked pending verified Netlify credit availability.
