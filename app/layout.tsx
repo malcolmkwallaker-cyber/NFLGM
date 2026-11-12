@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import { Barlow_Condensed, Outfit } from "next/font/google";
+import Script from "next/script";
+import { GoogleAnalyticsPageViews } from "@/components/google-analytics";
 import { ProfileProvider } from "@/components/profile";
 import { Shell } from "@/components/game/shell";
+import { gaBootstrapScript, googleAnalyticsId } from "@/lib/google-analytics";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -42,6 +45,8 @@ export const metadata: Metadata = {
   },
 };
 
+const gaMeasurementId = googleAnalyticsId(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID);
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${outfit.variable} ${display.variable} dark h-full antialiased`}>
@@ -49,6 +54,18 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <ProfileProvider>
           <Shell>{children}</Shell>
         </ProfileProvider>
+        {gaMeasurementId ? (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-gtag" strategy="afterInteractive">
+              {gaBootstrapScript(gaMeasurementId)}
+            </Script>
+            <GoogleAnalyticsPageViews measurementId={gaMeasurementId} />
+          </>
+        ) : null}
       </body>
     </html>
   );

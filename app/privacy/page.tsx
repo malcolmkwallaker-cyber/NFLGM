@@ -4,7 +4,7 @@ export default function PrivacyPage() {
       <header className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
         <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Privacy</p>
         <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">How this playtest handles data</h1>
-        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Current as of November 2, 2026.</p>
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Current as of November 12, 2026.</p>
       </header>
 
       <section className="space-y-4 rounded-2xl border border-white/10 bg-card p-5 text-sm leading-relaxed sm:p-6">
@@ -29,9 +29,10 @@ export default function PrivacyPage() {
           <p className="mt-2 text-muted-foreground">
             Although game saves stay local, hosting and network providers may process ordinary request information such as
             IP address, requested page, date and time, and browser or device details to deliver and protect the site. Run
-            The Roster does not run an account database. The cookieless statistics below are the only measurement the game
-            operates, and only on a build where the operator has turned them on. Provider logging and retention are
-            controlled by those providers rather than by the game&apos;s browser save.
+            The Roster does not run an account database. The cookieless statistics below are the game&apos;s own measurement,
+            and only on a build where the operator has turned them on. A build can also load Google Analytics when that
+            measurement ID is configured. Provider logging and retention are controlled by those providers rather than by
+            the game&apos;s browser save.
           </p>
         </div>
         <div>
@@ -39,8 +40,8 @@ export default function PrivacyPage() {
           <p className="mt-2 text-muted-foreground">
             When a published build has first-party statistics turned on, the browser sends pseudonymous events to this
             site&apos;s own collection address. The public build leaves this off until the operator turns it on. While it is
-            off, the game does not send these events. The browser does not set a cookie and does not load a third-party
-            tracker.
+            off, the game does not send these events. This first-party collection does not set a cookie and does not load a
+            third-party script.
           </p>
           <p className="mt-2 text-muted-foreground">
             A random id stays in session storage for the open tab and is discarded when that tab session ends. A second,
@@ -57,6 +58,16 @@ export default function PrivacyPage() {
             user agent. Browsers that send Do Not Track, and browsers that send Global Privacy Control, are not measured.
             Event rows older than 90 days are deleted by a daily cleanup. Hosting backups may retain copies under the
             provider&apos;s separate retention policy. The operator statistics page is password-protected and is not part of the game.
+          </p>
+        </div>
+        <div>
+          <h2 className="font-display text-2xl tracking-wide">Google Analytics</h2>
+          <p className="mt-2 text-muted-foreground">
+            When a published build includes a Google Analytics measurement ID, the site loads Google Analytics (gtag.js)
+            and sends a page view for each page, including pages opened through in-site navigation. Google Analytics may
+            set cookies and process that visit under Google&apos;s practices. If the measurement ID is not set, the site does
+            not load that script. See the{" "}
+            <a className="text-primary underline-offset-4 hover:underline" href="https://policies.google.com/privacy">Google Privacy Policy</a>.
           </p>
         </div>
         <div>
