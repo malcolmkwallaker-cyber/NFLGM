@@ -30,6 +30,13 @@ function meterPreview(effect: { requested: number; applied: number }, ceiling: n
     : `${signed(effect.applied)} applied (${signed(effect.requested)} requested; capped at ${ceiling})`;
 }
 
+function draftPickNote(note: string | undefined, year: number): string {
+  if (!note) return "";
+  if (note.startsWith("Acquired for ")) return note;
+  if (note.startsWith("Acquired · ")) return `Acquired for ${year} draft · ${note.slice("Acquired · ".length)}`;
+  return note;
+}
+
 const PHASE_TITLE: Record<Phase, string> = {
   intro: "Owner meeting",
   staff: "Front office",
@@ -227,6 +234,10 @@ export function Desk() {
                 </span>
               </li>
             ))}
+            <li className="pt-2 text-xs text-muted-foreground">
+              Showing the top {Math.min(18, roster.length)} of {roster.length} players by the grade currently visible.
+              {" "}<Link className="text-primary underline-offset-4 hover:underline" href="/stats">See the full roster and contracts.</Link>
+            </li>
           </ul>
           <ul className="space-y-1 text-sm">
             {divisionTable(season).map((row) => (
@@ -442,6 +453,8 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
       {season.faWave === 1 ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
           The room shown excludes expired prior contracts. Re-signing or tagging one adds the new charge immediately.
+          Your modeled retention asks include a small incumbent discount; reaching the open market can raise the later
+          price through scarcity.
         </p>
       ) : null}
       {!bestQuarterbackUnderContract || bestQuarterbackUnderContract.ovr < 70 ? (
@@ -529,6 +542,9 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           const tagAffordable = season.capMode !== "hard" || tagPrice <= space + 0.05;
           const talksEnded = (season.faNegotiatedIds ?? []).includes(player.id) && season.faNegotiation?.playerId !== player.id;
           const negotiationMessage = season.flags[`fa-negotiation:${player.id}`];
+          const preview = freeAgentNegotiationPreview(season, player);
+          const lowestListedOffer = Math.min(preview.askAnnual, preview.securityAnnual, preview.teamAnnual);
+          const listedOfferFits = season.capMode !== "hard" || lowestListedOffer <= space + 0.05;
           return (
           <div key={player.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-card px-3 py-3">
             <div>
@@ -541,6 +557,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 {player.age >= 31 ? " · veteran-adjusted annual ask" : ""}
               </p>
               {own && player.ovr >= 76 ? <p className="mt-1 text-xs text-primary">Core retention candidate</p> : null}
+              {!listedOfferFits ? (
+                <p className="mt-1 max-w-xl text-xs text-amber-200">
+                  No listed offer fits your current room. You can review the terms, but must create at least {money(lowestListedOffer - space)} more room before submitting one.
+                </p>
+              ) : null}
               {talksEnded ? <p className="mt-1 max-w-xl text-xs text-amber-200">{typeof negotiationMessage === "string" ? negotiationMessage : "This player's camp ended talks for this market window."}</p> : null}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -549,7 +570,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 data-testid={`choice-negotiate-${player.id}`}
                 onClick={() => dispatch({ type: "fa-negotiate", playerId: player.id })}
               >
-                {talksEnded ? "Talks ended" : season.faNegotiation?.playerId === player.id ? "Reviewing offers" : "Review offers"}
+                {talksEnded ? "Talks ended" : season.faNegotiation?.playerId === player.id ? "Reviewing offers" : listedOfferFits ? "Review offers" : "Review terms · no offer fits"}
               </Button>
               {own && !season.franchiseTagUsed ? (
                 <Button variant="outline" disabled={!tagAffordable || Boolean(season.faNegotiation)} data-testid={`choice-tag-${player.id}`} onClick={() => dispatch({ type: "tag", playerId: player.id })}>
@@ -561,7 +582,10 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           );
         })
       )}
-      {season.faWave > 1 && season.capMode === "hard" && season.faBoard.length > 0 && season.faBoard.every((player) => player.cap > space + 0.05) ? (
+      {season.faWave > 1 && season.capMode === "hard" && season.faBoard.length > 0 && season.faBoard.every((player) => {
+        const preview = freeAgentNegotiationPreview(season, player);
+        return Math.min(preview.askAnnual, preview.securityAnnual, preview.teamAnnual) > space + 0.05;
+      }) ? (
         <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-muted-foreground">
           No offer in this wave fits your remaining cap space. Advance the market, or continue without another signing.
         </p>
@@ -712,8 +736,8 @@ function Draft({ season }: { season: SeasonState }) {
       <h2 className="font-display text-2xl tracking-wide">
         {pick
           ? season.mode === "historical" || season.flags.historicalRosterScenarioId
-            ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}${pick.note ? ` · ${pick.note}` : ""}`
-            : `Round ${pick.round}, pick ${pick.overall}${pick.note ? ` · ${pick.note}` : ""}`
+            ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}${pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}`
+            : `Round ${pick.round}, pick ${pick.overall}${pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}`
           : "The board is moving"}
       </h2>
       <p className="text-sm text-muted-foreground">
@@ -801,7 +825,7 @@ function Draft({ season }: { season: SeasonState }) {
             .filter((made) => made.prospectName && made.teamId === season.teamId)
             .map((made) => (
               <li key={`${made.round}-${made.overall}`}>
-                Round {made.round}: {made.prospectName}{made.note ? ` · ${made.note}` : ""}
+                Round {made.round}: {made.prospectName}{made.note ? ` · ${draftPickNote(made.note, season.year)}` : ""}
               </li>
             ))}
         </ul>
@@ -867,7 +891,7 @@ function Camp({
             .filter((pick) => pick.teamId === season.teamId && pick.prospectName)
             .map((pick) => (
               <li key={`${pick.round}-${pick.overall}-${pick.prospectId}`}>
-                Round {pick.round}: {pick.prospectName}{pick.note ? ` · ${pick.note}` : ""}
+                Round {pick.round}: {pick.prospectName}{pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}
               </li>
             ))}
         </ul>

@@ -1845,8 +1845,8 @@ function injuryDecision(state: SeasonState): Decision | null {
     title: `${player.name} is questionable`,
     body: `${player.name} can play at less than full speed or sit and keep the injury from becoming the season. The coaches want a decision before the injury report hardens.`,
     options: [
-      { id: "play", label: `Play ${player.name}`, detail: "You need the snaps. You accept the risk.", owner: 1, fans: 2, locker: 1, log: `Played ${player.name} through the injury.`, tag: `playhurt:${player.id}`, swing: 1 },
-      { id: "sit", label: `Sit ${player.name}`, detail: "A month is better than a year.", owner: 0, fans: -2, locker: 1, log: `Shut ${player.name} down for a few weeks.`, tag: `sit:${player.id}`, swing: 0 },
+      { id: "play", label: `Play ${player.name}`, detail: "You accept the reinjury risk. Owner +1; fans +2; locker +1.", owner: 1, fans: 2, locker: 1, log: `Played ${player.name} through the injury.`, tag: `playhurt:${player.id}`, swing: 1 },
+      { id: "sit", label: `Sit ${player.name}`, detail: "Reduce the reinjury risk. Fans −2 for sitting a star; locker +1 for protecting him.", owner: 0, fans: -2, locker: 1, log: `Shut ${player.name} down for a few weeks.`, tag: `sit:${player.id}`, swing: 0 },
     ],
   };
 }

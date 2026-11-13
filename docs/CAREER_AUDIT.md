@@ -1,5 +1,21 @@
 # NFLGM career-mode audit
 
+## 2026-11-13 Daily #247 / Seattle Career report disposition
+
+Source: [Google Doc 1Xc93Bw5OgwpFjlRKHmNPkjaf1Ck-huMPzuyPjiHhVwA](https://docs.google.com/document/d/1Xc93Bw5OgwpFjlRKHmNPkjaf1Ck-huMPzuyPjiHhVwA/edit) and matching Slack message 1794582993146079. These are one manual report against live footer build a45c689, covering the existing Seattle Career with seed 3868239877 through the 2042 offseason and Week 10, plus Daily #247. Production still predates the cumulative November 7–12 local candidate. This Friday review preserves the separately authorized graphics/sound and consent-gated GA4 scopes already integrated in local candidate a89e595; the QA report adds no tracking authority.
+
+| Finding | Disposition |
+| --- | --- |
+| A $36.1M free agent still offers Review offers with only $11.9M of room | Negotiation review is intentionally available so terms and leverage remain inspectable, but the card did not disclose that none of its three listed structures fit. Hard-cap cards now show the exact shortfall against the cheapest listed structure and label the control Review terms · no offer fits. The engine still rejects an unaffordable submission, and opening or cancelling review does not consume the one offer. The wave-level warning now evaluates all three structures rather than assuming the asking-price structure is the cheapest. |
+| Delgado's $32.6M retention ask later appears as a $43.7M open-market value | Confirmed unexplained but intended pricing stages. User-team retention asks receive the existing 5% incumbent discount. A player allowed to reach the open market can receive the existing scarcity premium before CPU placement. The retention screen now explains that distinction; no ask, contract, or allocation formula changed. |
+| Old Jaxson Frost acquired-pick provenance lacks draft-year context | New picks already store Acquired for YEAR draft. A presentation fallback now expands legacy Acquired notes in the current pick header, completed draft log, and camp class list without rewriting saved pick data. Pick ownership, year, order, and compensation are unchanged. |
+| Roster and the division shows only the highest-rated subset without saying so | Confirmed disclosure gap. The compact panel intentionally shows 18 players. It now states the displayed and total counts, identifies the visible-grade ordering, and links to the complete Stats and contracts view. No roster, rating, or sorting mechanic changed. |
+| Sitting an injured star applies fans −2 despite the protective rationale | The existing tradeoff is intentional: fans react to losing a star while the locker room rewards protection. Both injury choices now state their actual requested owner/fan/locker effects and the reinjury-risk rationale before selection. Injury duration, aggravation odds, and meter values are unchanged. |
+| Owner at 96 receives 0 of a requested positive change | Deduplicated against the queued meter-ceiling clarification. Previews name the 96 owner ceiling, while durable result copy records 0 applied and the requested amount. No meter change was made. |
+| Repeated hard-cap, missing-kicker, and rookie-cut findings | Expected against old production and already covered by the cumulative queued fixes and regressions. They are not counted as new regressions or reimplemented here. |
+
+Remote main remains a45c689fc7694c7b80dc529ef0e9bec08d14b124. Publication remains blocked pending verified Netlify credit/access availability; no speculative push, PR, preview, hook, or deployment was used to probe that state.
+
 ## 2026-11-12 Daily #246 / Seattle Career report disposition
 
 Source: [Google Doc `1bVypDgOqwjzXuCBkHORLtkHcenxV1A9tiFy-2ayqDV4`](https://docs.google.com/document/d/1bVypDgOqwjzXuCBkHORLtkHcenxV1A9tiFy-2ayqDV4/edit). This is one manual production report against footer build `a45c689`, covering the existing Seattle Career with seed `3868239877` through the 2041 season and 2042 owner meeting, plus Daily #246. It confirms production still predates the cumulative November 7–11 local queue. Thursday work is local-only; no branch, preview, merge, hook, or deployment was created.

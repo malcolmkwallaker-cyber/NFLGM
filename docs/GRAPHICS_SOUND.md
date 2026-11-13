@@ -37,4 +37,3 @@ Generated outside the repository so they cannot enter a release accidentally:
 - `/workspace/rtr-qa-artifacts/graphics-sound-2026-11-12/browser-report.json`
 
 The automated browser check found no console/page errors, no horizontal mobile overflow at 390px, persisted mute state and 70% volume across storage, and a reduced-motion animation duration of `0.00001s`. An injected Web Audio probe confirmed that one deliberate CTA click created one context, resumed it from the user gesture, and scheduled one oscillator; page load alone did not create audio.
-

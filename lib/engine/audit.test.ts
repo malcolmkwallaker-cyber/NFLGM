@@ -1051,6 +1051,7 @@ describe("audit regressions", () => {
     expect(state.futureDead).toBe(0);
     const offer = state.faBoard.find((player) => player.name === "Garrett Wilson");
     if (!offer) throw new Error("Garrett Wilson retention offer missing");
+    expect(offer.cap).toBe(Math.round(marketAsk(expired, salaryScale(state.capLimit)) * 0.95 * 10) / 10);
     expect(offer.cap).toBeLessThanOrEqual(capSpace(state));
     state = applyAction(state, { type: "sign", playerId: offer.id });
     expect(yourRoster(state).find((player) => player.id === offer.id)?.years).toBeGreaterThan(0);
@@ -1310,6 +1311,10 @@ describe("audit regressions", () => {
     }
     expect(state.activeDecision?.id).toBe("injury");
     const play = state.activeDecision?.options.find((option) => option.id === "play");
+    const sit = state.activeDecision?.options.find((option) => option.id === "sit");
+    expect(play?.detail).toContain("Owner +1; fans +2; locker +1");
+    expect(sit?.detail).toContain("Fans −2 for sitting a star; locker +1 for protecting him");
+    expect({ owner: sit?.owner, fans: sit?.fans, locker: sit?.locker }).toEqual({ owner: 0, fans: -2, locker: 1 });
     const playerId = play?.tag?.slice("playhurt:".length);
     if (!playerId) throw new Error("Play-through injury fixture missing");
     state = applyAction(state, { type: "decide", choiceId: "play" });
