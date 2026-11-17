@@ -12,7 +12,7 @@ import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCapSpaceAfterCuts, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -24,10 +24,17 @@ function signed(value: number): string {
   return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
 }
 
-function meterPreview(effect: { requested: number; applied: number }): string {
+function meterPreview(effect: { requested: number; applied: number }, ceiling: number): string {
   return effect.requested === effect.applied
     ? signed(effect.applied)
-    : `${signed(effect.applied)} applied (${signed(effect.requested)} requested; meter limit)`;
+    : `${signed(effect.applied)} applied (${signed(effect.requested)} requested; capped at ${ceiling})`;
+}
+
+function draftPickNote(note: string | undefined, year: number): string {
+  if (!note) return "";
+  if (note.startsWith("Acquired for ")) return note;
+  if (note.startsWith("Acquired · ")) return `Acquired for ${year} draft · ${note.slice("Acquired · ".length)}`;
+  return note;
 }
 
 const PHASE_TITLE: Record<Phase, string> = {
@@ -62,7 +69,7 @@ export function Desk() {
   if (!ready) return <p className="text-sm text-muted-foreground">Pulling the binder…</p>;
   if (!season) {
     return (
-      <section className="yard-lines rounded-2xl border border-white/10 bg-card p-6">
+      <section className="stadium-panel yard-lines rounded-2xl border bg-card p-6">
         <p className="text-xs uppercase tracking-[0.18em] text-primary">Empty desk</p>
         <h1 className="mt-2 font-display text-4xl tracking-wide">Nobody has given you the keys.</h1>
         <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
@@ -89,11 +96,13 @@ export function Desk() {
   const matchup = weekMatchup(season);
   const remaining = roster.length - (season.phase === "camp" ? cutIds.length : 0);
   const keptQb = roster.some((player) => player.pos === "QB" && !cutIds.includes(player.id));
-  const campOk = remaining >= 22 && remaining <= 26 && keptQb;
+  const campCapSpace = season.phase === "camp" ? campCapSpaceAfterCuts(season, cutIds) : space;
+  const campCapOk = season.capMode !== "hard" || campCapSpace >= -0.05;
+  const campOk = remaining >= 22 && remaining <= 26 && keptQb && campCapOk;
 
   return (
     <div className={`space-y-4 ${interactionLocked ? "pointer-events-none select-none" : ""}`} aria-busy={interactionLocked}>
-      <section className="yard-lines overflow-hidden rounded-2xl border border-white/10 bg-card">
+      <section className="stadium-panel yard-lines overflow-hidden rounded-2xl border bg-card">
         <div className="flex items-start gap-3 border-b border-white/10 px-4 py-4">
           <TeamMark team={team} size="lg" />
           <div className="min-w-0 flex-1">
@@ -156,6 +165,7 @@ export function Desk() {
           cutIds={cutIds}
           remaining={remaining}
           campOk={campOk}
+          campCapSpace={campCapSpace}
           keptQb={keptQb}
           onToggle={(id) => {
             const next = cutIds.includes(id) ? cutIds.filter((item) => item !== id) : [...cutIds, id];
@@ -224,6 +234,10 @@ export function Desk() {
                 </span>
               </li>
             ))}
+            <li className="pt-2 text-xs text-muted-foreground">
+              Showing the top {Math.min(18, roster.length)} of {roster.length} players by the grade currently visible.
+              {" "}<Link className="text-primary underline-offset-4 hover:underline" href="/stats">See the full roster and contracts.</Link>
+            </li>
           </ul>
           <ul className="space-y-1 text-sm">
             {divisionTable(season).map((row) => (
@@ -268,7 +282,7 @@ function Intro({
 }) {
   const { dispatch } = useGame();
   return (
-    <section className="space-y-3 rounded-2xl border border-white/10 bg-card p-4">
+    <section className="stadium-panel space-y-3 rounded-2xl border p-4">
       <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{season.owner.name}</p>
       <h2 className="font-display text-2xl tracking-wide">The owner wants {priorityLabel(season.owner.priority).toLowerCase()}.</h2>
       <p className="text-sm leading-relaxed text-muted-foreground">{season.owner.note}</p>
@@ -284,7 +298,7 @@ function Intro({
       <div className="grid gap-2">
         {[
           ["embrace", "Embrace the brief", "Match the owner's stated plan. Owner confidence +8."],
-          ["balance", "Split the difference", "Wins, but not at any price. Owner confidence +2."],
+          ["balance", "Split the difference", "Keep the owner's brief on the board, but run a balanced plan. Owner confidence +2."],
           ["defy", "Push back", "Tell the owner the brief is wrong. Owner confidence −6."],
         ].map(([id, label, detail]) => (
           <button
@@ -331,7 +345,7 @@ function Staff({ season, role }: { season: SeasonState; role: StaffRole }) {
               Lead {member.leadership} · Develop {member.development} · Aggression {member.aggression} · Cost {member.cost}
             </span>
             <span className="mt-2 block text-xs text-muted-foreground">
-              If hired: owner {meterPreview(impact.owner)}, fans {meterPreview(impact.fans)}, locker {meterPreview(impact.locker)}.
+              If hired: owner {meterPreview(impact.owner, 96)}, fans {meterPreview(impact.fans, 100)}, locker {meterPreview(impact.locker, 96)}.
             </span>
           </button>
           );
@@ -366,6 +380,9 @@ function Cap({ season, roster, space }: { season: SeasonState; roster: Player[];
         {season.capMode === "hard"
           ? "Hard cap: only active contracts and current dead money count. Expired deals use no room until you re-sign or tag them. Current dead money clears at rollover; restructure money becomes next year's dead charge."
           : "Historical payroll guide: overspending is allowed, but the owner will penalize it."}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Showing the {Math.min(8, roster.length)} highest-rated players from a {roster.length}-player roster. Open <Link href="/stats" className="text-primary underline-offset-2 hover:underline">Stats &amp; contracts</Link> for the complete roster and contract outlook.
       </p>
       {season.capMode === "hard" && expiring.length ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
@@ -436,6 +453,8 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
       {season.faWave === 1 ? (
         <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-muted-foreground">
           The room shown excludes expired prior contracts. Re-signing or tagging one adds the new charge immediately.
+          Your modeled retention asks include a small incumbent discount; reaching the open market can raise the later
+          price through scarcity.
         </p>
       ) : null}
       {!bestQuarterbackUnderContract || bestQuarterbackUnderContract.ovr < 70 ? (
@@ -456,6 +475,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 Counter: {money(season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual)} per year for {formatContractYears(season.faNegotiation.counterYears ?? negotiationPreview.askYears)}.
               </p>
               <p className="mt-2 text-xs text-muted-foreground">{season.faNegotiation.message}</p>
+              {season.capMode === "hard" && (season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual) > space + 0.05 ? (
+                <p role="status" className="mt-2 text-sm text-amber-200">
+                  This counter is {money((season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual) - space)} above your cap room. Walk away or create room before accepting it.
+                </p>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   disabled={season.capMode === "hard" && (season.faNegotiation.counterAnnual ?? negotiationPreview.askAnnual) > space + 0.05}
@@ -518,6 +542,9 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           const tagAffordable = season.capMode !== "hard" || tagPrice <= space + 0.05;
           const talksEnded = (season.faNegotiatedIds ?? []).includes(player.id) && season.faNegotiation?.playerId !== player.id;
           const negotiationMessage = season.flags[`fa-negotiation:${player.id}`];
+          const preview = freeAgentNegotiationPreview(season, player);
+          const lowestListedOffer = Math.min(preview.askAnnual, preview.securityAnnual, preview.teamAnnual);
+          const listedOfferFits = season.capMode !== "hard" || lowestListedOffer <= space + 0.05;
           return (
           <div key={player.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-card px-3 py-3">
             <div>
@@ -530,6 +557,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 {player.age >= 31 ? " · veteran-adjusted annual ask" : ""}
               </p>
               {own && player.ovr >= 76 ? <p className="mt-1 text-xs text-primary">Core retention candidate</p> : null}
+              {!listedOfferFits ? (
+                <p className="mt-1 max-w-xl text-xs text-amber-200">
+                  No listed offer fits your current room. You can review the terms, but must create at least {money(lowestListedOffer - space)} more room before submitting one.
+                </p>
+              ) : null}
               {talksEnded ? <p className="mt-1 max-w-xl text-xs text-amber-200">{typeof negotiationMessage === "string" ? negotiationMessage : "This player's camp ended talks for this market window."}</p> : null}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -538,7 +570,7 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
                 data-testid={`choice-negotiate-${player.id}`}
                 onClick={() => dispatch({ type: "fa-negotiate", playerId: player.id })}
               >
-                {talksEnded ? "Talks ended" : season.faNegotiation?.playerId === player.id ? "Reviewing offers" : "Review offers"}
+                {talksEnded ? "Talks ended" : season.faNegotiation?.playerId === player.id ? "Reviewing offers" : listedOfferFits ? "Review offers" : "Review terms · no offer fits"}
               </Button>
               {own && !season.franchiseTagUsed ? (
                 <Button variant="outline" disabled={!tagAffordable || Boolean(season.faNegotiation)} data-testid={`choice-tag-${player.id}`} onClick={() => dispatch({ type: "tag", playerId: player.id })}>
@@ -550,7 +582,10 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           );
         })
       )}
-      {season.faWave > 1 && season.capMode === "hard" && season.faBoard.length > 0 && season.faBoard.every((player) => player.cap > space + 0.05) ? (
+      {season.faWave > 1 && season.capMode === "hard" && season.faBoard.length > 0 && season.faBoard.every((player) => {
+        const preview = freeAgentNegotiationPreview(season, player);
+        return Math.min(preview.askAnnual, preview.securityAnnual, preview.teamAnnual) > space + 0.05;
+      }) ? (
         <p className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-muted-foreground">
           No offer in this wave fits your remaining cap space. Advance the market, or continue without another signing.
         </p>
@@ -605,6 +640,8 @@ function Trades({
       <h2 className="font-display text-2xl tracking-wide">Three calls, and one name you can shop</h2>
       {season.tradeOffers.map((offer) => {
         const impact = tradeImpactPreview(season, offer);
+        const projectedSpace = Math.round((capSpace(season) + impact.capRoomChange) * 10) / 10;
+        const fitsHardCap = season.capMode !== "hard" || projectedSpace >= -0.05 || impact.capRoomChange >= -0.05;
         const outgoing = tradeOutgoingLabel(season, offer);
         return (
         <article key={offer.id} className="rounded-xl border border-white/10 bg-card p-4">
@@ -621,10 +658,11 @@ function Trades({
           </dl>
           {!offer.incoming ? <p className="mt-2 text-xs text-amber-200">No player comes back. This return is draft compensation only.</p> : null}
           <p className="mt-2 text-xs text-muted-foreground">
-            If accepted: owner {meterPreview(impact.owner)}, fans {meterPreview(impact.fans)}, locker {meterPreview(impact.locker)}. Cap room {impact.capRoomChange >= 0 ? "increases" : "decreases"} by {money(Math.abs(impact.capRoomChange))}.
+            If accepted: owner {meterPreview(impact.owner, 96)}, fans {meterPreview(impact.fans, 100)}, locker {meterPreview(impact.locker, 96)}. Cap room {impact.capRoomChange >= 0 ? "increases" : "decreases"} by {money(Math.abs(impact.capRoomChange))}.
           </p>
+          {!fitsHardCap ? <p role="status" className="mt-2 text-sm text-red-200">Cannot accept: this would put the club {money(Math.abs(projectedSpace))} over the hard cap.</p> : null}
           <div className="mt-3 flex gap-2">
-            <Button data-testid={`choice-accept-${offer.id}`} onClick={() => dispatch({ type: "trade", offerId: offer.id, accept: true })}>
+            <Button disabled={!fitsHardCap} data-testid={`choice-accept-${offer.id}`} onClick={() => dispatch({ type: "trade", offerId: offer.id, accept: true })}>
               Accept
             </Button>
             <Button variant="outline" onClick={() => dispatch({ type: "trade", offerId: offer.id, accept: false })}>
@@ -698,8 +736,8 @@ function Draft({ season }: { season: SeasonState }) {
       <h2 className="font-display text-2xl tracking-wide">
         {pick
           ? season.mode === "historical" || season.flags.historicalRosterScenarioId
-            ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}${pick.note ? ` · ${pick.note}` : ""}`
-            : `Round ${pick.round}, pick ${pick.overall}${pick.note ? ` · ${pick.note}` : ""}`
+            ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}${pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}`
+            : `Round ${pick.round}, pick ${pick.overall}${pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}`
           : "The board is moving"}
       </h2>
       <p className="text-sm text-muted-foreground">
@@ -735,7 +773,7 @@ function Draft({ season }: { season: SeasonState }) {
           </p>
           <p className="mt-2 text-xs text-amber-200">Answer this offer before selecting a prospect. The board is dimmed, not gone.</p>
           <div className="mt-3 flex gap-2">
-            <Button data-testid="choice-trade-down" onClick={() => dispatch({ type: "draft-trade", accept: true })}>
+            <Button data-sound="reveal" data-testid="choice-trade-down" onClick={() => dispatch({ type: "draft-trade", accept: true })}>
               Trade down
             </Button>
             <Button variant="outline" onClick={() => dispatch({ type: "draft-trade", accept: false })}>
@@ -759,10 +797,14 @@ function Draft({ season }: { season: SeasonState }) {
           <button
             key={prospect.id}
             type="button"
+            data-sound="reveal"
             disabled={Boolean(season.pendingDraftTrade)}
             data-testid={`choice-draft-${prospect.id}`}
             className="rounded-xl border border-white/10 bg-card px-4 py-3 text-left hover:border-primary/60 disabled:opacity-50"
-            onClick={() => dispatch({ type: "draft", prospectId: prospect.id })}
+            onClick={() => {
+              dispatch({ type: "draft", prospectId: prospect.id });
+              setPosition("ALL");
+            }}
           >
             <span className="flex items-center justify-between">
               <span className="font-medium">
@@ -783,7 +825,7 @@ function Draft({ season }: { season: SeasonState }) {
             .filter((made) => made.prospectName && made.teamId === season.teamId)
             .map((made) => (
               <li key={`${made.round}-${made.overall}`}>
-                Round {made.round}: {made.prospectName}{made.note ? ` · ${made.note}` : ""}
+                Round {made.round}: {made.prospectName}{made.note ? ` · ${draftPickNote(made.note, season.year)}` : ""}
               </li>
             ))}
         </ul>
@@ -798,6 +840,7 @@ function Camp({
   cutIds,
   remaining,
   campOk,
+  campCapSpace,
   keptQb,
   onToggle,
   onSubmit,
@@ -808,6 +851,7 @@ function Camp({
   cutIds: string[];
   remaining: number;
   campOk: boolean;
+  campCapSpace: number;
   keptQb: boolean;
   onToggle: (id: string) => void;
   onSubmit: () => void;
@@ -821,6 +865,7 @@ function Camp({
         <p className={campOk ? "text-emerald-300" : "text-red-300"}>{remaining} kept</p>
       </div>
       <p className="text-sm text-muted-foreground">Check the players you are cutting. Land between 22 and 26, and keep a quarterback.</p>
+      <p className="text-xs text-muted-foreground">Drafted rookie contracts already count against the cap. Projected room after these cuts and their dead-money charges: {money(campCapSpace)}.</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={onSuggest}>Select suggested cuts</Button>
         <span className="text-xs text-muted-foreground">{cutIds.length ? `${cutIds.length} selected to cut` : "No cuts selected yet"}</span>
@@ -829,6 +874,11 @@ function Camp({
         <p className="text-xs text-amber-100">Estimated added dead money: {money(campCutDeadMoney(season, cutIds))}. Replacement-level and minimum contracts can be released without a charge.</p>
       ) : null}
       {!keptQb ? <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm">Keep at least one quarterback before opening the season.</p> : null}
+      {season.capMode === "hard" && campCapSpace < -0.05 ? (
+        <p role="status" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+          Hard-cap hold: clear {money(Math.abs(campCapSpace))} more room before opening the season. Select additional cuts; suggested cuts will try to clear the deficit while keeping at least 22 players and a quarterback.
+        </p>
+      ) : null}
       {depthWarnings.length ? (
         <p role="status" className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-amber-100">
           Depth warning: {depthWarnings.map(({ pos, count, target }) => `${pos} ${count}/${target}`).join(" · ")}. You can still open the season with 22–26 players and a quarterback, but these groups are below the suggested depth targets.
@@ -841,7 +891,7 @@ function Camp({
             .filter((pick) => pick.teamId === season.teamId && pick.prospectName)
             .map((pick) => (
               <li key={`${pick.round}-${pick.overall}-${pick.prospectId}`}>
-                Round {pick.round}: {pick.prospectName}{pick.note ? ` · ${pick.note}` : ""}
+                Round {pick.round}: {pick.prospectName}{pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}
               </li>
             ))}
         </ul>
@@ -850,21 +900,28 @@ function Camp({
         {roster.map((player) => {
           const cut = cutIds.includes(player.id);
           return (
-            <label key={player.id} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5">
+            <label key={player.id} className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5 ${cut ? "bg-red-500/5 ring-1 ring-inset ring-red-300/20" : ""}`}>
               <span className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={cut} onChange={() => onToggle(player.id)} />
+                <input
+                  type="checkbox"
+                  checked={cut}
+                  aria-label={`Cut ${player.pos} ${player.name}`}
+                  className="h-4 w-4 shrink-0 accent-primary"
+                  onChange={() => onToggle(player.id)}
+                />
                 <span className={cut ? "text-muted-foreground line-through" : ""}>
                   {player.pos} {player.name}
                 </span>
               </span>
               <span className="text-xs text-muted-foreground">
+                {cut ? <span className="mr-1 text-red-200">Selected cut ·</span> : null}
                 {playerRatingLabel(season, player)} · {money(player.cap)}
               </span>
             </label>
           );
         })}
       </div>
-      <Button className="!h-12 !px-4" disabled={!campOk} data-testid="choice-camp" onClick={onSubmit}>
+      <Button className="!h-12 !px-4" data-sound="success" disabled={!campOk} data-testid="choice-camp" onClick={onSubmit}>
         Open the season
       </Button>
     </section>
@@ -922,7 +979,7 @@ function Regular({
           <p role="status" className="text-xs text-muted-foreground">Resolve this desk decision before playing or simming ahead.</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-white/10 bg-card p-4">
+        <div className="reveal-panel rounded-2xl border bg-card p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Week {season.week}</p>
           <h2 className="mt-1 font-display text-4xl tracking-wide">
             {opp ? (
@@ -936,7 +993,7 @@ function Regular({
           <p className="mt-2 text-sm text-muted-foreground">
             The rest of the league plays the same week. A win moves the owner. A collapse can end the job before February.
           </p>
-          <Button className="mt-4 !h-12 !px-5" disabled={Boolean(season.shop)} data-testid="play-week" onClick={() => dispatch({ type: "play-week" })}>
+          <Button className="mt-4 !h-12 !px-5" data-sound="reveal" disabled={Boolean(season.shop)} data-testid="play-week" onClick={() => dispatch({ type: "play-week" })}>
             {season.shop ? "Review the trade offer first" : "Play the week"}
           </Button>
         </div>
@@ -1012,12 +1069,14 @@ function Playoffs({ season }: { season: SeasonState }) {
       </ul>
       {yours ? (
         <p className="text-sm">
-          Your game: {teamById(yours.away, season.directory).abbr} at {teamById(yours.home, season.directory).abbr}
+          {yours.round === "superbowl"
+            ? `Your Super Bowl (neutral site): ${teamById(yours.away, season.directory).abbr} vs ${teamById(yours.home, season.directory).abbr}`
+            : `Your game: ${teamById(yours.away, season.directory).abbr} at ${teamById(yours.home, season.directory).abbr}`}
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">The other games sort the path. Advance the round when you are ready.</p>
       )}
-      <Button className="!h-12 !px-4" data-testid="play-week" onClick={() => dispatch({ type: "playoff" })}>
+      <Button className="!h-12 !px-4" data-sound="reveal" data-testid="play-week" onClick={() => dispatch({ type: "playoff" })}>
         {yours ? "Play your game" : "Advance the round"}
       </Button>
     </section>
@@ -1052,7 +1111,7 @@ function Recap({
   const drivers = seasonDrivers(season);
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-primary/40 bg-card p-5">
+      <div className="reveal-panel rounded-2xl border bg-card p-5">
         <p className="text-xs uppercase tracking-[0.18em] text-primary">GM grade</p>
         <p className="font-display text-7xl leading-none tracking-wide">{grade?.letter ?? "—"}</p>
         <p className="mt-2 font-display text-2xl tracking-wide">
@@ -1082,7 +1141,7 @@ function Recap({
             <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
               {playoffResults.map((game, index) => (
                 <li key={`${game.round}-${game.home}-${game.away}-${index}`}>
-                  {formatPlayoffRound(game.round as "wildcard" | "divisional" | "conference" | "superbowl")}: {teamById(game.away, season.directory).abbr} {game.awayScore} at {teamById(game.home, season.directory).abbr} {game.homeScore}
+                  {formatPlayoffRound(game.round as "wildcard" | "divisional" | "conference" | "superbowl")}: {teamById(game.away, season.directory).abbr} {game.awayScore} {game.round === "superbowl" ? "vs" : "at"} {teamById(game.home, season.directory).abbr} {game.homeScore}{game.round === "superbowl" ? " · neutral site" : ""}
                 </li>
               ))}
             </ul>
@@ -1108,7 +1167,8 @@ function Recap({
           <p className="text-xs uppercase tracking-[0.16em] text-primary">Advanced</p>
           <p className="mt-2">Pythagorean wins {lines.pythWins}</p>
           <p>Point differential {lines.diff}</p>
-          <p>Roster value {lines.rosterValue}</p>
+          <p>Roster rating total {lines.rosterValue} · {lines.rosterCount} players</p>
+          <p className="text-xs text-muted-foreground">Sum of the current visible overall ratings on your roster—not dollars, a league rank, or a separate grade.</p>
           <p>
             Cap space {money(lines.cap)} · current dead {money(lines.dead)} · pushed to next year {money(season.futureDead)}
           </p>
@@ -1127,7 +1187,7 @@ function Recap({
       </ul>
       {career ? (
         <div className="flex flex-wrap gap-2">
-          <Button className="!h-12 !px-4" onClick={onNext}>
+          <Button className="!h-12 !px-4" data-sound="success" onClick={onNext}>
             Open the next season
           </Button>
           <Button variant="outline" className="!h-12 !px-4" onClick={onRetire}>

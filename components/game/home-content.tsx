@@ -24,7 +24,7 @@ const MODES = [
 
 export function HomeStaticIntro() {
   return (
-    <section className="yard-lines overflow-hidden rounded-2xl border border-white/10 bg-card">
+    <section className="stadium-panel yard-lines overflow-hidden rounded-2xl border bg-card">
       <div className="border-b border-primary/30 bg-primary/10 px-5 py-3 text-[11px] uppercase tracking-[0.22em] text-primary">
         Football front-office simulation
       </div>
@@ -55,7 +55,7 @@ export function HomeStaticIntro() {
             <Link
               key={mode.href}
               href={mode.href}
-              className="flex min-h-48 flex-col rounded-xl border border-primary/40 bg-black/20 p-4 transition-transform hover:-translate-y-0.5 hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="mode-reel flex min-h-48 flex-col rounded-xl border p-4 transition-transform hover:-translate-y-0.5 hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
               <span className="text-[11px] uppercase tracking-[0.18em] text-primary">{mode.kicker} · Free</span>
               <span className="mt-2 block font-display text-3xl tracking-wide">{mode.title}</span>
@@ -71,7 +71,7 @@ export function HomeStaticIntro() {
 
 export function HomeGuide() {
   return (
-    <section className="rounded-2xl border border-white/10 bg-card p-5 sm:p-6" aria-labelledby="front-office-guide">
+    <section className="stadium-panel rounded-2xl border p-5 sm:p-6" aria-labelledby="front-office-guide">
       <p className="text-[11px] uppercase tracking-[0.18em] text-primary">How to play</p>
       <h2 id="front-office-guide" className="mt-1 font-display text-4xl tracking-wide">Read the football and the fine print</h2>
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground">

@@ -730,6 +730,37 @@ function freeAgentPool(state: SeasonState): Player[] {
       pool.push(player);
     }
   }
+  const hasKickerUnderContract = yourRoster(state).some((player) => player.pos === "K" && player.years > 0);
+  if (!hasKickerUnderContract && !pool.some((player) => player.pos === "K")) {
+    const rng = makeRng(hashSeed(state.seed, state.year, "modeled-kicker-market"));
+    const existingNames = new Set([
+      ...Object.values(state.teams).flatMap((team) => team.roster.map((player) => player.name)),
+      ...pool.map((player) => player.name),
+    ]);
+    let name = "Market Kicker";
+    for (let attempt = 0; attempt < FIRSTS.length * 2; attempt += 1) {
+      const candidate = `${FIRSTS[rng.int(FIRSTS.length)]} ${LASTS[rng.int(LASTS.length)]}`;
+      if (!existingNames.has(candidate)) {
+        name = candidate;
+        break;
+      }
+    }
+    const kicker: Player = {
+      id: `modeled-kicker-${state.year}-${state.seed}`,
+      name,
+      pos: "K",
+      ovr: 68 + rng.int(8),
+      age: 24 + rng.int(8),
+      cap: 0,
+      years: 0,
+      potential: 76,
+      real: false,
+      drafted: false,
+      origin: historicalMarket ? "modeled-historical-market" : "modeled-open-market",
+    };
+    kicker.cap = Math.round(marketAsk(kicker, salaryScale(state.capLimit)) * 10) / 10;
+    pool.push(kicker);
+  }
   return pool.sort((a, b) => b.ovr - a.ovr);
 }
 
@@ -745,11 +776,16 @@ function buildBoard(state: SeasonState, wave: number): Player[] {
   const shown = new Set(String(state.flags.faShown ?? "").split(",").filter(Boolean));
   const available = pool.filter((player) => !shown.has(player.id));
   const board = available.slice(0, OUTSIDE_BOARD_SIZE);
+  const needsKicker = !yourRoster(state).some((player) => player.pos === "K" && player.years > 0);
+  const availableKicker = needsKicker ? available.find((player) => player.pos === "K") : undefined;
+  const specialistBoard = availableKicker && !board.some((player) => player.id === availableKicker.id) && board.length
+    ? [...board.slice(0, -1), availableKicker]
+    : board;
   const space = capSpace(state);
-  const affordable = state.capMode === "hard" && !board.some((player) => player.cap <= space + 0.05)
+  const affordable = state.capMode === "hard" && !specialistBoard.some((player) => player.cap <= space + 0.05)
     ? available.slice(OUTSIDE_BOARD_SIZE).find((player) => player.cap <= space + 0.05)
     : undefined;
-  const selected = affordable && board.length ? [...board.slice(0, -1), affordable] : board;
+  const selected = affordable && specialistBoard.length ? [...specialistBoard.slice(0, -1), affordable] : specialistBoard;
   state.flags.faShown = [...shown, ...selected.map((player) => player.id)].join(",");
   return selected;
 }
@@ -929,14 +965,19 @@ function completeFreeAgentSigning(
   const ownerChange = over ? -6 : deal.ovr >= 88 ? 2 : 0;
   const fanChange = deal.ovr >= 85 ? 4 : 1;
   const lockerChange = deal.age >= 31 ? -1 : 1;
+  const reactionReasons = [
+    ownerChange === -6 ? "payroll-guide overage: owner −6" : ownerChange === 2 ? "headline player: owner +2" : "owner 0",
+    deal.ovr >= 85 ? "star arrival: fans +4" : "roster addition: fans +1",
+    deal.age >= 31 ? "veteran competition: locker −1" : "younger addition: locker +1",
+  ].join("; ");
   const before = { ...state.meters };
   bump(state, ownerChange, fanChange, lockerChange);
-  pushDecision(state, "Free agency", `Signed ${deal.name}`, `Signed ${deal.name} for ${formatMoney(annual)} per year over ${years} years; ${negotiationResult}. ${meterChanges(before, state.meters)}`, deal.ovr >= 85 ? 3 : 1);
+  pushDecision(state, "Free agency", `Signed ${deal.name}`, `Signed ${deal.name} for ${formatMoney(annual)} per year over ${years} years; ${negotiationResult}. Reactions: ${reactionReasons}. ${meterChanges(before, state.meters)}`, deal.ovr >= 85 ? 3 : 1);
   if (over) queueRipple(state, 3, payrollRipple());
   state.headlines = makeHeadlines(state, "positive", {
     beat: `${deal.name} is yours. ${formatMoney(annual)} a year, ${years} years on the sheet.`,
     national: deal.ovr >= 88 ? `${gmSubject(state.gmName)} just bought a headline.` : `${deal.name} is a fit, not a parade.`,
-    analytics: `${negotiationResult[0]?.toUpperCase()}${negotiationResult.slice(1)}. Space after the deal: ${formatMoney(capSpace(state))}. ${over ? "The owner will read this number." : "The cap still closes."} ${meterChanges(before, state.meters)}`,
+    analytics: `${negotiationResult[0]?.toUpperCase()}${negotiationResult.slice(1)}. Space after the deal: ${formatMoney(capSpace(state))}. ${over ? "The owner will read this number." : "The cap still closes."} Reactions: ${reactionReasons}. ${meterChanges(before, state.meters)}`,
   });
   return state;
 }
@@ -1188,7 +1229,14 @@ function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonSt
   if (state.phase !== "trade") throw new Error("The trade window is shut");
   const offer = state.tradeOffers.find((o) => o.id === offerId);
   if (!offer) throw new Error("That offer expired");
-  if (accept) applyOffer(state, offer);
+  if (accept) {
+    const capRoomChange = tradeImpactPreview(state, offer).capRoomChange;
+    const projectedSpace = Math.round((capSpace(state) + capRoomChange) * 10) / 10;
+    if (state.capMode === "hard" && projectedSpace < -0.05 && capRoomChange < -0.05) {
+      throw new Error(`That trade would put the club ${formatMoney(Math.abs(projectedSpace))} over the hard cap`);
+    }
+    applyOffer(state, offer);
+  }
   else {
     const caller = teamById(offer.fromTeamId, state.directory).city;
     pushDecision(state, "Trade", `Passed on ${offer.wantName}`, `Declined the ${caller} call about ${offer.wantName}.`, 0);
@@ -1203,6 +1251,7 @@ function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonSt
 }
 
 function applyOffer(state: SeasonState, offer: TradeOffer) {
+  const roomBefore = capSpace(state);
   const roster = yourRoster(state);
   const idx = roster.findIndex((p) => p.id === offer.wantId);
   if (idx < 0) throw new Error("That player is not on the roster");
@@ -1235,11 +1284,14 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
   const swing = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
   bump(state, swing, offer.fair === "fleece" ? -3 : 0, sent.ovr >= 85 ? -2 : 0);
   const got = offer.incoming ? tradeIncomingName(offer.incoming) : offer.pickRound ? `a ${offer.pickYear} round ${offer.pickRound}` : "nothing you wanted";
-  pushDecision(state, "Trade", `Moved ${sent.name}`, `Traded ${sent.name} to ${teamById(offer.fromTeamId, state.directory).city} for ${got}.`, swing);
+  const roomAfter = capSpace(state);
+  const roomDelta = Math.round((roomAfter - roomBefore) * 10) / 10;
+  const roomExplanation = `Cap room ${formatMoney(roomBefore)} → ${formatMoney(roomAfter)} (${roomDelta > 0 ? `increased by ${formatMoney(roomDelta)}` : roomDelta < 0 ? `decreased by ${formatMoney(Math.abs(roomDelta))}` : "unchanged"}) from the annual charges exchanged.`;
+  pushDecision(state, "Trade", `Moved ${sent.name}`, `Traded ${sent.name} to ${teamById(offer.fromTeamId, state.directory).city} for ${got}. ${roomExplanation}`, swing);
   state.headlines = makeHeadlines(state, swing >= 0 ? "positive" : "negative", {
     beat: `${sent.name} is gone. Coming back: ${got}.`,
     national: offer.fair === "fleece" ? "That is how you lose a locker room and the trade chart." : "The calls are getting sharper.",
-    analytics: `Trade chart: ${tradeValueLabel(offer.fair)}. This trade's draft compensation is on your board; restructure dead money remains with the club that created it. Owner confidence ${formatSigned(swing)}.`,
+    analytics: `Trade chart: ${tradeValueLabel(offer.fair)}. ${roomExplanation} This trade's draft compensation is on your board; restructure dead money remains with the club that created it. Owner confidence ${formatSigned(swing)}.`,
   });
 }
 
@@ -1372,7 +1424,7 @@ function makeDraftOrder(state: SeasonState): DraftPick[] {
         slot: ranked.length + 1,
         overall,
         teamId: state.teamId,
-        note: extra.source ? `Acquired · ${extra.source}` : "Acquired in an earlier trade",
+        note: extra.source ? `Acquired for ${extra.year} draft · ${extra.source}` : `Acquired for ${extra.year} draft in an earlier trade`,
       });
       overall += 1;
     }
@@ -1584,7 +1636,7 @@ function finishDraft(state: SeasonState) {
       teamId: state.teamId,
       prospectId: prospect.id,
       prospectName: prospect.name,
-      note: `Acquired · ${extra.source ?? "earlier trade"} · staff auto-pick`,
+      note: `Acquired for ${extra.year} draft · ${extra.source ?? "earlier trade"} · staff auto-pick`,
     });
     late.push(`Acquired round ${extra.round}: ${prospect.name} (${prospect.pos})`);
     need.delete(prospect.pos);
@@ -1604,8 +1656,13 @@ function finishDraft(state: SeasonState) {
 export function suggestedCuts(state: SeasonState): string[] {
   const roster = yourRoster(state);
   const extra = roster.length - 26;
-  if (extra <= 0) return [];
+  if (extra <= 0 && (state.capMode !== "hard" || capSpace(state) >= -0.05)) return [];
   const minimums = CAMP_DEPTH_TARGETS;
+  const draftRound = (player: Player) => state.draftPicks.find((pick) => pick.prospectId && player.id === `draft-${pick.prospectId}`)?.round;
+  const draftProtection = (player: Player) => {
+    const round = draftRound(player);
+    return round === 1 ? 35 : round === 2 ? 25 : round === 3 ? 10 : round ? 3 : 0;
+  };
   const keep = new Set<string>();
   const keptByPosition = new Map<Pos, number>();
   for (const [pos, minimum] of Object.entries(minimums) as [Pos, number][]) {
@@ -1626,7 +1683,7 @@ export function suggestedCuts(state: SeasonState): string[] {
         if (player.pos === "K" && (keptByPosition.get("K") ?? 0) >= 1) return -100;
         const surplus = Math.max(0, (keptByPosition.get(player.pos) ?? 0) - (minimums[player.pos] ?? 0));
         const newDealProtection = state.flags[`signed:${player.id}`] === state.year ? 10 : 0;
-        return player.ovr + newDealProtection - surplus * 4 - player.cap * 0.03;
+        return player.ovr + newDealProtection + draftProtection(player) - surplus * 4 - player.cap * 0.03;
       };
       return value(b) - value(a);
     });
@@ -1639,7 +1696,29 @@ export function suggestedCuts(state: SeasonState): string[] {
   if (keep.size < target) {
     roster.filter((player) => !keep.has(player.id)).slice(0, target - keep.size).forEach((player) => keep.add(player.id));
   }
-  return roster.filter((player) => !keep.has(player.id)).map((player) => player.id);
+  const cuts = roster.filter((player) => !keep.has(player.id)).map((player) => player.id);
+  if (state.capMode === "hard") {
+    while (campCapSpaceAfterCuts(state, cuts) < -0.05 && roster.length - cuts.length > MIN_ROSTER) {
+      const remaining = roster.filter((player) => !cuts.includes(player.id));
+      const positionCounts = new Map<Pos, number>();
+      for (const player of remaining) positionCounts.set(player.pos, (positionCounts.get(player.pos) ?? 0) + 1);
+      const candidates = remaining
+        .filter((player) => player.pos !== "QB" || (positionCounts.get("QB") ?? 0) > 1)
+        .sort((a, b) => {
+          const surplus = (player: Player) => (positionCounts.get(player.pos) ?? 0) - (minimums[player.pos] ?? 0);
+          const netSavings = (player: Player) => player.cap - campCutDeadMoney(state, [player.id]);
+          return Number(surplus(b) > 0) - Number(surplus(a) > 0)
+            || Number(state.flags[`signed:${a.id}`] === state.year) - Number(state.flags[`signed:${b.id}`] === state.year)
+            || draftProtection(a) - draftProtection(b)
+            || netSavings(b) - netSavings(a)
+            || a.ovr - b.ovr;
+        });
+      const next = candidates[0];
+      if (!next || next.cap - campCutDeadMoney(state, [next.id]) <= 0) break;
+      cuts.push(next.id);
+    }
+  }
+  return cuts;
 }
 
 const CAMP_DEPTH_TARGETS: Partial<Record<Pos, number>> = {
@@ -1677,6 +1756,13 @@ export function campCutDeadMoney(state: SeasonState, cutIds: string[]): number {
     }, 0) * 10) / 10;
 }
 
+export function campCapSpaceAfterCuts(state: SeasonState, cutIds: string[]): number {
+  const selected = new Set(cutIds);
+  const remaining = yourRoster(state).filter((player) => !selected.has(player.id));
+  const projectedDead = state.deadMoney + campCutDeadMoney(state, cutIds);
+  return Math.round((state.capLimit - committedPayroll(remaining) - projectedDead) * 10) / 10;
+}
+
 function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
   if (state.phase !== "camp") throw new Error("Camp cuts are done");
   const roster = yourRoster(state);
@@ -1685,6 +1771,10 @@ function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
   const qbs = remaining.filter((p) => p.pos === "QB");
   if (remaining.length > 26 || remaining.length < 22 || qbs.length < 1) {
     throw new Error("The camp roster has to land between 22 and 26, with a quarterback");
+  }
+  const projectedSpace = campCapSpaceAfterCuts(state, unique);
+  if (state.capMode === "hard" && projectedSpace < -0.05) {
+    throw new Error(`Clear ${formatMoney(Math.abs(projectedSpace))} more cap room before opening the season`);
   }
   const cut = roster.filter((p) => unique.includes(p.id));
   const addedDead = campCutDeadMoney(state, unique);
@@ -1738,7 +1828,7 @@ function identityDecision(state: SeasonState): Decision {
     options: [
       { id: "balanced", label: "Stay balanced", detail: "Take the points. Take the shots when the math is real.", owner: 1, fans: 1, locker: 1, identity: "balanced", log: "Set a balanced fourth-down rule.", swing: 1 },
       { id: "aggressive", label: "Go for it", detail: "Fourth-and-short is a play, not a punt.", owner: 0, fans: 3, locker: 1, identity: "aggressive", log: "Told the staff to be aggressive on fourth down.", tag: "mod:0.6", swing: 1 },
-      { id: "conservative", label: hasKicker ? "Trust the defense and the kicker" : "Trust the defense and field position", detail: hasKicker ? "Field position over heroics." : "Manage the clock and field position without pretending a missing specialist is part of the plan.", owner: 2, fans: -1, locker: 0, identity: "conservative", log: "Chose a conservative close-game plan.", tag: "mod:-0.2", swing: 1 },
+      { id: "conservative", label: hasKicker ? "Trust the defense and the kicker" : "Trust the defense and field position", detail: hasKicker ? "Field position over heroics." : "Manage the clock and field position through the game's abstracted special-teams unit.", owner: 2, fans: -1, locker: 0, identity: "conservative", log: "Chose a conservative close-game plan.", tag: "mod:-0.2", swing: 1 },
     ],
   };
 }
@@ -1755,8 +1845,8 @@ function injuryDecision(state: SeasonState): Decision | null {
     title: `${player.name} is questionable`,
     body: `${player.name} can play at less than full speed or sit and keep the injury from becoming the season. The coaches want a decision before the injury report hardens.`,
     options: [
-      { id: "play", label: `Play ${player.name}`, detail: "You need the snaps. You accept the risk.", owner: 1, fans: 2, locker: 1, log: `Played ${player.name} through the injury.`, tag: `playhurt:${player.id}`, swing: 1 },
-      { id: "sit", label: `Sit ${player.name}`, detail: "A month is better than a year.", owner: 0, fans: -2, locker: 1, log: `Shut ${player.name} down for a few weeks.`, tag: `sit:${player.id}`, swing: 0 },
+      { id: "play", label: `Play ${player.name}`, detail: "You accept the reinjury risk. Owner +1; fans +2; locker +1.", owner: 1, fans: 2, locker: 1, log: `Played ${player.name} through the injury.`, tag: `playhurt:${player.id}`, swing: 1 },
+      { id: "sit", label: `Sit ${player.name}`, detail: "Reduce the reinjury risk. Fans −2 for sitting a star; locker +1 for protecting him.", owner: 0, fans: -2, locker: 1, log: `Shut ${player.name} down for a few weeks.`, tag: `sit:${player.id}`, swing: 0 },
     ],
   };
 }
@@ -2491,9 +2581,7 @@ function buildGrade(state: SeasonState, fired: boolean) {
   if (historical && (!champ || record.wins < state.seasonLength)) score = Math.min(score, 92);
   if (fired) score = Math.min(score, 47);
   score = Math.round(clamp(score, 20, 99));
-  const swings = state.decisions.slice().sort((a, b) => b.swing - a.swing);
-  const best = swings[0]?.log ?? "You kept the building standing.";
-  const worst = swings[swings.length - 1]?.log ?? "Nothing on the tape was fatal.";
+  const { best, worst } = recapDecisionLines(state);
   const headline = champ
     ? "A champion, and the roster still has a pulse."
     : fired
@@ -2513,6 +2601,21 @@ function buildGrade(state: SeasonState, fired: boolean) {
     headline,
     best,
     worst,
+  };
+}
+
+export function recapDecisionLines(state: SeasonState): { best: string; worst: string } {
+  const survivingNames = new Set(yourRoster(state).map((player) => player.name));
+  const draftedNames = new Set(state.draftPicks
+    .filter((pick) => pick.teamId === state.teamId && pick.prospectName)
+    .map((pick) => pick.prospectName as string));
+  const swings = state.decisions
+    .filter((decision) => decision.title !== "Draft" || !draftedNames.has(decision.choice) || survivingNames.has(decision.choice))
+    .slice()
+    .sort((a, b) => b.swing - a.swing);
+  return {
+    best: swings[0]?.log ?? "You kept the building standing.",
+    worst: swings[swings.length - 1]?.log ?? "Nothing on the tape was fatal.",
   };
 }
 
@@ -2581,7 +2684,11 @@ export function suggestAction(state: SeasonState): Action | null {
   }
   if (state.phase === "trade") {
     if (state.shop) return { type: "shop-resolve", accept: false };
-    const bargain = state.tradeOffers.find((o) => o.fair === "bargain");
+    const bargain = state.tradeOffers.find((offer) => {
+      if (offer.fair !== "bargain") return false;
+      const projectedSpace = capSpace(state) + tradeImpactPreview(state, offer).capRoomChange;
+      return state.capMode !== "hard" || projectedSpace >= -0.05;
+    });
     if (bargain) return { type: "trade", offerId: bargain.id, accept: true };
     const next = state.tradeOffers[0];
     if (next) return { type: "trade", offerId: next.id, accept: false };
@@ -2689,6 +2796,7 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   next.teamMod = 0;
   next.capLimit = Math.round(next.capLimit * 1.05 * 10) / 10;
   const priorMeters = { ...next.meters };
+  const modeledRetirements: string[] = [];
   next.meters.owner = clamp(Math.round(next.meters.owner * 0.7 + 66 * 0.3), 35, 90);
   next.meters.fans = clamp(Math.round(next.meters.fans * 0.8 + 58 * 0.2), 30, 90);
   next.meters.locker = clamp(Math.round(next.meters.locker * 0.85 + 64 * 0.15), 30, 90);
@@ -2715,6 +2823,9 @@ export function rolloverSeason(state: SeasonState): SeasonState {
       }
       else if (player.age >= 33) player.ovr = Math.max(60, player.ovr - (player.pos === "RB" ? 3 : 2));
       else if (player.age >= 30 && rng.next() > 0.55) player.ovr = Math.max(62, player.ovr - 1);
+      if (team.id === next.teamId && player.years >= 0 && (player.age >= 39 || player.ovr < 60)) {
+        modeledRetirements.push(`${player.name} (age ${player.age})`);
+      }
     }
     team.roster = team.roster.filter((p) => p.years >= 0 && p.age < 39 && p.ovr >= 60);
     ensureMinimumRoster(next, team.id);
@@ -2735,11 +2846,12 @@ export function rolloverSeason(state: SeasonState): SeasonState {
     `${next.year}: ${next.owner.name} wants the plan again.`,
     `Cap rollover: ${formatMoney(currentDeadCleared)} of prior current-year dead money cleared; ${formatMoney(pushedDeadBecomingCurrent)} of pushed money became this year's dead charge.`,
     meterReset,
+    ...(modeledRetirements.length ? [`Modeled retirements: ${modeledRetirements.join(", ")}. These players left the player pool and are not free agents.`] : []),
   ];
   next.headlines = makeHeadlines(next, "neutral", {
     beat: `Year ${next.year}. The owner already has a version of this meeting on the calendar.`,
     national: `${gmSubject(next.gmName)} is back. The roster is a year older and the cap moved.`,
-    analytics: `Cap ${formatMoney(next.capLimit)}. Prior dead cleared ${formatMoney(currentDeadCleared)}; pushed money now charged ${formatMoney(next.deadMoney)}. ${meterReset}`,
+    analytics: `Cap ${formatMoney(next.capLimit)}. Prior dead cleared ${formatMoney(currentDeadCleared)}; pushed money now charged ${formatMoney(next.deadMoney)}. ${meterReset}${modeledRetirements.length ? ` Modeled retirements: ${modeledRetirements.join(", ")}.` : ""}`,
   });
   return next;
 }
@@ -2828,6 +2940,7 @@ export function advancedLines(state: SeasonState) {
     dead: state.deadMoney,
     health: capHealth(state),
     rosterValue: roster.reduce((sum, player) => sum + visiblePlayerOverall(state, player), 0),
+    rosterCount: roster.length,
     top: roster.slice().sort((a, b) => b.cap - a.cap).slice(0, 5),
     byPos: [...byPos.entries()],
   };

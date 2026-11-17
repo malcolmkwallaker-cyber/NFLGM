@@ -29,7 +29,9 @@ function Bar({ label, value, hint }: { label: string; value: number; hint?: stri
 export function Meters({ season }: { season: SeasonState }) {
   const health = capHealth(season);
   const space = capSpace(season);
-  const capHint = `${formatMoney(space)} room · ${formatMoney(season.deadMoney)} current dead${season.futureDead ? ` · ${formatMoney(season.futureDead)} pushed to next year` : ""}`;
+  const capHint = season.capMode === "hard" && space < -0.05
+    ? `Over the hard cap by ${formatMoney(Math.abs(space))} · clear the deficit before opening the season · ${formatMoney(season.deadMoney)} current dead`
+    : `${formatMoney(space)} room · ${formatMoney(season.deadMoney)} current dead${season.futureDead ? ` · ${formatMoney(season.futureDead)} pushed to next year` : ""}`;
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <Bar

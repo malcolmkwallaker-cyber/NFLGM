@@ -43,8 +43,9 @@ export function TeamPicker({
             key={team.id}
             type="button"
             data-testid={`team-card-${team.id}`}
+            data-sound="select"
             onClick={() => setTeamId(team.id)}
-            className={`flex items-center gap-2 rounded-xl border px-2 py-2 text-left ${
+            className={`position-slot flex items-center gap-2 rounded-xl border px-2 py-2 text-left ${
               team.id === teamId ? "border-primary bg-primary/10" : "border-white/10 bg-card"
             }`}
           >
@@ -58,7 +59,7 @@ export function TeamPicker({
           </button>
         ))}
       </div>
-      <Button className="!h-12 !px-5" onClick={() => onStart(selected.id)}>
+      <Button className="!h-12 !px-5" data-sound="reveal" data-testid="team-picker-start" onClick={() => onStart(selected.id)}>
         {action} · {teamLabel(selected)}
       </Button>
     </section>

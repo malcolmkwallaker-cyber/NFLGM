@@ -1,68 +1,37 @@
-const GA_MEASUREMENT_ID = /^G-[A-Z0-9]+$/;
+export const GOOGLE_ANALYTICS_CONSENT_KEY = "rtr_google_analytics_consent";
 
-export type GaPageLocation = {
-  pathname: string;
-  search: string;
-  href: string;
-};
+export type GoogleAnalyticsConsent = "granted" | "denied";
 
-export type GaPageViewParams = {
-  page_path: string;
-  page_location: string;
-  page_title: string;
-  send_to: string;
-};
+export function validGoogleAnalyticsId(value: string | undefined): string | null {
+  const measurementId = value?.trim().toUpperCase() ?? "";
+  return /^G-[A-Z0-9]{4,20}$/.test(measurementId) ? measurementId : null;
+}
 
-declare global {
-  interface Window {
-    dataLayer?: unknown[];
-    gtag?: (...args: unknown[]) => void;
-    __rtrGaConfigured?: boolean;
+export function readGoogleAnalyticsConsent(storage: Pick<Storage, "getItem">): GoogleAnalyticsConsent | null {
+  try {
+    const value = storage.getItem(GOOGLE_ANALYTICS_CONSENT_KEY);
+    return value === "granted" || value === "denied" ? value : null;
+  } catch {
+    return null;
   }
 }
 
-export function googleAnalyticsId(value: string | undefined | null): string | null {
-  if (typeof value !== "string") return null;
-  const id = value.trim();
-  return GA_MEASUREMENT_ID.test(id) ? id : null;
-}
-
-export function gaBootstrapScript(measurementId: string): string {
-  return [
-    "window.dataLayer = window.dataLayer || [];",
-    "function gtag(){dataLayer.push(arguments);}",
-    "window.gtag = window.gtag || gtag;",
-    "if (!window.__rtrGaConfigured) {",
-    "  window.gtag('js', new Date());",
-    `  window.gtag('config', '${measurementId}', { send_page_view: false });`,
-    "  window.__rtrGaConfigured = true;",
-    "}",
-  ].join("\n");
-}
-
-export function gaPageViewParams(measurementId: string, location: GaPageLocation, title: string): GaPageViewParams {
-  return {
-    page_path: `${location.pathname}${location.search}`,
-    page_location: location.href,
-    page_title: title,
-    send_to: measurementId,
-  };
-}
-
-export function queueGaPageView(measurementId: string, location: GaPageLocation, title: string): void {
-  if (typeof window === "undefined") return;
-  window.dataLayer = window.dataLayer || [];
-  if (typeof window.gtag !== "function") {
-    window.gtag = function gtag() {
-      // gtag.js reads an Arguments object from the data layer, not a rest array.
-      // eslint-disable-next-line prefer-rest-params
-      window.dataLayer?.push(arguments);
-    };
+export function writeGoogleAnalyticsConsent(
+  storage: Pick<Storage, "setItem">,
+  consent: GoogleAnalyticsConsent,
+): boolean {
+  try {
+    storage.setItem(GOOGLE_ANALYTICS_CONSENT_KEY, consent);
+    return true;
+  } catch {
+    return false;
   }
-  if (!window.__rtrGaConfigured) {
-    window.gtag("js", new Date());
-    window.gtag("config", measurementId, { send_page_view: false });
-    window.__rtrGaConfigured = true;
-  }
-  window.gtag("event", "page_view", gaPageViewParams(measurementId, location, title));
+}
+
+export function browserPrivacySignalsAllowGoogleAnalytics(signals: {
+  doNotTrack?: string | null;
+  globalPrivacyControl?: boolean;
+}): boolean {
+  const doNotTrack = signals.doNotTrack?.toLowerCase();
+  return doNotTrack !== "1" && doNotTrack !== "yes" && signals.globalPrivacyControl !== true;
 }
