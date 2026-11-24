@@ -405,8 +405,10 @@ export type Action =
   | { type: "shop"; playerId: string }
   | { type: "shop-resolve"; accept: boolean }
   | { type: "trade-done" }
-  | { type: "draft"; prospectId: string }
+  | { type: "draft"; prospectId: string; capConfirmation?: { overall: number; overage: number } }
   | { type: "draft-trade"; accept: boolean }
+  | { type: "draft-pass" }
+  | { type: "draft-finish"; confirmedOverage: number }
   | { type: "camp-selection"; cutIds: string[] }
   | { type: "camp"; cutIds: string[] }
   | { type: "decide"; choiceId: string }

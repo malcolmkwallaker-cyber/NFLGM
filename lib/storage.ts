@@ -1,5 +1,5 @@
 import type { Profile } from "@/lib/types";
-import { ensureMinimumRoster, suggestedCuts } from "@/lib/engine/season";
+import { ensureMinimumRoster, yourRoster } from "@/lib/engine/season";
 import { recordCompletedSeason } from "@/lib/engine/career";
 import { normalizeGmName } from "@/lib/gm-name";
 
@@ -57,11 +57,12 @@ export function migrateProfile(profile: Profile): Profile {
       [season.teamId]: { deadMoney: season.deadMoney, futureDead: season.futureDead },
     };
     if (season.phase !== "camp") continue;
-    const addedToUser = ensureMinimumRoster(season, season.teamId);
+    ensureMinimumRoster(season, season.teamId);
     for (const teamId of Object.keys(season.teams)) {
       if (teamId !== season.teamId) ensureMinimumRoster(season, teamId);
     }
-    if (addedToUser.length) season.campCutIds = suggestedCuts(season);
+    const rosterIds = new Set(yourRoster(season).map((player) => player.id));
+    season.campCutIds = [...new Set(season.campCutIds ?? [])].filter((id) => rosterIds.has(id));
   }
   if (next.career) next.career = recordCompletedSeason(next.career);
   return next;
