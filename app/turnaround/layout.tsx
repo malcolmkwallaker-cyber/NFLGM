@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function TurnaroundLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return <><h1 className="sr-only">Daily Historic Turnaround</h1>{children}</>;
 }

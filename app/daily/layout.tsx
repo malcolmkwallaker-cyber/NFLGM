@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function DailyLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return <><h1 className="sr-only">Daily Football GM Challenge</h1>{children}</>;
 }

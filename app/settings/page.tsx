@@ -14,7 +14,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-lg space-y-5">
       <header>
-        <h1 className="font-display text-4xl tracking-wide">This browser is the account</h1>
+        <h1 className="font-display text-4xl tracking-wide">Settings</h1>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           Saves stay in this browser only. There is no login or cloud sync, and nothing uploads your career, Daily results,
           or settings.
@@ -30,8 +30,8 @@ export default function SettingsPage() {
       </label>
       <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm">
         <span>
-          <span className="block">Public playtest access</span>
-          <span className="text-xs text-muted-foreground">Career mode and the full preview are open in this build.</span>
+          <span className="block">Free game access</span>
+          <span className="text-xs text-muted-foreground">Career mode, Historical Seasons, and score rooms are open in this build.</span>
         </span>
       </div>
       <label className="flex items-center justify-between gap-3 rounded-xl border border-white/10 px-4 py-3 text-sm">

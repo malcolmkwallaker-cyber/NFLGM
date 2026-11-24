@@ -87,7 +87,7 @@ export function HomeClient({
           {ready ? (
             <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
               Streak {profile.daily.streak} · best {profile.daily.bestStreak}
-              {FREE_TESTING_MODE ? " · Public playtest" : profile.pro ? " · Full access" : " · Free"}
+              {FREE_TESTING_MODE || !profile.pro ? " · Free" : " · Full access"}
             </p>
           ) : null}
         </div>

@@ -82,7 +82,7 @@ export default function LeaguesPage() {
             </select>
           </label>
         ) : (
-          <p className="text-sm text-muted-foreground">No rooms yet.</p>
+          <p className="text-sm text-muted-foreground">Create a score room, then paste result codes to compare runs in this browser.</p>
         )}
         <div className="space-y-2">
           <Input className="!h-11" value={friend} onChange={(event) => setFriend(event.target.value)} placeholder="Friend's name" />

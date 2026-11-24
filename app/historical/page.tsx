@@ -13,7 +13,7 @@ export default function HistoricalPage() {
   return (
     <ProGate
       title="Historical season mode"
-      body="Historical season mode is open during the public playtest. These are game recreations, not complete archival league databases."
+      body="Play a season with a selected historical roster and modeled game data."
     >
       <div className="space-y-3">
         <header>
