@@ -1,9 +1,16 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description: "See what Run The Roster saves in your browser and how to manage your data and measurement choices.",
+  alternates: { canonical: "/privacy/" },
+};
+
 export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Privacy</p>
-        <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">How this playtest handles data</h1>
+        <h1 className="font-display text-5xl leading-none tracking-wide">Privacy Policy</h1>
         <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Current as of November 12, 2026.</p>
       </header>
 

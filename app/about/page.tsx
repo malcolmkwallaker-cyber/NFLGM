@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+
+export const metadata: Metadata = {
+  title: "About the Football GM Game",
+  description: "Learn who makes Run The Roster, how to play, and what its football simulation represents.",
+  alternates: { canonical: "/about/" },
+};
 
 export default function AboutPage() {
   return (
@@ -40,7 +47,7 @@ export default function AboutPage() {
         <div className="mt-3 space-y-3 text-sm leading-relaxed text-muted-foreground">
           <p>Schedules, ratings, cap figures, contracts, free-agent markets, draft classes, game results, and many staff members are modeled or fictional unless a screen says otherwise.</p>
           <p>Historical modes use sourced team-season roster snapshots where available, but ratings, salaries, contracts, opponents, and simulated results remain game mechanics rather than historical facts.</p>
-          <p>Your save stays in this browser. There is no player account, cloud save, or connected global leaderboard in the current public playtest.</p>
+          <p>Your save stays in this browser. The game has no player account, cloud save, or global leaderboard.</p>
         </div>
       </section>
 

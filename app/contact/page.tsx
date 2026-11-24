@@ -1,3 +1,11 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Contact",
+  description: "Contact Malcolm Wallaker about Run The Roster game feedback, accessibility, privacy, or business inquiries.",
+  alternates: { canonical: "/contact/" },
+};
+
 export default function ContactPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">

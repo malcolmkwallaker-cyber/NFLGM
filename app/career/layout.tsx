@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function CareerLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return children;
+  return <><h1 className="sr-only">Career Football GM Mode</h1>{children}</>;
 }
