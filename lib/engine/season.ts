@@ -41,7 +41,6 @@ export const PROJECTED_CAP = 322;
 export const MIN_ROSTER = 22;
 export const FIRING_THRESHOLD = 20;
 const OUTSIDE_BOARD_SIZE = 6;
-const UNUSED_CAP_REVIEW_RATIO = 0.18;
 
 const OWNERS = [
   "Dana Crowe",
@@ -779,17 +778,26 @@ function buildBoard(state: SeasonState, wave: number): Player[] {
   state.faPool = pool;
   const shown = new Set(String(state.flags.faShown ?? "").split(",").filter(Boolean));
   const available = pool.filter((player) => !shown.has(player.id));
-  const board = available.slice(0, OUTSIDE_BOARD_SIZE);
+  if (!available.some((player) => player.pos === "QB")) {
+    available.push({
+      id: `wave-backup-qb-${state.year}-${state.seed}-${wave}`,
+      name: wave === 2 ? "Casey Harlow" : "Drew Langford",
+      pos: "QB", ovr: 64, age: 26, cap: Math.round(1.1 * salaryScale(state.capLimit) * 10) / 10,
+      years: 0, potential: 68, real: false, drafted: false, origin: "modeled-open-market",
+    });
+  }
   const needsKicker = !yourRoster(state).some((player) => player.pos === "K" && player.years > 0);
-  const availableKicker = needsKicker ? available.find((player) => player.pos === "K") : undefined;
-  const specialistBoard = availableKicker && !board.some((player) => player.id === availableKicker.id) && board.length
-    ? [...board.slice(0, -1), availableKicker]
-    : board;
+  const quarterback = available.find((player) => player.pos === "QB");
+  const kicker = needsKicker ? available.find((player) => player.pos === "K") : undefined;
+  const reserved = [quarterback, kicker].filter((player): player is Player => Boolean(player));
   const space = capSpace(state);
-  const affordable = state.capMode === "hard" && !specialistBoard.some((player) => player.cap <= space + 0.05)
-    ? available.slice(OUTSIDE_BOARD_SIZE).find((player) => player.cap <= space + 0.05)
-    : undefined;
-  const selected = affordable && specialistBoard.length ? [...specialistBoard.slice(0, -1), affordable] : specialistBoard;
+  const preferred = available.filter((player) => !reserved.some((held) => held.id === player.id));
+  const selected = [...preferred.slice(0, OUTSIDE_BOARD_SIZE - reserved.length), ...reserved];
+  if (state.capMode === "hard" && !selected.some((player) => player.cap <= space + 0.05)) {
+    const affordable = preferred.find((player) => player.cap <= space + 0.05);
+    const replace = selected.findLastIndex((player) => !reserved.some((held) => held.id === player.id));
+    if (affordable && replace >= 0) selected[replace] = affordable;
+  }
   state.flags.faShown = [...shown, ...selected.map((player) => player.id)].join(",");
   return selected;
 }
@@ -1738,6 +1746,10 @@ function campReleaseCharge(state: SeasonState, player: Player): number {
 }
 
 export function suggestedCuts(state: SeasonState): string[] {
+  return campCutPlan(state, true);
+}
+
+function campCutPlan(state: SeasonState, protectDrafteesAndStars: boolean): string[] {
   const roster = yourRoster(state);
   const counts = new Map<Pos, number>();
   for (const { pos } of roster) counts.set(pos, (counts.get(pos) ?? 0) + 1);
@@ -1748,7 +1760,8 @@ export function suggestedCuts(state: SeasonState): string[] {
 
   const candidates = roster.map((player) => ({
     player,
-    protected: campCutProtections(state, player).length > 0,
+    protections: campCutProtections(state, player),
+    dead: campReleaseCharge(state, player),
     savings: Math.round(((player.years > 0 ? player.cap : 0) - campReleaseCharge(state, player)) * 10) / 10,
   }));
   const cuts = new Set<string>();
@@ -1758,7 +1771,8 @@ export function suggestedCuts(state: SeasonState): string[] {
     const deficit = state.capMode === "hard" ? Math.max(0, -room) : 0;
     if (!needRosterSpace && deficit === 0) break;
 
-    const available = candidates.filter(({ player, savings }) => !cuts.has(player.id)
+    const available = candidates.filter(({ player, savings, protections }) => !cuts.has(player.id)
+      && (!protectDrafteesAndStars || !protections.some((reason) => reason === "Drafted this year" || reason === "80+ overall"))
       && (player.pos !== "QB" || (counts.get("QB") ?? 0) > 1)
       && (needRosterSpace || savings > 0));
     // Reserve enough cuts to clear the cap within the roster limit and keep a quarterback.
@@ -1779,13 +1793,14 @@ export function suggestedCuts(state: SeasonState): string[] {
     const next = (viable.length ? viable : available)
       .sort((a, b) => {
         const depth = depthPenalty(a.player.pos) - depthPenalty(b.player.pos);
-        const protection = Number(a.protected) - Number(b.protected);
-        if (depth || protection) return depth || protection;
+        const protection = Number(a.protections.length > 0) - Number(b.protections.length > 0);
+        if (deficit === 0) return depth || protection || a.dead - b.dead || a.player.ovr - b.player.ovr;
+        if (protection) return protection;
         if (deficit > 0) {
           const aClearsCap = a.savings >= deficit;
           const bClearsCap = b.savings >= deficit;
           const capFit = Number(bClearsCap) - Number(aClearsCap)
-            || (aClearsCap ? a.savings - b.savings : b.savings - a.savings);
+            || (aClearsCap ? a.dead - b.dead || a.savings - b.savings : a.dead / a.savings - b.dead / b.savings || b.savings - a.savings);
           if (capFit) return capFit;
         }
         const extraKicker = Number(b.player.pos === "K") - Number(a.player.pos === "K");
@@ -1797,6 +1812,13 @@ export function suggestedCuts(state: SeasonState): string[] {
     cuts.add(id);
     counts.set(pos, (counts.get(pos) ?? 1) - 1);
     room = campCapSpaceAfterCuts(state, [...cuts]);
+  }
+  // Remove redundant cuts once the roster and cap fit, even if they were selected earlier on the way to that fit.
+  for (const id of [...cuts].reverse()) {
+    if (roster.length - cuts.size >= 26 || roster.length - cuts.size < MIN_ROSTER) continue;
+    const smaller = [...cuts].filter((cutId) => cutId !== id);
+    if (state.capMode === "hard" && campCapSpaceAfterCuts(state, smaller) < -0.05) continue;
+    cuts.delete(id);
   }
   return [...cuts];
 }
@@ -1855,9 +1877,8 @@ function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
     if (player.ovr >= 84) queueRipple(state, Math.min(6, state.seasonLength), veteranRipple(player));
     if (player.ovr >= 80) bump(state, 0, -2, -2);
   }
-  const names = cut.slice(0, 4).map((player) => player.name).join(", ");
-  const remainingNames = cut.length > 4 ? ` and ${cut.length - 4} more` : "";
-  const summary = cut.length ? `Cut ${names}${remainingNames}.` : "No cuts.";
+  const names = cut.map((player) => player.name).join(", ");
+  const summary = cut.length ? `Cut ${names}.` : "No cuts.";
   pushDecision(state, "Camp", `Cut ${cut.length}`, `${summary} Added ${formatMoney(addedDead)} in dead money.`, cut.some((p) => p.ovr >= 84) ? -2 : 0);
   state.phase = "regular";
   state.week = 1;
@@ -2023,6 +2044,7 @@ function doDecide(state: SeasonState, choiceId: string): SeasonState {
 
 function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
   const beforeMeters = { ...state.meters };
+  let choiceLog = choice.log;
   if (choice.identity) state.identity = choice.identity as Identity;
   if (choice.tag?.startsWith("mod:")) state.teamMod += Number(choice.tag.slice(4));
   if (choice.tag?.startsWith("playhurt:")) {
@@ -2055,8 +2077,10 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
     const roster = yourRoster(state);
     const player = roster.find((p) => p.id === id);
     if (player) {
+      const beforeRoom = capSpace(state);
       state.teams[state.teamId].roster = roster.filter((p) => p.id !== id);
       state.extraPicks.push({ round: Number(roundRaw), year: state.year + 1, source: `Deadline trade of ${player.name}` });
+      choiceLog += ` Cap room ${formatMoney(beforeRoom)} to ${formatMoney(capSpace(state))}.`;
     }
   }
   if (choice.tag?.startsWith("extend:")) {
@@ -2089,7 +2113,7 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
     }
   }
   bump(state, choice.owner ?? 0, choice.fans ?? 0, choice.locker ?? 0);
-  pushDecision(state, decision.title, choice.label, choice.log, choice.swing ?? choice.owner ?? 0);
+  pushDecision(state, decision.id === "deadline" ? "Trade deadline" : decision.title, choice.label, choiceLog, choice.swing ?? choice.owner ?? 0);
   state.headlines = makeHeadlines(state, (choice.owner ?? 0) + (choice.fans ?? 0) >= 0 ? "positive" : "negative", {
     beat: choice.log,
     national: `${gmSubject(state.gmName)} made a call: ${choice.label}.`,
@@ -2152,10 +2176,6 @@ function resolveLimitedPlayers(state: SeasonState) {
   }
 }
 
-export function unusedCapUnderReview(state: SeasonState): boolean {
-  return state.capMode === "hard" && capSpace(state) / Math.max(1, state.capLimit) >= UNUSED_CAP_REVIEW_RATIO;
-}
-
 export function ownerGameChange(state: SeasonState, won: boolean, margin: number): { delta: number; reasons: string[] } {
   if (won) return { delta: 1, reasons: ["win +1"] };
   const reasons = ["loss −3"];
@@ -2164,11 +2184,6 @@ export function ownerGameChange(state: SeasonState, won: boolean, margin: number
   if (!bestQuarterback || bestQuarterback.ovr < 70) {
     delta -= 1;
     reasons.push("unresolved QB −1");
-  }
-  const capReviewWeek = state.week % 4 === 0 || state.week === state.seasonLength;
-  if (unusedCapUnderReview(state) && capReviewWeek) {
-    delta -= 1;
-    reasons.push("quarterly unused-cap review −1");
   }
   if (margin <= -14) {
     delta -= 1;
@@ -2589,10 +2604,6 @@ function toRecap(state: SeasonState): SeasonState {
   const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
   const ownerBeforeReview = state.meters.owner;
   const recapPenalties: string[] = [];
-  if (record.wins <= 6 && unusedCapUnderReview(state)) {
-    state.meters.owner = clamp(state.meters.owner - 5, 0, 100);
-    recapPenalties.push("poor finish with at least 18% of the cap unused −5");
-  }
   if (!bestQuarterback || bestQuarterback.ovr < 70) {
     state.meters.owner = clamp(state.meters.owner - 6, 0, 100);
     recapPenalties.push("unresolved starting quarterback −6");
@@ -2649,7 +2660,6 @@ function buildGrade(state: SeasonState, fired: boolean) {
   score += (state.meters.locker - 60) / 12;
   score += (capHealth(state) - 55) / 12;
   const bestQuarterback = yourRoster(state).filter((player) => player.pos === "QB").sort((a, b) => b.ovr - a.ovr)[0];
-  if (record.wins <= 6 && unusedCapUnderReview(state)) score -= 8;
   if (!bestQuarterback || bestQuarterback.ovr < 70) score -= 6;
   if (historical && (!champ || record.wins < state.seasonLength)) score = Math.min(score, 92);
   if (fired) score = Math.min(score, 47);
@@ -2687,6 +2697,9 @@ export function recapDecisionLines(state: SeasonState): { best: string; worst: s
     .slice()
     .sort((a, b) => b.swing - a.swing);
   const label = (decision: SeasonState["decisions"][number] | undefined) => {
+    if (decision?.log.startsWith("Traded ") && (decision.title === "Trade deadline" || decision.log.includes(" at the deadline."))) {
+      return `Deadline, after Week 9. ${decision.log}`;
+    }
     if (decision?.title === "Trade" && decision.log.startsWith("Traded ")) {
       return `${decision.week > 1 ? `Week ${decision.week} trade` : "Offseason trade"}. ${decision.log}`;
     }
@@ -2811,6 +2824,15 @@ export function simulateUntil(
   let current = state;
   for (let i = 0; i < 300; i++) {
     if (current.phase === "fired" || current.phase === "recap") return current;
+    if (current.phase === "camp") {
+      if (options.stopAtDecision) return current;
+      // Full-run simulations can choose protected players when the roster cannot otherwise be made legal.
+      const plan = suggestedCuts(current);
+      const eligible = yourRoster(current).length - plan.length <= 26
+        && (current.capMode !== "hard" || campCapSpaceAfterCuts(current, plan) >= -0.05);
+      current = applyAction(current, { type: "camp", cutIds: eligible ? plan : campCutPlan(current, false) });
+      continue;
+    }
     if (until === "playoffs" && current.phase === "playoffs") return current;
     if (options.stopAtDecision && current.phase === "regular" && (current.activeDecision || current.shop)) return current;
     const action = suggestAction(current);
@@ -2827,6 +2849,17 @@ export function weekMatchup(state: SeasonState) {
 export function divisionTable(state: SeasonState): StandingRow[] {
   const you = teamById(state.teamId, state.directory);
   return standings(state).filter((t) => t.conf === you.conf && t.div === you.div);
+}
+
+/** Use a bounded league curve; legacy cap values converge without an overnight payroll cliff. */
+export function nextCareerCap(current: number, committedFloor = 0): number {
+  const leagueCeiling = 520;
+  const annualGrowth = 7;
+  const annualLegacyStep = 12;
+  const target = current > leagueCeiling
+    ? Math.min(current, Math.max(leagueCeiling, current - annualLegacyStep, Math.ceil(committedFloor * 10) / 10))
+    : Math.min(leagueCeiling, current + annualGrowth);
+  return Math.round(target * 10) / 10;
 }
 
 export function rolloverSeason(state: SeasonState): SeasonState {
@@ -2875,7 +2908,6 @@ export function rolloverSeason(state: SeasonState): SeasonState {
   next.deadMoney = activeLiability.deadMoney;
   next.futureDead = activeLiability.futureDead;
   next.teamMod = 0;
-  next.capLimit = Math.round(next.capLimit * 1.05 * 10) / 10;
   const priorMeters = { ...next.meters };
   const modeledRetirements: string[] = [];
   next.meters.owner = clamp(Math.round(next.meters.owner * 0.7 + 66 * 0.3), 35, 90);
@@ -2911,6 +2943,10 @@ export function rolloverSeason(state: SeasonState): SeasonState {
     team.roster = team.roster.filter((p) => p.years >= 0 && p.age < 39 && p.ovr >= 60);
     ensureMinimumRoster(next, team.id);
   }
+  const leagueObligations = Math.max(...Object.entries(next.teams).map(([id, team]) =>
+    committedPayroll(team.roster) + (next.teamCapLiabilities?.[id]?.deadMoney ?? 0)));
+  const legacyReserve = next.capLimit > 520 ? 10 : 0;
+  next.capLimit = nextCareerCap(next.capLimit, leagueObligations + legacyReserve);
   next.extraPicks = next.extraPicks.filter((pick) => pick.year >= next.year);
   next.schedule = buildSchedule(
     next.directory.map((t) => t.id),

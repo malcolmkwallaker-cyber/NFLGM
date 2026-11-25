@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { advanceCareer, createCareer, recordCompletedSeason, retireCareer, takeJob, withJobOffers } from "@/lib/engine/career";
-import { advancedLines, applyAction, applyChampionshipMeterBonus, campCapSpaceAfterCuts, campCutDeadMoney, campCutProtections, capCutDeadMoney, capSpace, createSeason, draftCapImpact, draftFinishOverage, ensureMinimumRoster, meterImpactPreview, ownerGameChange, payroll, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, playerTradeValue, recapDecisionLines, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
+import { advancedLines, applyAction, applyChampionshipMeterBonus, campCapSpaceAfterCuts, campCutDeadMoney, campCutProtections, capCutDeadMoney, capSpace, createSeason, draftCapImpact, draftFinishOverage, ensureMinimumRoster, meterImpactPreview, nextCareerCap, ownerGameChange, payroll, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, playerTradeValue, recapDecisionLines, rolloverSeason, rosterDepthWarnings, rosterForDisplay, seasonDrivers, simulateUntil, staffImpactPreview, suggestedCuts, suggestAction, tradeFairness, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, visiblePlayerOverall, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, SeasonState, TradeOffer } from "@/lib/types";
 import { freshProfile, migrateProfile } from "@/lib/storage";
 import { FREE_TESTING_MODE, hasFullAccess } from "@/lib/access";
@@ -460,7 +460,10 @@ describe("audit regressions", () => {
     expect(cuts.filter((id) => [...rookies, reSigned].some((player) => player.id === id))).toEqual([]);
     expect(rosterDepthWarnings(roster, cuts)).toEqual([]);
     const regular = applyAction(state, { type: "camp", cutIds: cuts });
-    expect(regular.decisions.find((entry) => entry.title === "Camp")?.log).toContain(`and ${cuts.length - 4} more`);
+    for (const id of cuts) {
+      const player = roster.find((candidate) => candidate.id === id)!;
+      expect(regular.decisions.find((entry) => entry.title === "Camp")?.log).toContain(player.name);
+    }
     expect(regular.deadMoney - state.deadMoney).toBeCloseTo(campCutDeadMoney(state, cuts));
   });
 
@@ -483,7 +486,7 @@ describe("audit regressions", () => {
     expect(rosterDepthWarnings(roster, cuts)).toEqual([]);
   });
 
-  it("identifies an unavoidable protected cut and its dead money while preserving the only quarterback", () => {
+  it("requires the GM to select an unavoidable protected cut manually", () => {
     const state = createSeason({ teamId: "SEA", gmName: "Protected Cap Cut Audit", seed: 3868239877 });
     state.phase = "camp";
     const roster = campDepthRoster().slice(1).map((player) => ({ ...player, cap: 0.1 }));
@@ -496,12 +499,12 @@ describe("audit regressions", () => {
     setRoom(state, -5);
 
     const cuts = suggestedCuts(state);
-    expect(cuts).toEqual([protectedPlayer.id]);
-    expect(campCutProtections(state, protectedPlayer)).toEqual(["Signed this year", "80+ overall"]);
-    expect(campCutDeadMoney(state, cuts)).toBe(4.5);
-    expect(campCapSpaceAfterCuts(state, cuts)).toBe(0.5);
-    expect(roster.length - cuts.length).toBe(22);
+    expect(cuts).not.toContain(protectedPlayer.id);
     expect(cuts).not.toContain(quarterback.id);
+    expect(campCapSpaceAfterCuts(state, cuts)).toBeLessThan(0);
+    expect(campCutProtections(state, protectedPlayer)).toEqual(["Signed this year", "80+ overall"]);
+    expect(campCutDeadMoney(state, [protectedPlayer.id])).toBe(4.5);
+    expect(campCapSpaceAfterCuts(state, [protectedPlayer.id])).toBe(0.5);
   });
 
   it("does not celebrate or blame a drafted player in the recap after that player was cut", () => {
@@ -529,7 +532,7 @@ describe("audit regressions", () => {
       { week: 10, title: "Trade deadline", choice: "Moved Shane Brooks", log: "Traded Shane Brooks at the deadline.", swing: -1 },
     ];
     expect(recapDecisionLines(season)).toEqual({
-      best: "Traded Shane Brooks at the deadline.",
+      best: "Deadline, after Week 9. Traded Shane Brooks at the deadline.",
       worst: "Offseason trade. Traded Leo Frost to Detroit.",
     });
   });
@@ -773,9 +776,47 @@ describe("audit regressions", () => {
     const existingCharge = state.teams.KC.roster[0]?.cap;
     let future = state;
     for (let index = 0; index < 8; index += 1) future = rolloverSeason(future);
-    expect(future.capLimit).toBeGreaterThan(state.capLimit * 1.4);
+    expect(future.capLimit).toBe(state.capLimit + 56);
     expect(state.teams.KC.roster[0]?.cap).toBe(existingCharge);
-    expect(salaryScale(future.capLimit)).toBeGreaterThan(1.4);
+    expect(salaryScale(future.capLimit)).toBeGreaterThan(1);
+  });
+
+  it("caps new careers and grandfathers high legacy commitments without compounding their limit", () => {
+    expect(nextCareerCap(518)).toBe(520);
+    expect(nextCareerCap(520)).toBe(520);
+    expect(nextCareerCap(1145.3, 1140)).toBe(1140);
+    expect(nextCareerCap(1145.3, 1170)).toBe(1145.3);
+    const state = createSeason({ teamId: "SEA", gmName: "Legacy commitments", seed: 3868239877, mode: "career" });
+    state.capLimit = 1145.3;
+    const roster = yourRoster(state);
+    for (const player of roster) {
+      player.cap = 1137 / roster.length;
+      player.age = 26;
+      player.years = 3;
+    }
+    const rolled = rolloverSeason(state);
+    expect(rolled.capLimit).toBe(state.capLimit);
+    expect(capSpace(rolled)).toBeCloseTo(8.3, 1);
+    expect(yourRoster(rolled).find((player) => player.id === roster[0].id)?.cap).toBe(roster[0].cap);
+  });
+
+  it("automatically clears open camp selections at the loading boundary", () => {
+    const state = createSeason({ teamId: "SEA", gmName: "Reload audit", seed: 3868239877, mode: "season" });
+    state.phase = "camp";
+    state.campCutIds = [yourRoster(state)[0].id];
+    const reloaded = migrateProfile({ ...freshProfile(), season: state });
+    expect(reloaded.season?.campCutIds).toEqual([]);
+    expect(state.campCutIds).toHaveLength(1);
+  });
+
+  it("offers a quarterback in both outside-market waves even when all pool QBs were shown", () => {
+    let state = advanceTo(createSeason({ teamId: "SEA", gmName: "Open market audit", seed: 3868239877 }), "fa");
+    state = applyAction(state, { type: "next-wave" });
+    expect(state.faBoard.some((player) => player.pos === "QB")).toBe(true);
+    state.flags.faShown = state.faPool?.filter((player) => player.pos === "QB").map((player) => player.id).join(",") ?? "";
+    state = applyAction(state, { type: "next-wave" });
+    expect(state.faBoard.some((player) => player.pos === "QB")).toBe(true);
+    expect(state.faBoard.length).toBeLessThanOrEqual(6);
   });
 
   it("discounts older new-market asks while protecting elite positional value", () => {
@@ -1051,7 +1092,7 @@ describe("audit regressions", () => {
     expect(finished.meters.owner).toBeLessThan(22);
   });
 
-  it("reviews unused cap quarterly instead of compounding it after every loss", () => {
+  it("does not penalize unused cap when there is no reliable in-season spend path", () => {
     const state = createSeason({ teamId: "SEA", gmName: "Owner Ledger Audit", seed: 1236, mode: "career" });
     state.capLimit = payroll(yourRoster(state)) + state.deadMoney + 100;
     state.week = 2;
@@ -1060,10 +1101,10 @@ describe("audit regressions", () => {
     expect(ordinaryLoss.reasons).not.toContain("quarterly unused-cap review −1");
     state.week = 4;
     const reviewLoss = ownerGameChange(state, false, -7);
-    expect(reviewLoss.delta).toBe(-4);
-    expect(reviewLoss.reasons).toContain("quarterly unused-cap review −1");
+    expect(reviewLoss.delta).toBe(-3);
+    expect(reviewLoss.reasons).not.toContain("quarterly unused-cap review −1");
     const blowout = ownerGameChange(state, false, -17);
-    expect(blowout.delta).toBe(-5);
+    expect(blowout.delta).toBe(-4);
     expect(blowout.reasons).toContain("blowout −1");
   });
 

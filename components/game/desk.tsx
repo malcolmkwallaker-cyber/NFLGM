@@ -13,7 +13,7 @@ import { capSpace, committedPayroll, marketAsk, offerYears, salaryScale } from "
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCapSpaceAfterCuts, campCutDeadMoney, campCutProtections, capCutDeadMoney, divisionTable, draftCapImpact, draftFinishOverage, freeAgentNegotiationPreview, meterImpactPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, shopTradeImpactPreview, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCapSpaceAfterCuts, campCutDeadMoney, campCutProtections, capCutDeadMoney, divisionTable, draftCapImpact, draftFinishOverage, freeAgentNegotiationPreview, meterImpactPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, shopTradeImpactPreview, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel,  weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, Prospect, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -123,7 +123,7 @@ export function Desk() {
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {teamLabel(team)} · {record.wins}-{record.losses}
-              {season.phase === "regular" ? ` · Week ${season.week}` : ""} · {titledGmName(season.gmName)} · Seed {season.seed}
+              {season.phase === "regular" ? (season.activeDecision?.id === "deadline" ? " · Trade deadline, after Week 9" : ` · Week ${season.week}`) : ""} · {titledGmName(season.gmName)} · Seed {season.seed}
             </p>
             {["camp", "regular", "playoffs"].includes(season.phase) ? (
               <dl aria-label="Team cap" className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs">
@@ -445,6 +445,9 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
     ? season.faBoard.find((player) => player.id === season.faNegotiation?.playerId)
     : undefined;
   const negotiationPreview = negotiatingPlayer ? freeAgentNegotiationPreview(season, negotiatingPlayer) : null;
+  const expiringKicker = season.faWave === 1 && !yourRoster(season).some((player) => player.pos === "K" && player.years > 0)
+    ? season.faBoard.find((player) => player.pos === "K")
+    : undefined;
   const bestQuarterbackUnderContract = yourRoster(season)
     .filter((player) => player.pos === "QB" && player.years > 0)
     .sort((a, b) => b.ovr - a.ovr)[0];
@@ -468,6 +471,11 @@ function FreeAgency({ season, space }: { season: SeasonState; space: number }) {
           The room shown excludes expired prior contracts. Re-signing or tagging one adds the new charge immediately.
           Your modeled retention asks include a small incumbent discount; reaching the open market can raise the later
           price through scarcity.
+        </p>
+      ) : null}
+      {expiringKicker ? (
+        <p role="status" className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-sm text-amber-100">
+          Last kicker warning: {expiringKicker.name} is expiring and no kicker is under contract. Re-sign, tag, or plan for a replacement before opening the season.
         </p>
       ) : null}
       {!bestQuarterbackUnderContract || bestQuarterbackUnderContract.ovr < 70 ? (
@@ -928,7 +936,7 @@ function Camp({
       {!keptQb ? <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm">Keep at least one quarterback before opening the season.</p> : null}
       {season.capMode === "hard" && campCapSpace < -0.05 ? (
         <p role="status" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm text-red-100">
-          Hard-cap hold: clear {money(Math.abs(campCapSpace))} more room before opening the season. Select additional cuts; suggested cuts will try to clear the deficit while keeping at least 22 players and a quarterback.
+          Hard-cap hold: clear {money(Math.abs(campCapSpace))} more room before opening the season. Suggested cuts never select this year’s draftees or 80+ players. If suggestions cannot get you under the cap, review additional cuts yourself.
         </p>
       ) : null}
       {depthWarnings.length ? (
@@ -1028,6 +1036,10 @@ function Regular({
   const { dispatch } = useGame();
   const decision = season.activeDecision;
   const pendingInjury = pendingInjuryPlayer(season);
+  const deadlineOption = decision?.id === "deadline" ? decision.options.find((option) => option.id === "deal") : undefined;
+  const tradedPlayer = roster.find((player) => player.id === deadlineOption?.tag?.split(":")[1]);
+  const beforeTradeRoom = capSpace(season);
+  const afterTradeRoom = beforeTradeRoom + (tradedPlayer?.years && tradedPlayer.years > 0 ? tradedPlayer.cap : 0);
   const opp = matchup ? (matchup.home === season.teamId ? matchup.away : matchup.home) : null;
   const home = matchup?.home === season.teamId;
   const recentGames = season.results
@@ -1036,6 +1048,9 @@ function Regular({
     .reverse();
   return (
     <section className="space-y-3">
+      <div className="sticky top-0 z-20 flex justify-end rounded-xl border border-white/10 bg-card/95 p-2">
+        <Button className="!h-12 !px-5" data-sound="reveal" disabled={Boolean(season.shop || decision)} data-testid="play-week" onClick={() => dispatch({ type: "play-week" })}>Play the week</Button>
+      </div>
       {season.shop ? (
         <article className="rounded-2xl border border-primary/40 bg-card p-4" aria-label="Contract-year trade offer">
           <p className="text-xs uppercase tracking-[0.16em] text-primary">Trade offer · no move yet</p>
@@ -1063,7 +1078,12 @@ function Regular({
             >
               <span className="block font-medium">{option.label}</span>
               <span className="mt-1 block text-sm text-muted-foreground">
-                {decision.id === "deadline" ? <TradeApproval impact={meterImpactPreview(season, option)} /> : option.detail}
+                {decision.id === "deadline" ? (
+                  <>
+                    <TradeApproval impact={meterImpactPreview(season, option)} />
+                    {option.id === "deal" && tradedPlayer ? <span className="mt-1 block">Cap room {money(beforeTradeRoom)} to {money(afterTradeRoom)}. The outside market is closed for the season.</span> : null}
+                  </>
+                ) : option.detail}
               </span>
             </button>
           ))}
@@ -1084,16 +1104,8 @@ function Regular({
           <p className="mt-2 text-sm text-muted-foreground">
             The rest of the league plays the same week. A win moves the owner. A collapse can end the job before February.
           </p>
-          <Button className="mt-4 !h-12 !px-5" data-sound="reveal" disabled={Boolean(season.shop)} data-testid="play-week" onClick={() => dispatch({ type: "play-week" })}>
-            {season.shop ? "Review the trade offer first" : "Play the week"}
-          </Button>
         </div>
       )}
-      {unusedCapUnderReview(season) ? (
-        <p role="status" className="rounded-lg border border-amber-300/30 bg-amber-300/5 px-3 py-2 text-xs text-amber-100">
-          Owner cap review active: at least 18% of the cap is unused. A loss in Week 4, 8, 12, 16, or the final week adds a one-point owner penalty; wins are not penalized.
-        </p>
-      ) : null}
       {recentGames.length ? (
         <section aria-label="Recent scores">
           <p className="mb-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">Recent scores</p>
@@ -1195,7 +1207,9 @@ function Recap({
   const superBowlRunnerUp = superBowl ? (superBowlWinner === superBowl.home ? superBowl.away : superBowl.home) : null;
   const winnerScore = superBowl ? (superBowlWinner === superBowl.home ? superBowl.homeScore : superBowl.awayScore) : null;
   const runnerUpScore = superBowl ? (superBowlRunnerUp === superBowl.home ? superBowl.homeScore : superBowl.awayScore) : null;
-  const playoffResults = season.results.filter((game) => ["wildcard", "divisional", "conference", "superbowl"].includes(game.round));
+  const playoffResults = season.results.filter((game) => game.round !== "regular" && (game.home === season.teamId || game.away === season.teamId));
+  const seasonTrades = season.decisions.filter((entry) => (entry.title === "Trade" || entry.title === "Trade deadline" || entry.log.includes(" at the deadline.")) && entry.log.startsWith("Traded "));
+  const campCuts = season.decisions.find((entry) => entry.title === "Camp");
   const playedSuperBowl = Boolean(superBowl && (superBowl.home === season.teamId || superBowl.away === season.teamId));
   const finish = grade?.champ ? "Champion" : grade?.round === "missed" ? "Missed playoffs" : grade?.round ? formatPlayoffRound(grade.round) : "Season complete";
   const eliminatedFinish = grade?.round === "missed" ? "You missed the playoffs" : grade?.round ? `Your run ended in the ${formatPlayoffRound(grade.round)}` : "Your season was complete";
@@ -1228,7 +1242,7 @@ function Recap({
         ) : null}
         {playoffResults.length ? (
           <details className="mt-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
-            <summary className="cursor-pointer text-sm">Recorded playoff results ({playoffResults.length})</summary>
+            <summary className="cursor-pointer text-sm">Your playoff games ({playoffResults.length})</summary>
             <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
               {playoffResults.map((game, index) => (
                 <li key={`${game.round}-${game.home}-${game.away}-${index}`}>
@@ -1238,6 +1252,13 @@ function Recap({
             </ul>
           </details>
         ) : null}
+        {campCuts ? <p className="mt-3 text-sm"><strong>Training camp:</strong> {campCuts.log}</p> : null}
+        {seasonTrades.length ? <section className="mt-3 text-sm" aria-label="Trades this season">
+          <h3 className="font-medium">Trades this season</h3>
+          <ul className="mt-1 list-disc pl-5 text-muted-foreground">
+            {seasonTrades.map((entry, index) => <li key={index}>{entry.title === "Trade deadline" || entry.log.includes(" at the deadline.") ? "Deadline, after Week 9" : entry.week > 1 ? `Week ${entry.week}` : "Offseason"}: {entry.log}</li>)}
+          </ul>
+        </section> : null}
         <p className="mt-3 text-sm">Best call: {grade?.best}</p>
         <p className="text-sm text-muted-foreground">The one that stuck: {grade?.worst}</p>
         <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">

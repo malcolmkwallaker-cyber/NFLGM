@@ -3,7 +3,7 @@ import Link from "next/link";
 
 const MODES = [
   {
-    href: "/daily",
+    href: "/daily/",
     kicker: "Daily Challenge",
     title: "Make one call",
     body: "Choose a front-office response, receive an instant grade, and read why another path may have worked.",
@@ -51,8 +51,9 @@ export function HomeStaticIntro() {
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
-          {MODES.map((mode) => (
-            <Link
+          {MODES.map((mode) => {
+            const ModeLink = mode.href === "/daily/" ? "a" : Link;
+            return <ModeLink
               key={mode.href}
               href={mode.href}
               className="mode-reel flex min-h-48 flex-col rounded-xl border p-4 transition-transform hover:-translate-y-0.5 hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
@@ -61,8 +62,8 @@ export function HomeStaticIntro() {
               <span className="mt-2 block font-display text-3xl tracking-wide">{mode.title}</span>
               <span className="mt-2 block text-sm leading-relaxed text-muted-foreground">{mode.body}</span>
               <span className="mt-auto block pt-5 text-sm font-medium text-primary">Open mode →</span>
-            </Link>
-          ))}
+            </ModeLink>;
+          })}
         </div>
       </div>
     </section>

@@ -55,7 +55,7 @@ export function HomeClient({
           </div>
           <div className="grid gap-3 md:grid-cols-3">
             <HomeMode
-              href="/daily"
+              href="/daily/"
               testId="home-daily-cta"
               kicker="Mode 1 · Daily Challenge · Free"
               title={dailyComplete ? "Today’s call is in" : "Make today’s call"}
@@ -108,7 +108,7 @@ export function HomeClient({
           {DAILY_CHALLENGES.filter((challenge) => !challenge.fictional).length} sourced historical decisions and{" "}
           {DAILY_CHALLENGES.filter((challenge) => challenge.fictional).length} clearly labeled original fictional scenarios rotate daily. The Daily Challenge stays free and available.
         </p>
-        <Button className="mt-4 !h-11" nativeButton={false} render={<Link href="/daily" />}>
+        <Button className="mt-4 !h-11" nativeButton={false} render={<Link href="/daily/" />}>
           {dailyComplete ? "View today’s result" : "Make the call"}
         </Button>
       </section>
@@ -146,8 +146,9 @@ function HomeMode({
   action: string;
   testId: string;
 }) {
+  const ModeLink = href === "/daily/" ? "a" : Link;
   return (
-    <Link
+    <ModeLink
       href={href}
       data-testid={testId}
       className="mode-reel flex min-h-52 flex-col rounded-xl border p-4 transition-transform hover:-translate-y-0.5 hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
@@ -156,6 +157,6 @@ function HomeMode({
       <span className="mt-2 block font-display text-3xl tracking-wide">{title}</span>
       <span className="mt-2 block text-sm leading-relaxed text-muted-foreground">{body}</span>
       <span className="mt-auto block pt-5 text-sm font-medium text-primary">{action}</span>
-    </Link>
+    </ModeLink>
   );
 }
