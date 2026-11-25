@@ -36,7 +36,7 @@ export function TurnaroundClient() {
     <div className="space-y-5">
       <section className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
         <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Daily historic turnaround · #{challengeNumber + 1}</p>
-        <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">{scenario.title}</h1>
+        <h2 className="mt-2 font-display text-5xl leading-none tracking-wide">{scenario.title}</h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">{scenario.setup}</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           <Fact label="Actual record" value={`${scenario.actualWins}-${scenario.actualLosses}`} />

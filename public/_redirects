@@ -1,5 +1,34 @@
-# Analytics endpoints only. Preserve static page routing and real 404s.
+# Canonical page URLs and analytics endpoints. Preserve static routing and real 404s.
+/pro/            /upgrade/                     301!
+/index.html      /                             301!
 /api/collect     /.netlify/functions/collect     200
 /api/collect/    /.netlify/functions/collect     200
 /analytics       /.netlify/functions/dashboard   200
 /analytics/      /.netlify/functions/dashboard   200
+
+# Previously planned guide URLs redirect to their canonical articles.
+/guides/how-to-play/ /articles/how-to-play/ 301!
+/guides/daily-challenge-guide/ /articles/daily-challenge-guide/ 301!
+/guides/single-season-walkthrough/ /articles/single-season-walkthrough/ 301!
+/guides/salary-cap-explained/ /articles/salary-cap-explained/ 301!
+/guides/career-mode-guide/ /articles/career-mode-guide/ 301!
+/news/2026-nfl-trade-deadline/ /articles/2026-nfl-trade-deadline/ 301!
+/guides/historic-turnaround-guide/ /articles/historic-turnaround-guide/ 301!
+/guides/historical-seasons-which-team/ /articles/historical-seasons-which-team/ 301!
+/guides/draft-strategy-bpa-vs-need/ /articles/draft-strategy-bpa-vs-need/ 301!
+/guides/glossary/ /articles/glossary/ 301!
+/guides/dead-money-and-restructures/ /articles/dead-money-and-restructures/ 301!
+/guides/trade-value-guide/ /articles/trade-value-guide/ 301!
+/guides/positional-value-roster-building/ /articles/positional-value-roster-building/ 301!
+/guides/owner-goals-keep-your-job/ /articles/owner-goals-keep-your-job/ 301!
+/guides/free-agency-retain-or-let-walk/ /articles/free-agency-retain-or-let-walk/ 301!
+/guides/final-camp-cuts-53-man-roster/ /articles/final-camp-cuts-53-man-roster/ 301!
+/guides/hiring-head-coach-and-staff/ /articles/hiring-head-coach-and-staff/ 301!
+/news/2027-draft-order-watch/ /articles/2027-draft-order-watch/ 301!
+/guides/1985-bears-gm-guide/ /articles/1985-bears-gm-guide/ 301!
+/guides/1999-rams-warner-green/ /articles/1999-rams-warner-green/ 301!
+/guides/2013-seahawks-rookie-contract-window/ /articles/2013-seahawks-rookie-contract-window/ 301!
+/guides/2007-patriots-chase-16-0/ /articles/2007-patriots-chase-16-0/ 301!
+/guides/rebuild-vs-reload/ /articles/rebuild-vs-reload/ 301!
+/how-to-play/ /articles/how-to-play/ 301!
+/news/front-office-report-week-of-nov-30-2026/ /articles/2026-nfl-trade-deadline/ 301!

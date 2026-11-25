@@ -40,16 +40,6 @@ export function LeaderboardClient() {
         </section>
       )}
 
-      <section className="rounded-xl border border-white/10 bg-card p-5">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Shared leaderboard status</p>
-        <h2 className="mt-1 font-display text-3xl tracking-wide">Not connected yet</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          A real public board needs a server that can verify identical challenge seeds, reject duplicate or altered
-          runs, and explain what player data it stores. This playtest has no account or score server, so it does not
-          pretend local scores are global.
-        </p>
-      </section>
-
       <div className="flex flex-wrap gap-2">
         <Button nativeButton={false} render={<Link href="/daily" />}>Play Daily Challenge</Button>
         <Button variant="outline" nativeButton={false} render={<Link href="/season" />}>Play Single Season</Button>

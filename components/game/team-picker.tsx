@@ -26,7 +26,7 @@ export function TeamPicker({
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="font-display text-4xl tracking-wide">{title}</h1>
+        <h2 className="font-display text-4xl tracking-wide">{title}</h2>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">{body}</p>
       </div>
       <label className="block max-w-xs text-sm">

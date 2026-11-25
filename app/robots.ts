@@ -9,6 +9,5 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
     },
     sitemap: "https://runtheroster.com/sitemap.xml",
-    host: "https://runtheroster.com",
   };
 }
