@@ -435,9 +435,13 @@ export function applyAction(state: SeasonState, action: Action): SeasonState {
     case "trade-done":
       return beginDraft(next);
     case "draft":
-      return doDraft(next, action.prospectId);
+      return doDraft(next, action);
     case "draft-trade":
       return doDraftTrade(next, action.accept);
+    case "draft-pass":
+      return doDraftPass(next);
+    case "draft-finish":
+      return confirmDraftFinish(next, action.confirmedOverage);
     case "camp-selection":
       return doCampSelection(next, action.cutIds);
     case "camp":
@@ -1185,21 +1189,36 @@ export function tradeOutgoingLabel(state: SeasonState, offer: TradeOffer): strin
     : offer.wantName;
 }
 
-export function tradeImpactPreview(state: SeasonState, offer: TradeOffer) {
-  const sent = yourRoster(state).find((player) => player.id === offer.wantId);
-  const ownerRequested = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
-  const fansRequested = offer.fair === "fleece" ? -3 : 0;
-  const lockerRequested = sent && sent.ovr >= 85 ? -2 : 0;
+export function meterImpactPreview(state: SeasonState, changes: Partial<SeasonState["meters"]>) {
   const effect = (before: number, requested: number, ceiling: number) => ({
     requested,
     applied: requested === 0 ? 0 : clamp(Math.round(before + requested), 0, ceiling) - before,
   });
   return {
-    owner: effect(state.meters.owner, ownerRequested, 96),
-    fans: effect(state.meters.fans, fansRequested, 100),
-    locker: effect(state.meters.locker, lockerRequested, 96),
+    owner: effect(state.meters.owner, changes.owner ?? 0, 96),
+    fans: effect(state.meters.fans, changes.fans ?? 0, 100),
+    locker: effect(state.meters.locker, changes.locker ?? 0, 96),
+  };
+}
+
+export function tradeImpactPreview(state: SeasonState, offer: TradeOffer) {
+  const sent = yourRoster(state).find((player) => player.id === offer.wantId);
+  return {
+    ...meterImpactPreview(state, {
+      owner: offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4,
+      fans: offer.fair === "fleece" ? -3 : 0,
+      locker: sent && sent.ovr >= 85 ? -2 : 0,
+    }),
     capRoomChange: Math.round(((sent?.cap ?? 0) - (offer.incoming?.cap ?? 0)) * 10) / 10,
   };
+}
+
+function shopTradeOffer(offer: TradeOffer): TradeOffer {
+  return { ...offer, fair: offer.fair === "fleece" ? "fleece" : "fair" };
+}
+
+export function shopTradeImpactPreview(state: SeasonState, offer: TradeOffer) {
+  return tradeImpactPreview(state, shopTradeOffer(offer));
 }
 
 const TRADE_POSITION_MULTIPLIER: Record<Pos, number> = {
@@ -1252,6 +1271,8 @@ function doTrade(state: SeasonState, offerId: string, accept: boolean): SeasonSt
 
 function applyOffer(state: SeasonState, offer: TradeOffer) {
   const roomBefore = capSpace(state);
+  const beforeMeters = { ...state.meters };
+  const impact = tradeImpactPreview(state, offer);
   const roster = yourRoster(state);
   const idx = roster.findIndex((p) => p.id === offer.wantId);
   if (idx < 0) throw new Error("That player is not on the roster");
@@ -1281,8 +1302,8 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
       source: `Trade with ${teamById(offer.fromTeamId, state.directory).city}`,
     });
   }
-  const swing = offer.fair === "bargain" ? 4 : offer.fair === "fair" ? 1 : -4;
-  bump(state, swing, offer.fair === "fleece" ? -3 : 0, sent.ovr >= 85 ? -2 : 0);
+  const swing = impact.owner.requested;
+  bump(state, swing, impact.fans.requested, impact.locker.requested);
   const got = offer.incoming ? tradeIncomingName(offer.incoming) : offer.pickRound ? `a ${offer.pickYear} round ${offer.pickRound}` : "nothing you wanted";
   const roomAfter = capSpace(state);
   const roomDelta = Math.round((roomAfter - roomBefore) * 10) / 10;
@@ -1291,7 +1312,7 @@ function applyOffer(state: SeasonState, offer: TradeOffer) {
   state.headlines = makeHeadlines(state, swing >= 0 ? "positive" : "negative", {
     beat: `${sent.name} is gone. Coming back: ${got}.`,
     national: offer.fair === "fleece" ? "That is how you lose a locker room and the trade chart." : "The calls are getting sharper.",
-    analytics: `Trade chart: ${tradeValueLabel(offer.fair)}. ${roomExplanation} This trade's draft compensation is on your board; restructure dead money remains with the club that created it. Owner confidence ${formatSigned(swing)}.`,
+    analytics: `Trade chart: ${tradeValueLabel(offer.fair)}. ${roomExplanation} ${meterChanges(beforeMeters, state.meters)}.`,
   });
 }
 
@@ -1324,7 +1345,7 @@ function doShopResolve(state: SeasonState, accept: boolean): SeasonState {
   if (!state.shop) throw new Error("Nobody is bidding");
   const offer = state.shop;
   state.shop = null;
-  if (accept) applyOffer(state, { ...offer, fair: offer.fair === "fleece" ? "fleece" : "fair" });
+  if (accept) applyOffer(state, shopTradeOffer(offer));
   else pushDecision(state, "Trade", `Kept ${offer.wantName}`, `Shopped ${offer.wantName} and kept him.`, 0);
   return state;
 }
@@ -1501,7 +1522,7 @@ function assignPick(state: SeasonState, pick: DraftPick, prospect: Prospect) {
       pos: prospect.pos,
       ovr: prospect.trueOvr,
       age: prospect.age,
-      cap: Math.round((0.7 + (4 - pick.round) * 0.8) * salaryScale(state.capLimit) * 10) / 10,
+      cap: rookieCapHit(state, pick.round),
       years: 4,
       potential: clamp(prospect.trueOvr + (prospect.age <= 22 ? 6 : 3), 60, 99),
       real: false,
@@ -1510,6 +1531,30 @@ function assignPick(state: SeasonState, pick: DraftPick, prospect: Prospect) {
     };
     team.roster.push(player);
   }
+}
+
+function rookieCapHit(state: SeasonState, round: number): number {
+  const base = round >= 4 ? 0.9 : 0.7 + (4 - round) * 0.8;
+  return Math.round(base * salaryScale(state.capLimit) * 10) / 10;
+}
+
+function draftRoomAfterMinimumRoster(state: SeasonState, pick?: { round: number; pos: Pos }): number {
+  const roster = yourRoster(state);
+  const hasQuarterback = pick?.pos === "QB" || roster.some((player) => player.pos === "QB");
+  const countAfterPick = roster.length + Number(Boolean(pick));
+  const requiredReplacements = Math.max(MIN_ROSTER - countAfterPick, hasQuarterback ? 0 : 1);
+  const charges = (pick ? rookieCapHit(state, pick.round) : 0) + requiredReplacements * rookieCapHit(state, 4);
+  return Math.round((state.capLimit - committedPayroll(roster) - state.deadMoney - charges) * 10) / 10;
+}
+
+export function draftCapImpact(state: SeasonState, round: number, pos: Pos) {
+  const capHit = rookieCapHit(state, round);
+  const projectedRoom = draftRoomAfterMinimumRoster(state, { round, pos });
+  return { capHit, projectedRoom, overage: state.capMode === "hard" ? Math.max(0, -projectedRoom) : 0 };
+}
+
+export function draftFinishOverage(state: SeasonState): number {
+  return state.capMode === "hard" ? Math.max(0, -draftRoomAfterMinimumRoster(state)) : 0;
 }
 
 function doDraftTrade(state: SeasonState, accept: boolean): SeasonState {
@@ -1543,13 +1588,25 @@ function doDraftTrade(state: SeasonState, accept: boolean): SeasonState {
   return state;
 }
 
-function doDraft(state: SeasonState, prospectId: string): SeasonState {
+function currentUserDraftPick(state: SeasonState): DraftPick {
   if (state.phase !== "draft") throw new Error("You are not on the clock");
   if (state.pendingDraftTrade) throw new Error("Answer the trade offer first");
   const pick = state.draftPicks[state.draftCursor];
   if (!pick || pick.teamId !== state.teamId) throw new Error("It is not your pick");
-  const prospect = availableProspects(state).find((p) => p.id === prospectId);
+  return pick;
+}
+
+function doDraft(state: SeasonState, action: Extract<Action, { type: "draft" }>): SeasonState {
+  const pick = currentUserDraftPick(state);
+  const prospect = availableProspects(state).find((p) => p.id === action.prospectId);
   if (!prospect) throw new Error("That prospect is gone");
+  const { overage } = draftCapImpact(state, pick.round, prospect.pos);
+  if (overage > 0) {
+    if (action.capConfirmation?.overall !== pick.overall || action.capConfirmation.overage !== overage) {
+      throw new Error(`Confirm this pick before going ${formatMoney(overage)} over the hard cap`);
+    }
+    state.flags["draft-cap-confirmed-overage"] = overage;
+  }
   assignPick(state, pick, prospect);
   const gap = prospect.trueOvr - prospect.perceived;
   bump(state, 0, gap >= 4 ? 1 : 0, 0);
@@ -1570,51 +1627,37 @@ function doDraft(state: SeasonState, prospectId: string): SeasonState {
   return state;
 }
 
+function doDraftPass(state: SeasonState): SeasonState {
+  const pick = currentUserDraftPick(state);
+  pick.note = pick.note ? `${pick.note} · Passed` : "Passed";
+  pushDecision(state, "Draft", "Passed on a pick", `Passed on round ${pick.round}, pick ${pick.overall}.`, 0);
+  state.draftCursor += 1;
+  advanceCpu(state);
+  return state;
+}
+
 function finishDraft(state: SeasonState) {
   const need = needs(yourRoster(state));
   const late: string[] = [];
-  for (let i = 0; i < 4; i++) {
-    const pool = availableProspects(state).sort(
-      (a, b) => b.perceived + (need.has(b.pos) ? 3 : 0) - (a.perceived + (need.has(a.pos) ? 3 : 0)),
-    );
-    const prospect = pool[0];
-    if (!prospect) break;
-    state.prospects = state.prospects.map((p) => (p.id === prospect.id ? { ...p, perceived: -1 } : p));
-    prospect.perceived = -1;
-    const player: Player = {
-      id: `draft-${prospect.id}`,
-      name: prospect.name,
-      pos: prospect.pos,
-      ovr: prospect.trueOvr,
-      age: prospect.age,
-      cap: Math.round(0.9 * salaryScale(state.capLimit) * 10) / 10,
-      years: 4,
-      potential: prospect.trueOvr + 4,
-      real: false,
-      perceived: prospect.trueOvr,
-      drafted: true,
-    };
-    yourRoster(state).push(player);
-    const round = 4 + i;
-    state.draftPicks.push({
-      round,
-      slot: i + 1,
-      overall: Math.max(0, ...state.draftPicks.map((pick) => pick.overall)) + 1,
-      teamId: state.teamId,
-      prospectId: prospect.id,
-      prospectName: prospect.name,
-      note: "Staff auto-pick",
+  const staffPicks = [4, 5, 6, 7].map((round) => ({ round, note: "Staff auto-pick", acquired: false }));
+  for (const pick of state.extraPicks) {
+    if (pick.year !== state.year || pick.round < 4 || pick.round > 7) continue;
+    staffPicks.push({
+      round: pick.round,
+      note: `Acquired for ${pick.year} draft · ${pick.source ?? "earlier trade"} · staff auto-pick`,
+      acquired: true,
     });
-    late.push(`Round ${round}: ${prospect.name} (${prospect.pos})`);
-    need.delete(prospect.pos);
   }
-  for (const extra of state.extraPicks.filter((pick) => pick.year === state.year && pick.round >= 4 && pick.round <= 7)) {
+  for (const { round, note, acquired } of staffPicks) {
     const pool = availableProspects(state).sort(
       (a, b) => b.perceived + (need.has(b.pos) ? 3 : 0) - (a.perceived + (need.has(a.pos) ? 3 : 0)),
     );
-    const prospect = pool[0];
-    if (!prospect) break;
-    state.prospects = state.prospects.map((candidate) => candidate.id === prospect.id ? { ...candidate, perceived: -1 } : candidate);
+    if (!pool.length) break;
+    const prospect = pool.find((candidate) => draftCapImpact(state, round, candidate.pos).overage === 0);
+    if (!prospect) {
+      state.flags["draft-staff-cap-stop"] = `Staff stopped before round ${round} because another rookie contract would exceed the hard cap.`;
+      break;
+    }
     prospect.perceived = -1;
     yourRoster(state).push({
       id: `draft-${prospect.id}`,
@@ -1622,7 +1665,7 @@ function finishDraft(state: SeasonState) {
       pos: prospect.pos,
       ovr: prospect.trueOvr,
       age: prospect.age,
-      cap: Math.round(0.9 * salaryScale(state.capLimit) * 10) / 10,
+      cap: rookieCapHit(state, round),
       years: 4,
       potential: prospect.trueOvr + 4,
       real: false,
@@ -1630,101 +1673,133 @@ function finishDraft(state: SeasonState) {
       drafted: true,
     });
     state.draftPicks.push({
-      round: extra.round,
-      slot: state.draftPicks.filter((pick) => pick.round === extra.round).length + 1,
+      round,
+      slot: acquired ? state.draftPicks.filter((pick) => pick.round === round).length + 1 : round - 3,
       overall: Math.max(0, ...state.draftPicks.map((pick) => pick.overall)) + 1,
       teamId: state.teamId,
       prospectId: prospect.id,
       prospectName: prospect.name,
-      note: `Acquired for ${extra.year} draft · ${extra.source ?? "earlier trade"} · staff auto-pick`,
+      note,
     });
-    late.push(`Acquired round ${extra.round}: ${prospect.name} (${prospect.pos})`);
+    late.push(`${acquired ? "Acquired round" : "Round"} ${round}: ${prospect.name} (${prospect.pos})`);
     need.delete(prospect.pos);
   }
   state.extraPicks = state.extraPicks.filter((pick) => pick.year > state.year);
+  state.draftCursor = state.draftPicks.length;
+  const stop = state.flags["draft-staff-cap-stop"];
+  if (typeof stop === "string") state.log.push(stop);
+  state.log.push(`Later rounds: ${late.join(", ") || "no staff picks"}.`);
+  if (draftFinishOverage(state) <= Number(state.flags["draft-cap-confirmed-overage"] ?? 0)) {
+    openDraftCamp(state);
+  }
+}
+
+function confirmDraftFinish(state: SeasonState, confirmedOverage: number): SeasonState {
+  if (state.phase !== "draft" || state.draftCursor < state.draftPicks.length) {
+    throw new Error("The draft is still in progress");
+  }
+  if (draftFinishOverage(state) !== confirmedOverage) throw new Error("Review the updated cap projection before opening camp");
+  return openDraftCamp(state);
+}
+
+function openDraftCamp(state: SeasonState): SeasonState {
   for (const team of Object.values(state.teams)) ensureMinimumRoster(state, team.id);
   state.phase = "camp";
   state.campCutIds = [];
-  state.log.push(`Later rounds: ${late.join(", ")}.`);
   state.headlines = makeHeadlines(state, "neutral", {
-    beat: `Camp opens with a roster that does not fit on the plane. You have to get to 26.`,
+    beat: "Camp opens. Set the roster and clear the hard cap before Week 1.",
     national: "Cuts are where GMs find out which veterans have group chats.",
-    analytics: `Rounds 4–7 staff picks: ${late.join(", ") || "none"}. Every addition is listed at camp.`,
+    analytics: typeof state.flags["draft-staff-cap-stop"] === "string"
+      ? String(state.flags["draft-staff-cap-stop"])
+      : "The complete draft class is listed at camp.",
   });
-}
-
-export function suggestedCuts(state: SeasonState): string[] {
-  const roster = yourRoster(state);
-  const extra = roster.length - 26;
-  if (extra <= 0 && (state.capMode !== "hard" || capSpace(state) >= -0.05)) return [];
-  const minimums = CAMP_DEPTH_TARGETS;
-  const draftRound = (player: Player) => state.draftPicks.find((pick) => pick.prospectId && player.id === `draft-${pick.prospectId}`)?.round;
-  const draftProtection = (player: Player) => {
-    const round = draftRound(player);
-    return round === 1 ? 35 : round === 2 ? 25 : round === 3 ? 10 : round ? 3 : 0;
-  };
-  const keep = new Set<string>();
-  const keptByPosition = new Map<Pos, number>();
-  for (const [pos, minimum] of Object.entries(minimums) as [Pos, number][]) {
-    roster
-      .filter((player) => player.pos === pos)
-      .sort((a, b) => b.ovr - a.ovr || a.cap - b.cap)
-      .slice(0, minimum)
-      .forEach((player) => {
-        keep.add(player.id);
-        keptByPosition.set(pos, (keptByPosition.get(pos) ?? 0) + 1);
-      });
-  }
-  const target = Math.min(26, roster.length);
-  const depth = roster
-    .filter((player) => !keep.has(player.id))
-    .sort((a, b) => {
-      const value = (player: Player) => {
-        if (player.pos === "K" && (keptByPosition.get("K") ?? 0) >= 1) return -100;
-        const surplus = Math.max(0, (keptByPosition.get(player.pos) ?? 0) - (minimums[player.pos] ?? 0));
-        const newDealProtection = state.flags[`signed:${player.id}`] === state.year ? 10 : 0;
-        return player.ovr + newDealProtection + draftProtection(player) - surplus * 4 - player.cap * 0.03;
-      };
-      return value(b) - value(a);
-    });
-  for (const player of depth) {
-    if (keep.size >= target) break;
-    if (player.pos === "K" && (keptByPosition.get("K") ?? 0) >= 1) continue;
-    keep.add(player.id);
-    keptByPosition.set(player.pos, (keptByPosition.get(player.pos) ?? 0) + 1);
-  }
-  if (keep.size < target) {
-    roster.filter((player) => !keep.has(player.id)).slice(0, target - keep.size).forEach((player) => keep.add(player.id));
-  }
-  const cuts = roster.filter((player) => !keep.has(player.id)).map((player) => player.id);
-  if (state.capMode === "hard") {
-    while (campCapSpaceAfterCuts(state, cuts) < -0.05 && roster.length - cuts.length > MIN_ROSTER) {
-      const remaining = roster.filter((player) => !cuts.includes(player.id));
-      const positionCounts = new Map<Pos, number>();
-      for (const player of remaining) positionCounts.set(player.pos, (positionCounts.get(player.pos) ?? 0) + 1);
-      const candidates = remaining
-        .filter((player) => player.pos !== "QB" || (positionCounts.get("QB") ?? 0) > 1)
-        .sort((a, b) => {
-          const surplus = (player: Player) => (positionCounts.get(player.pos) ?? 0) - (minimums[player.pos] ?? 0);
-          const netSavings = (player: Player) => player.cap - campCutDeadMoney(state, [player.id]);
-          return Number(surplus(b) > 0) - Number(surplus(a) > 0)
-            || Number(state.flags[`signed:${a.id}`] === state.year) - Number(state.flags[`signed:${b.id}`] === state.year)
-            || draftProtection(a) - draftProtection(b)
-            || netSavings(b) - netSavings(a)
-            || a.ovr - b.ovr;
-        });
-      const next = candidates[0];
-      if (!next || next.cap - campCutDeadMoney(state, [next.id]) <= 0) break;
-      cuts.push(next.id);
-    }
-  }
-  return cuts;
+  return state;
 }
 
 const CAMP_DEPTH_TARGETS: Partial<Record<Pos, number>> = {
   QB: 2, RB: 2, WR: 3, TE: 1, OL: 3,
   DL: 2, EDGE: 2, LB: 2, CB: 3, S: 2, K: 1,
 };
+
+export function campCutProtections(state: SeasonState, player: Player): string[] {
+  const protections: string[] = [];
+  if (player.id.startsWith(`draft-p-${state.year}-`) || state.draftPicks.some((pick) => (
+    pick.teamId === state.teamId && pick.prospectId && player.id === `draft-${pick.prospectId}`
+  ))) protections.push("Drafted this year");
+  if (state.flags[`signed:${player.id}`] === state.year) protections.push("Signed this year");
+  if (player.ovr >= 80) protections.push("80+ overall");
+  return protections;
+}
+
+function campReleaseCharge(state: SeasonState, player: Player): number {
+  if (player.origin === "replacement" || player.cap <= 1) return 0;
+  if (state.flags[`signed:${player.id}`] === state.year) return player.cap * 0.45;
+  return player.cap * (player.drafted ? 0.15 : 0.3);
+}
+
+export function suggestedCuts(state: SeasonState): string[] {
+  const roster = yourRoster(state);
+  const counts = new Map<Pos, number>();
+  for (const { pos } of roster) counts.set(pos, (counts.get(pos) ?? 0) + 1);
+  const depthPenalty = (pos: Pos) => {
+    const count = counts.get(pos) ?? 0;
+    return count <= 1 ? 2 : Number(count <= (CAMP_DEPTH_TARGETS[pos] ?? 1));
+  };
+
+  const candidates = roster.map((player) => ({
+    player,
+    protected: campCutProtections(state, player).length > 0,
+    savings: Math.round(((player.years > 0 ? player.cap : 0) - campReleaseCharge(state, player)) * 10) / 10,
+  }));
+  const cuts = new Set<string>();
+  let room = capSpace(state);
+  while (roster.length - cuts.size > MIN_ROSTER) {
+    const needRosterSpace = roster.length - cuts.size > 26;
+    const deficit = state.capMode === "hard" ? Math.max(0, -room) : 0;
+    if (!needRosterSpace && deficit === 0) break;
+
+    const available = candidates.filter(({ player, savings }) => !cuts.has(player.id)
+      && (player.pos !== "QB" || (counts.get("QB") ?? 0) > 1)
+      && (needRosterSpace || savings > 0));
+    // Reserve enough cuts to clear the cap within the roster limit and keep a quarterback.
+    const bySavings = available.filter(({ savings }) => savings > 0).sort((a, b) => b.savings - a.savings);
+    const cutLimit = roster.length - MIN_ROSTER;
+    const canClearCap = (player: Player) => {
+      const plan = [...cuts, player.id];
+      let quarterbacks = (counts.get("QB") ?? 0) - Number(player.pos === "QB");
+      for (const { player: other } of bySavings) {
+        if (plan.length >= cutLimit) break;
+        if (other.id === player.id || (other.pos === "QB" && quarterbacks <= 1)) continue;
+        plan.push(other.id);
+        if (other.pos === "QB") quarterbacks -= 1;
+      }
+      return campCapSpaceAfterCuts(state, plan) >= 0;
+    };
+    const viable = deficit > 0 ? available.filter(({ player }) => canClearCap(player)) : available;
+    const next = (viable.length ? viable : available)
+      .sort((a, b) => {
+        const depth = depthPenalty(a.player.pos) - depthPenalty(b.player.pos);
+        const protection = Number(a.protected) - Number(b.protected);
+        if (depth || protection) return depth || protection;
+        if (deficit > 0) {
+          const aClearsCap = a.savings >= deficit;
+          const bClearsCap = b.savings >= deficit;
+          const capFit = Number(bClearsCap) - Number(aClearsCap)
+            || (aClearsCap ? a.savings - b.savings : b.savings - a.savings);
+          if (capFit) return capFit;
+        }
+        const extraKicker = Number(b.player.pos === "K") - Number(a.player.pos === "K");
+        return extraKicker || a.player.ovr - b.player.ovr || b.player.age - a.player.age || b.savings - a.savings;
+      })[0];
+    if (!next) break;
+
+    const { id, pos } = next.player;
+    cuts.add(id);
+    counts.set(pos, (counts.get(pos) ?? 1) - 1);
+    room = campCapSpaceAfterCuts(state, [...cuts]);
+  }
+  return [...cuts];
+}
 
 export function rosterDepthWarnings(roster: Player[], cutIds: string[] = []): { pos: Pos; count: number; target: number }[] {
   const cut = new Set(cutIds);
@@ -1748,12 +1823,7 @@ export function campCutDeadMoney(state: SeasonState, cutIds: string[]): number {
   const selected = new Set(cutIds);
   return Math.round(yourRoster(state)
     .filter((player) => selected.has(player.id))
-    .reduce((total, player) => {
-      if (player.origin === "replacement" || player.cap <= 1) return total;
-      if (state.flags[`signed:${player.id}`] === state.year) return total + player.cap * 0.45;
-      if (player.drafted) return total + player.cap * 0.15;
-      return total + player.cap * 0.3;
-    }, 0) * 10) / 10;
+    .reduce((total, player) => total + campReleaseCharge(state, player), 0) * 10) / 10;
 }
 
 export function campCapSpaceAfterCuts(state: SeasonState, cutIds: string[]): number {
@@ -1785,7 +1855,10 @@ function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
     if (player.ovr >= 84) queueRipple(state, Math.min(6, state.seasonLength), veteranRipple(player));
     if (player.ovr >= 80) bump(state, 0, -2, -2);
   }
-  pushDecision(state, "Camp", `Cut ${cut.length}`, `Cut ${cut.map((p) => p.name).slice(0, 4).join(", ")}. Added ${formatMoney(addedDead)} in dead money.`, cut.some((p) => p.ovr >= 84) ? -2 : 0);
+  const names = cut.slice(0, 4).map((player) => player.name).join(", ");
+  const remainingNames = cut.length > 4 ? ` and ${cut.length - 4} more` : "";
+  const summary = cut.length ? `Cut ${names}${remainingNames}.` : "No cuts.";
+  pushDecision(state, "Camp", `Cut ${cut.length}`, `${summary} Added ${formatMoney(addedDead)} in dead money.`, cut.some((p) => p.ovr >= 84) ? -2 : 0);
   state.phase = "regular";
   state.week = 1;
   prepareWeek(state);
@@ -2613,9 +2686,15 @@ export function recapDecisionLines(state: SeasonState): { best: string; worst: s
     .filter((decision) => decision.title !== "Draft" || !draftedNames.has(decision.choice) || survivingNames.has(decision.choice))
     .slice()
     .sort((a, b) => b.swing - a.swing);
+  const label = (decision: SeasonState["decisions"][number] | undefined) => {
+    if (decision?.title === "Trade" && decision.log.startsWith("Traded ")) {
+      return `${decision.week > 1 ? `Week ${decision.week} trade` : "Offseason trade"}. ${decision.log}`;
+    }
+    return decision?.log;
+  };
   return {
-    best: swings[0]?.log ?? "You kept the building standing.",
-    worst: swings[swings.length - 1]?.log ?? "Nothing on the tape was fatal.",
+    best: label(swings[0]) ?? "You kept the building standing.",
+    worst: label(swings.at(-1)) ?? "Nothing on the tape was fatal.",
   };
 }
 
@@ -2696,11 +2775,13 @@ export function suggestAction(state: SeasonState): Action | null {
   }
   if (state.phase === "draft") {
     if (state.pendingDraftTrade) return { type: "draft-trade", accept: false };
+    const onClock = state.draftPicks[state.draftCursor];
+    if (!onClock) return null;
     const need = needs(yourRoster(state));
     const pick = availableProspects(state).sort(
       (a, b) => b.perceived + (need.has(b.pos) ? 4 : 0) - (a.perceived + (need.has(a.pos) ? 4 : 0)),
-    )[0];
-    return pick ? { type: "draft", prospectId: pick.id } : { type: "draft", prospectId: "missing" };
+    ).find((prospect) => draftCapImpact(state, onClock.round, prospect.pos).overage === 0);
+    return pick ? { type: "draft", prospectId: pick.id } : { type: "draft-pass" };
   }
   if (state.phase === "camp") return { type: "camp", cutIds: suggestedCuts(state) };
   if (state.phase === "regular") {
@@ -2874,7 +2955,7 @@ export function ensureMinimumRoster(state: SeasonState, teamId: string): Player[
       pos,
       ovr,
       age: 24,
-      cap: Math.round(0.9 * salaryScale(state.capLimit) * 10) / 10,
+      cap: rookieCapHit(state, 4),
       years: 1,
       potential: ovr + 2,
       real: false,
@@ -2922,7 +3003,7 @@ export function seasonDrivers(state: SeasonState): string[] {
 
 export function advancedLines(state: SeasonState) {
   const record = teamRecord(state, state.teamId);
-  const games = Math.max(1, record.wins + record.losses);
+  const games = record.wins + record.losses;
   const pyth =
     record.pf === 0 && record.pa === 0
       ? 0

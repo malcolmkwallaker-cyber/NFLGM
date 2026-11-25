@@ -52,7 +52,7 @@ export default function StatsPage() {
 function SeasonOverview({ season, lines }: { season: SeasonState; lines: ReturnType<typeof advancedLines> }) {
   return <section className="rounded-2xl border border-white/10 bg-card p-4 text-sm">
     <p className="text-xs uppercase tracking-[0.16em] text-primary">{season.year} current season</p>
-    <p className="mt-2">Pythagorean wins {lines.pythWins} through {lines.games} games · point differential {lines.diff}</p>
+    <p className="mt-2">{lines.games ? `Pythagorean wins ${lines.pythWins} through ${lines.games} ${lines.games === 1 ? "game" : "games"} · point differential ${lines.diff}` : "No games played yet"}</p>
     <p>Roster value {lines.rosterValue} · cap space {formatMoney(lines.cap)} · dead {formatMoney(lines.dead)} · health {lines.health}</p>
     <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Player lines are deterministic modeled statistics created with each game result. They are not official NFL box scores. Career player totals are unavailable because career saves currently retain season-level summaries, not past player lines.</p>
   </section>;

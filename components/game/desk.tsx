@@ -8,12 +8,13 @@ import { ShareCard } from "@/components/game/share-card";
 import { TeamMark } from "@/components/game/team-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { capSpace, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { capSpace, committedPayroll, marketAsk, offerYears, salaryScale } from "@/lib/engine/cap";
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCapSpaceAfterCuts, campCutDeadMoney, capCutDeadMoney, divisionTable, freeAgentNegotiationPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
-import type { Phase, Player, Pos, SeasonState, StaffRole } from "@/lib/types";
+import { advancedLines, campCapSpaceAfterCuts, campCutDeadMoney, campCutProtections, capCutDeadMoney, divisionTable, draftCapImpact, draftFinishOverage, freeAgentNegotiationPreview, meterImpactPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, shopTradeImpactPreview, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel, unusedCapUnderReview, weekMatchup, yourRoster } from "@/lib/engine/season";
+import type { Phase, Player, Pos, Prospect, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
 import { titledGmName } from "@/lib/gm-name";
@@ -27,7 +28,11 @@ function signed(value: number): string {
 function meterPreview(effect: { requested: number; applied: number }, ceiling: number): string {
   return effect.requested === effect.applied
     ? signed(effect.applied)
-    : `${signed(effect.applied)} applied (${signed(effect.requested)} requested; capped at ${ceiling})`;
+    : `${signed(effect.applied)} applied (${signed(effect.requested)} requested, limit ${effect.requested < 0 ? 0 : ceiling})`;
+}
+
+function TradeApproval({ impact }: { impact: ReturnType<typeof meterImpactPreview> }) {
+  return <>Owner {meterPreview(impact.owner, 96)} · Fans {meterPreview(impact.fans, 100)} · Locker {meterPreview(impact.locker, 96)}</>;
 }
 
 function draftPickNote(note: string | undefined, year: number): string {
@@ -94,7 +99,7 @@ export function Desk() {
   const roster = rosterForDisplay(season);
   const role = ROLES[season.staffStep] ?? "hc";
   const matchup = weekMatchup(season);
-  const remaining = roster.length - (season.phase === "camp" ? cutIds.length : 0);
+  const remaining = roster.length - cutIds.length;
   const keptQb = roster.some((player) => player.pos === "QB" && !cutIds.includes(player.id));
   const campCapSpace = season.phase === "camp" ? campCapSpaceAfterCuts(season, cutIds) : space;
   const campCapOk = season.capMode !== "hard" || campCapSpace >= -0.05;
@@ -120,6 +125,13 @@ export function Desk() {
               {teamLabel(team)} · {record.wins}-{record.losses}
               {season.phase === "regular" ? ` · Week ${season.week}` : ""} · {titledGmName(season.gmName)} · Seed {season.seed}
             </p>
+            {["camp", "regular", "playoffs"].includes(season.phase) ? (
+              <dl aria-label="Team cap" className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                <div><dt className="text-muted-foreground">{season.capMode === "hard" ? "Cap limit" : "Payroll guide"}</dt><dd>{money(season.capLimit)}</dd></div>
+                <div><dt className="text-muted-foreground">Committed payroll</dt><dd>{money(committedPayroll(roster))}</dd></div>
+                <div><dt className="text-muted-foreground">Cap room</dt><dd>{money(space)}</dd></div>
+              </dl>
+            ) : null}
           </div>
         </div>
         <div className="px-4 py-4">
@@ -173,6 +185,7 @@ export function Desk() {
           }}
           onSubmit={() => dispatch({ type: "camp", cutIds })}
           onSuggest={() => dispatch({ type: "camp-selection", cutIds: suggestedCuts(season) })}
+          onClear={() => dispatch({ type: "camp-selection", cutIds: [] })}
         />
       ) : null}
       {season.phase === "regular" ? <Regular season={season} matchup={matchup} roster={roster} /> : null}
@@ -658,7 +671,7 @@ function Trades({
           </dl>
           {!offer.incoming ? <p className="mt-2 text-xs text-amber-200">No player comes back. This return is draft compensation only.</p> : null}
           <p className="mt-2 text-xs text-muted-foreground">
-            If accepted: owner {meterPreview(impact.owner, 96)}, fans {meterPreview(impact.fans, 100)}, locker {meterPreview(impact.locker, 96)}. Cap room {impact.capRoomChange >= 0 ? "increases" : "decreases"} by {money(Math.abs(impact.capRoomChange))}.
+            <TradeApproval impact={impact} />. Cap room {impact.capRoomChange >= 0 ? "increases" : "decreases"} by {money(Math.abs(impact.capRoomChange))}.
           </p>
           {!fitsHardCap ? <p role="status" className="mt-2 text-sm text-red-200">Cannot accept: this would put the club {money(Math.abs(projectedSpace))} over the hard cap.</p> : null}
           <div className="mt-3 flex gap-2">
@@ -679,7 +692,7 @@ function Trades({
             <Badge variant={season.shop.fair === "fleece" ? "destructive" : "outline"}>{tradeValueLabel(season.shop.fair)}</Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{season.shop.blurb}</p>
-          <p className="mt-2 text-xs text-muted-foreground">Accepting changes owner confidence by {season.shop.fair === "fleece" ? "−4" : "+1"}. The grade is shown before you decide.</p>
+          <p className="mt-2 text-xs text-muted-foreground"><TradeApproval impact={shopTradeImpactPreview(season, season.shop)} /></p>
           <div className="mt-3 flex gap-2">
             <Button onClick={() => dispatch({ type: "shop-resolve", accept: true })}>Take the pick</Button>
             <Button variant="outline" onClick={() => dispatch({ type: "shop-resolve", accept: false })}>
@@ -722,24 +735,56 @@ function Trades({
 }
 
 function Draft({ season }: { season: SeasonState }) {
-  const { dispatch } = useGame();
+  const { dispatch, confirmAction } = useGame();
   const [position, setPosition] = useState<"ALL" | Pos>("ALL");
   const [draftSort, setDraftSort] = useState<"grade" | "position">("grade");
   const pick = season.draftPicks[season.draftCursor];
-  const board = season.prospects
-    .filter((prospect) => prospect.perceived > 0 && !season.draftPicks.some((made) => made.prospectId === prospect.id))
+  const available = season.prospects.filter((prospect) => prospect.perceived > 0 && !season.draftPicks.some((made) => made.prospectId === prospect.id));
+  const board = available
     .filter((prospect) => position === "ALL" || prospect.pos === position)
     .sort((a, b) => draftSort === "position" ? a.pos.localeCompare(b.pos) || b.perceived - a.perceived : b.perceived - a.perceived)
     .slice(0, 8);
+
+  if (!pick) {
+    const overage = draftFinishOverage(season);
+    return (
+      <section className="space-y-3">
+        <h2 className="font-display text-2xl tracking-wide">Draft complete</h2>
+        <p className="text-sm text-muted-foreground">Minimum roster additions would leave you {money(overage)} over the hard cap. You will need to free that room before opening the season.</p>
+        <Button onClick={() => confirmAction(
+          `Open camp ${money(overage)} over the hard cap after minimum roster additions? You will need to clear that room at camp.`,
+          () => dispatch({ type: "draft-finish", confirmedOverage: overage }),
+          { title: "Review cap room before camp", confirmLabel: "Open camp over the cap" },
+        )}>Review camp cap impact</Button>
+      </section>
+    );
+  }
+
+  const projection = draftCapImpact(season, pick.round, "WR");
+
+  function chooseProspect(prospect: Prospect) {
+    const currentPick = season.draftPicks[season.draftCursor];
+    const { capHit, overage } = draftCapImpact(season, currentPick.round, prospect.pos);
+    if (overage > 0) {
+      confirmAction(
+        `${prospect.name}'s ${money(capHit)} rookie contract would leave you ${money(overage)} over the hard cap after any minimum roster additions. You will need to clear that room at camp.`,
+        () => dispatch({ type: "draft", prospectId: prospect.id, capConfirmation: { overall: currentPick.overall, overage } }),
+        { title: "Confirm draft pick over the hard cap", confirmLabel: `Draft ${prospect.name}` },
+      );
+      return;
+    }
+    dispatch({ type: "draft", prospectId: prospect.id });
+    setPosition("ALL");
+  }
+
   return (
     <section className="space-y-3">
       <h2 className="font-display text-2xl tracking-wide">
-        {pick
-          ? season.mode === "historical" || season.flags.historicalRosterScenarioId
-            ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}${pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}`
-            : `Round ${pick.round}, pick ${pick.overall}${pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}`
-          : "The board is moving"}
+        {season.mode === "historical" || season.flags.historicalRosterScenarioId
+          ? `Round ${pick.round} · modeled overall pick ${pick.overall} · slot ${pick.slot} of ${season.directory.length}${pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}`
+          : `Round ${pick.round}, pick ${pick.overall}${pick.note ? ` · ${draftPickNote(pick.note, season.year)}` : ""}`}
       </h2>
+      <p className="text-sm text-muted-foreground">Rookie contract {money(projection.capHit)} · Current room {money(capSpace(season))}</p>
       <p className="text-sm text-muted-foreground">
         You are looking at the scout card, not the truth. Camp will show what you actually drafted. Prospects in this class are fictional.
       </p>
@@ -801,10 +846,7 @@ function Draft({ season }: { season: SeasonState }) {
             disabled={Boolean(season.pendingDraftTrade)}
             data-testid={`choice-draft-${prospect.id}`}
             className="rounded-xl border border-white/10 bg-card px-4 py-3 text-left hover:border-primary/60 disabled:opacity-50"
-            onClick={() => {
-              dispatch({ type: "draft", prospectId: prospect.id });
-              setPosition("ALL");
-            }}
+            onClick={() => chooseProspect(prospect)}
           >
             <span className="flex items-center justify-between">
               <span className="font-medium">
@@ -818,7 +860,10 @@ function Draft({ season }: { season: SeasonState }) {
           </button>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">After your featured picks, the scouting staff fills later rounds by roster need. Every automatic selection appears in the draft log and camp roster.</p>
+      {projection.overage > 0 || !available.length ? (
+        <Button variant="outline" disabled={Boolean(season.pendingDraftTrade)} onClick={() => dispatch({ type: "draft-pass" })}>Pass on this pick</Button>
+      ) : null}
+      <p className="text-xs text-muted-foreground">Staff fills later rounds by roster need and stops before a pick would exceed the hard cap. Every selection appears in the draft log and camp roster.</p>
       {season.draftPicks.filter((made) => made.teamId === season.teamId && made.prospectName).length ? (
         <ul className="text-sm text-muted-foreground">
           {season.draftPicks
@@ -845,6 +890,7 @@ function Camp({
   onToggle,
   onSubmit,
   onSuggest,
+  onClear,
 }: {
   season: SeasonState;
   roster: Player[];
@@ -856,8 +902,13 @@ function Camp({
   onToggle: (id: string) => void;
   onSubmit: () => void;
   onSuggest: () => void;
+  onClear: () => void;
 }) {
+  const [reviewOpen, setReviewOpen] = useState(false);
   const depthWarnings = rosterDepthWarnings(roster, cutIds);
+  const selected = new Set(cutIds);
+  const selectedPlayers = roster.filter((player) => selected.has(player.id));
+  const deadMoney = campCutDeadMoney(season, cutIds);
   return (
     <section className="space-y-3">
       <div className="flex items-end justify-between">
@@ -868,10 +919,11 @@ function Camp({
       <p className="text-xs text-muted-foreground">Drafted rookie contracts already count against the cap. Projected room after these cuts and their dead-money charges: {money(campCapSpace)}.</p>
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" onClick={onSuggest}>Select suggested cuts</Button>
+        <Button type="button" variant="outline" onClick={onClear} disabled={!cutIds.length}>Clear all</Button>
         <span className="text-xs text-muted-foreground">{cutIds.length ? `${cutIds.length} selected to cut` : "No cuts selected yet"}</span>
       </div>
       {cutIds.length ? (
-        <p className="text-xs text-amber-100">Estimated added dead money: {money(campCutDeadMoney(season, cutIds))}. Replacement-level and minimum contracts can be released without a charge.</p>
+        <p className="text-xs text-amber-100">Estimated added dead money: {money(deadMoney)}. Replacement-level and minimum contracts can be released without a charge.</p>
       ) : null}
       {!keptQb ? <p className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm">Keep at least one quarterback before opening the season.</p> : null}
       {season.capMode === "hard" && campCapSpace < -0.05 ? (
@@ -898,7 +950,8 @@ function Camp({
       </section>
       <div className="grid gap-1">
         {roster.map((player) => {
-          const cut = cutIds.includes(player.id);
+          const cut = selected.has(player.id);
+          const protections = cut ? campCutProtections(season, player) : [];
           return (
             <label key={player.id} className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-white/5 ${cut ? "bg-red-500/5 ring-1 ring-inset ring-red-300/20" : ""}`}>
               <span className="flex items-center gap-2 text-sm">
@@ -909,8 +962,11 @@ function Camp({
                   className="h-4 w-4 shrink-0 accent-primary"
                   onChange={() => onToggle(player.id)}
                 />
-                <span className={cut ? "text-muted-foreground line-through" : ""}>
-                  {player.pos} {player.name}
+                <span>
+                  <span className={cut ? "text-muted-foreground line-through" : ""}>{player.pos} {player.name}</span>
+                  {protections.length ? (
+                    <span className="block text-xs text-amber-200">{protections.join(" · ")} · {money(campCutDeadMoney(season, [player.id]))} dead money</span>
+                  ) : null}
                 </span>
               </span>
               <span className="text-xs text-muted-foreground">
@@ -921,9 +977,41 @@ function Camp({
           );
         })}
       </div>
-      <Button className="!h-12 !px-4" data-sound="success" disabled={!campOk} data-testid="choice-camp" onClick={onSubmit}>
-        Open the season
-      </Button>
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogTrigger disabled={!campOk} data-testid="choice-camp" render={<Button className="!h-12 !px-4" />}>
+          Open the season
+        </DialogTrigger>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md" data-testid="confirm-cuts-dialog">
+          <DialogHeader>
+            <DialogTitle>Confirm cuts</DialogTitle>
+            <DialogDescription>Review the players leaving the roster before you open Week 1.</DialogDescription>
+          </DialogHeader>
+          {selectedPlayers.length ? (
+            <ul className="space-y-2" aria-label="Players to cut">
+              {selectedPlayers.map((player) => {
+                const protections = campCutProtections(season, player);
+                return (
+                  <li key={player.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-white/10 pb-2">
+                    <span>{player.pos} {player.name}</span>
+                    <span className="text-xs text-muted-foreground">{money(campCutDeadMoney(season, [player.id]))} dead money</span>
+                    {protections.length ? <span className="w-full text-xs text-amber-200">{protections.join(" · ")}</span> : null}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <p>No cuts selected.</p>}
+          <dl className="grid grid-cols-2 gap-3 rounded-lg bg-white/5 p-3">
+            <div><dt className="text-muted-foreground">Added dead money</dt><dd>{money(deadMoney)}</dd></div>
+            <div><dt className="text-muted-foreground">Projected cap room</dt><dd>{money(campCapSpace)}</dd></div>
+          </dl>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Back to camp</DialogClose>
+            <Button data-sound="success" disabled={!campOk} onClick={() => { setReviewOpen(false); onSubmit(); }}>
+              Confirm cuts and open season
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -953,6 +1041,7 @@ function Regular({
           <p className="text-xs uppercase tracking-[0.16em] text-primary">Trade offer · no move yet</p>
           <h2 className="mt-1 font-display text-2xl tracking-wide">{teamById(season.shop.fromTeamId, season.directory).city} called about {tradeOutgoingLabel(season, season.shop)}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{season.shop.blurb}</p>
+          <p className="mt-2 text-xs text-muted-foreground"><TradeApproval impact={shopTradeImpactPreview(season, season.shop)} /></p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button data-testid="choice-contract-trade-accept" onClick={() => dispatch({ type: "shop-resolve", accept: true })}>Accept the offer</Button>
             <Button data-testid="choice-contract-trade-decline" variant="outline" onClick={() => dispatch({ type: "shop-resolve", accept: false })}>Keep {season.shop.wantName}</Button>
@@ -973,7 +1062,9 @@ function Regular({
               onClick={() => dispatch({ type: "decide", choiceId: option.id })}
             >
               <span className="block font-medium">{option.label}</span>
-              <span className="mt-1 block text-sm text-muted-foreground">{option.detail}</span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                {decision.id === "deadline" ? <TradeApproval impact={meterImpactPreview(season, option)} /> : option.detail}
+              </span>
             </button>
           ))}
           <p role="status" className="text-xs text-muted-foreground">Resolve this desk decision before playing or simming ahead.</p>
