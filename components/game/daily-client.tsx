@@ -126,7 +126,7 @@ export function DailyClient({
             {challenge.fictional ? "Fictional front office" : `${challenge.year} ${challenge.team}`}
           </Badge>
         </div>
-        <h1 className="mt-3 font-display text-4xl leading-none tracking-wide sm:text-5xl">{challenge.title}</h1>
+        <h2 className="mt-3 font-display text-4xl leading-none tracking-wide sm:text-5xl">{challenge.title}</h2>
       </header>
 
       <p className="text-sm leading-relaxed text-muted-foreground">{challenge.situation}</p>
@@ -219,7 +219,7 @@ export function DailyClient({
                     {option.grade === "green" ? "Ready to run the whole team?" : "Make the next call from the big chair."}
                   </h2>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Try a one-year run or build a multi-season career. Both are free during the public playtest.
+                    Try a one-year run or build a multi-season career. Both are free to play.
                   </p>
                 </div>
                 <Button

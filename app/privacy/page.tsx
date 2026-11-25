@@ -1,10 +1,17 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description: "See what Run The Roster saves in your browser and how to manage your data and measurement choices.",
+  alternates: { canonical: "/privacy/" },
+};
+
 export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Privacy</p>
-        <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">How this playtest handles data</h1>
-        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Current as of November 12, 2026.</p>
+        <h1 className="font-display text-5xl leading-none tracking-wide">Privacy Policy</h1>
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">Updated November 25, 2026.</p>
       </header>
 
       <section className="space-y-4 rounded-2xl border border-white/10 bg-card p-5 text-sm leading-relaxed sm:p-6">
@@ -42,8 +49,8 @@ export default function PrivacyPage() {
           <p className="mt-2 text-muted-foreground">
             Although game saves stay local, hosting and network providers may process ordinary request information such as
             IP address, requested page, date and time, and browser or device details to deliver and protect the site. Run
-            The Roster does not run an account database. The cookieless statistics below are the only measurement the game
-            operates, and only on a build where the operator has turned them on. Provider logging and retention are
+            The Roster does not run an account database. The game does not send the separate first-party statistics
+            described below unless that feature is enabled. Provider logging and retention are
             controlled by those providers rather than by the game&apos;s browser save.
           </p>
         </div>
@@ -53,7 +60,7 @@ export default function PrivacyPage() {
             When a published build has first-party statistics turned on, the browser sends pseudonymous events to this
             site&apos;s own collection address. The public build leaves this off until the operator turns it on. While it is
             off, the game does not send these events. The browser does not set a cookie and does not load a third-party
-            tracker.
+            tracker for these first-party events. This is separate from optional Google Analytics.
           </p>
           <p className="mt-2 text-muted-foreground">
             A random id stays in session storage for the open tab and is discarded when that tab session ends. A second,
@@ -82,7 +89,7 @@ export default function PrivacyPage() {
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-card p-5 sm:p-6">
-        <h2 className="font-display text-3xl tracking-wide">Google advertising is not live</h2>
+        <h2 className="font-display text-3xl tracking-wide">Advertising and your choices</h2>
         <div className="mt-3 space-y-3 text-sm leading-relaxed text-muted-foreground">
           <p>
             The site currently publishes an AdSense account ownership tag and an <code>ads.txt</code> seller record so
@@ -90,14 +97,19 @@ export default function PrivacyPage() {
             units, and no advertising consent system has been activated.
           </p>
           <p>
-            Before advertising is enabled, this notice and the site&apos;s consent controls will be updated to describe the
-            actual configuration and applicable choices. Google explains its data practices in the{" "}
-            <a className="text-primary underline-offset-4 hover:underline" href="https://policies.google.com/privacy">Google Privacy Policy</a>
-            {" "}and{" "}
-            <a className="text-primary underline-offset-4 hover:underline" href="https://policies.google.com/technologies/ads">How Google uses information for advertising</a>.
-            The operator will also re-check{" "}
-            <a className="text-primary underline-offset-4 hover:underline" href="https://support.google.com/adsense/answer/1348695">Google&apos;s consent-management requirements</a>
-            {" "}before any ads go live.
+            If we enable Google advertising, Google and participating ad providers may use cookies and similar
+            technologies to serve, measure, or personalize ads. Learn how Google uses information from
+            {" "}<a className="text-primary underline-offset-4 hover:underline" href="https://policies.google.com/technologies/partner-sites">sites that use its services</a>{" "}
+            and manage personalized advertising in
+            {" "}<a className="text-primary underline-offset-4 hover:underline" href="https://myadcenter.google.com/">My Ad Center</a>.
+            You can also manage participation from some other advertising providers through{" "}
+            <a className="text-primary underline-offset-4 hover:underline" href="https://optout.aboutads.info/">WebChoices</a>,
+            and use your browser to block or clear cookies.
+          </p>
+          <p>
+            The audience measurement choice above is separate from advertising. Before serving personalized ads in the
+            European Economic Area, the United Kingdom, or Switzerland, we will use a Google-certified consent tool
+            and update this notice. No advertising consent tool is active now.
           </p>
         </div>
       </section>

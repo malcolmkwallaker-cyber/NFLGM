@@ -1,10 +1,13 @@
+import { ModeIntro } from "@/components/site/mode-intro";
 import Link from "next/link";
 import { TodayDaily } from "@/components/game/today-daily";
 import { Button } from "@/components/ui/button";
 
 export default function DailyPage() {
   return (
-    <div className="space-y-6">
+    <>
+      <ModeIntro mode="daily" />
+      <div id="game" tabIndex={-1} className="space-y-6">
       <TodayDaily />
       <section className="rounded-xl border border-primary/30 bg-card p-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
         <div>
@@ -18,6 +21,7 @@ export default function DailyPage() {
           Play today’s turnaround
         </Button>
       </section>
-    </div>
+      </div>
+    </>
   );
 }

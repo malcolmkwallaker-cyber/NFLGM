@@ -16,12 +16,12 @@ export default function CareerPage() {
   return (
     <ProGate
       title="Career mode"
-      body="Career mode is open during the public playtest. Contracts age, the cap moves, and a firing can become a job change instead of game over."
+      body="Contracts age, the cap moves, and a firing can lead to another job."
     >
       <div className="space-y-5">
         <section className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Career GM · Free public playtest</p>
-          <h1 className="mt-2 font-display text-5xl leading-none tracking-wide">Build more than one good season</h1>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Career GM · Free to play</p>
+          <h2 className="mt-2 font-display text-5xl leading-none tracking-wide">Build more than one good season</h2>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground">
             Start with a real team snapshot and make the front-office decisions year after year. Contracts expire, the cap moves, players age, new draft classes arrive, and a firing can lead to another job instead of ending the file.
           </p>
@@ -35,7 +35,7 @@ export default function CareerPage() {
         <section className="space-y-4">
           <header>
             <p className="text-[11px] uppercase tracking-[0.18em] text-primary">{hofStatus(career)}</p>
-            <h1 className="font-display text-4xl tracking-wide">{career.gmName}</h1>
+            <h2 className="font-display text-4xl tracking-wide">{career.gmName}</h2>
             <p className="mt-2 text-sm text-muted-foreground">
               Legacy {career.legacy} · jobs {career.jobs} · rings {career.superBowls} · fired {career.fired}
             </p>

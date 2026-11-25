@@ -1,3 +1,11 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Contact",
+  description: "Contact Malcolm Wallaker about Run The Roster game feedback, accessibility, privacy, or business inquiries.",
+  alternates: { canonical: "/contact/" },
+};
+
 export default function ContactPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -17,7 +25,6 @@ export default function ContactPage() {
           For a game problem, include the mode, season year, team, and the screen where it happened. Do not email passwords,
           payment details, or other sensitive information; the current game has no player accounts or checkout.
         </p>
-        <p className="mt-3">This public email is monitored directly. No specific response time is promised.</p>
       </section>
     </div>
   );

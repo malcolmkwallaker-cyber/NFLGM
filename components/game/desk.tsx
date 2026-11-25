@@ -76,9 +76,9 @@ export function Desk() {
     return (
       <section className="stadium-panel yard-lines rounded-2xl border bg-card p-6">
         <p className="text-xs uppercase tracking-[0.18em] text-primary">Empty desk</p>
-        <h1 className="mt-2 font-display text-4xl tracking-wide">Nobody has given you the keys.</h1>
+        <h2 className="mt-2 font-display text-4xl tracking-wide">Nobody has given you the keys.</h2>
         <p className="mt-3 max-w-lg text-sm leading-relaxed text-muted-foreground">
-          Take one team from the owner meeting through the Super Bowl, or build a free multi-season career during the public playtest.
+          Take one team from the owner meeting through the Super Bowl, or build a free multi-season career.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           <Button className="!h-12 !px-4" nativeButton={false} render={<Link href="/season" />}>
@@ -118,9 +118,9 @@ export function Desk() {
                   ? `${season.historicalTitle} · historical`
                   : `${season.year} · ${season.mode}`}
             </p>
-            <h1 data-testid="phase-title" className="font-display text-3xl leading-none tracking-wide sm:text-4xl">
+            <h2 data-testid="phase-title" className="font-display text-3xl leading-none tracking-wide sm:text-4xl">
               {PHASE_TITLE[season.phase]}
-            </h1>
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {teamLabel(team)} · {record.wins}-{record.losses}
               {season.phase === "regular" ? ` · Week ${season.week}` : ""} · {titledGmName(season.gmName)} · Seed {season.seed}

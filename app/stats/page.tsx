@@ -23,10 +23,6 @@ export default function StatsPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="font-display text-4xl tracking-wide">Stats &amp; contracts</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Current-season simulation totals, league team results, and contract projections from your saved file.</p>
-      </header>
       <section className="rounded-2xl border border-white/10 bg-card p-4">
         <p className="text-xs uppercase tracking-[0.16em] text-primary">Daily</p>
         <p className="mt-2 font-display text-3xl tracking-widest">{profile.daily.results.slice(-20).map((row) => GRADE_EMOJI[row.grade]).join("") || "—"}</p>
