@@ -1,15 +1,23 @@
-import { ModeIntro } from "@/components/site/mode-intro";
+import { DailyGuide } from "@/components/site/mode-intro";
 import Link from "next/link";
 import { TodayDaily } from "@/components/game/today-daily";
 import { Button } from "@/components/ui/button";
 
 export default function DailyPage() {
   return (
-    <>
-      <ModeIntro mode="daily" />
-      <div id="game" tabIndex={-1} className="space-y-6">
-      <TodayDaily />
-      <section className="rounded-xl border border-primary/30 bg-card p-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
+    <div className="space-y-6">
+      <header className="mx-auto flex max-w-2xl flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h1 className="font-display text-2xl leading-none tracking-wide sm:text-3xl">Daily Football GM Challenge</h1>
+        <a href="#daily-guide" className="text-sm text-primary underline underline-offset-4">How to play</a>
+      </header>
+
+      <div id="game" tabIndex={-1}>
+        <TodayDaily />
+      </div>
+
+      <DailyGuide />
+
+      <section className="mx-auto max-w-2xl rounded-xl border border-primary/30 bg-card p-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
         <div>
           <p className="text-[11px] uppercase tracking-[0.18em] text-primary">Daily historic turnaround</p>
           <h2 className="mt-1 font-display text-3xl tracking-wide">Rewrite History</h2>
@@ -21,7 +29,6 @@ export default function DailyPage() {
           Play today’s turnaround
         </Button>
       </section>
-      </div>
-    </>
+    </div>
   );
 }
