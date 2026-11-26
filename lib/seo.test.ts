@@ -16,11 +16,10 @@ describe("public discovery files", () => {
     expect(urls).toContain("https://runtheroster.com/");
     expect(urls).toContain("https://runtheroster.com/daily/");
     expect(urls).toContain("https://runtheroster.com/career/");
-    for (const path of ["faq", "changelog", "guides", "articles", "play"]) {
+    for (const path of ["faq", "changelog", "guides", "articles", "play", "terms"]) {
       expect(urls).toContain(`https://runtheroster.com/${path}/`);
     }
     expect(urls).not.toContain("https://runtheroster.com/articles/preview/");
-    expect(urls).not.toContain("https://runtheroster.com/terms/");
     for (const path of ["stats", "settings", "leaderboard", "leagues", "pro"]) {
       expect(urls).not.toContain(`https://runtheroster.com/${path}/`);
     }

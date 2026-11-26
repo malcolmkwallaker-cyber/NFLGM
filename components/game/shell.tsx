@@ -28,6 +28,7 @@ const FOOTER_LINKS = [
   { href: "/about/", label: "About" },
   { href: "/contact/", label: "Contact" },
   { href: "/privacy/", label: "Privacy" },
+  { href: "/terms/", label: "Terms" },
   { href: "/faq/", label: "FAQ" },
   { href: "/guides/", label: "Guides" },
   { href: "/articles/", label: "Articles" },
