@@ -55,9 +55,21 @@ const modes = {
   },
 } as const;
 
-export function ModeIntro({ mode }: { mode: keyof typeof modes }) {
+function ModeGuideContent({ mode }: { mode: keyof typeof modes }) {
   const content = modes[mode];
   const guide = publishedArticles.find(({ slug }) => slug === guideSlugs[mode]);
+  return (
+    <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-muted-foreground">
+      {content.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+      <h2 className="pt-1 text-base font-semibold text-foreground">Three tips before you play</h2>
+      <ul className="list-disc space-y-1 pl-5">{content.tips.map((tip) => <li key={tip}>{tip}</li>)}</ul>
+      <p><Link href={guide ? `/articles/${guide.slug}/` : "/guides/"} className="text-primary underline underline-offset-4">{guide ? guide.title : "Compare the game modes"}</Link> or read the <Link href="/faq/" className="text-primary underline underline-offset-4">FAQ</Link> for help with saves.</p>
+    </div>
+  );
+}
+
+export function ModeIntro({ mode }: { mode: keyof typeof modes }) {
+  const content = modes[mode];
   return (
     <section aria-labelledby="mode-heading" className="mb-6 space-y-4 rounded-2xl border border-primary/30 bg-card p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -65,12 +77,20 @@ export function ModeIntro({ mode }: { mode: keyof typeof modes }) {
         <a href="#game" className="rounded-md border border-primary/40 px-3 py-2 text-sm text-primary underline underline-offset-4">{content.play}</a>
       </div>
       <p className="text-base text-foreground">{content.description}</p>
-      <div className="max-w-3xl space-y-3 text-sm leading-relaxed text-muted-foreground">
-        {content.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
-        <h2 className="pt-1 text-base font-semibold text-foreground">Three tips before you play</h2>
-        <ul className="list-disc space-y-1 pl-5">{content.tips.map((tip) => <li key={tip}>{tip}</li>)}</ul>
-        <p><Link href={guide ? `/articles/${guide.slug}/` : "/guides/"} className="text-primary underline underline-offset-4">{guide ? guide.title : "Compare the game modes"}</Link> or read the <Link href="/faq/" className="text-primary underline underline-offset-4">FAQ</Link> for help with saves.</p>
-      </div>
+      <ModeGuideContent mode={mode} />
     </section>
+  );
+}
+
+export function DailyGuide() {
+  return (
+    <details id="daily-guide" className="mx-auto max-w-2xl scroll-mt-20 rounded-xl border border-white/10 bg-card p-4">
+      <summary className="cursor-pointer rounded-sm text-base font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
+        How to play the Daily Challenge
+      </summary>
+      <div className="mt-4">
+        <ModeGuideContent mode="daily" />
+      </div>
+    </details>
   );
 }
