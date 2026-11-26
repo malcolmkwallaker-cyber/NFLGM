@@ -1,5 +1,5 @@
 import type { Profile } from "@/lib/types";
-import { ensureMinimumRoster, yourRoster } from "@/lib/engine/season";
+import { ensureMinimumRoster } from "@/lib/engine/season";
 import { recordCompletedSeason } from "@/lib/engine/career";
 import { normalizeGmName } from "@/lib/gm-name";
 
@@ -61,8 +61,8 @@ export function migrateProfile(profile: Profile): Profile {
     for (const teamId of Object.keys(season.teams)) {
       if (teamId !== season.teamId) ensureMinimumRoster(season, teamId);
     }
-    const rosterIds = new Set(yourRoster(season).map((player) => player.id));
-    season.campCutIds = [...new Set(season.campCutIds ?? [])].filter((id) => rosterIds.has(id));
+    // Camp picks are an uncommitted review batch, never replay them after a reload.
+    season.campCutIds = [];
   }
   if (next.career) next.career = recordCompletedSeason(next.career);
   return next;
