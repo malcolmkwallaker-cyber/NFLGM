@@ -125,7 +125,8 @@ describe("historic turnaround challenge contract", () => {
     expect(season.phase).toBe("regular");
     expect(season.activeDecision?.id).toBe("deadline");
     expect(season.activeDecision?.body).toMatch(/good value|fair value|poor value/i);
-    expect(season.activeDecision?.options.every((option) => option.detail.includes("Owner"))).toBe(true);
+    expect(season.activeDecision?.options.every((option) => typeof option.owner === "number")).toBe(true);
+    expect(season.activeDecision?.options.find((option) => option.id === "keep")?.detail).toContain("cap relief");
     const tradeOption = season.activeDecision?.options.find((option) => option.id === "deal");
     expect(tradeOption?.detail).toMatch(/because the .* brief/);
     expect(tradeOption?.detail).toMatch(/Asset value: (Good|Fair|Poor) value for you/);

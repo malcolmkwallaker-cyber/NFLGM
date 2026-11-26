@@ -1,5 +1,5 @@
 import type { Profile } from "@/lib/types";
-import { ensureMinimumRoster } from "@/lib/engine/season";
+import { ensureMinimumRoster, restoreWeeklyDecision } from "@/lib/engine/season";
 import { recordCompletedSeason } from "@/lib/engine/career";
 import { normalizeGmName } from "@/lib/gm-name";
 
@@ -56,6 +56,7 @@ export function migrateProfile(profile: Profile): Profile {
     season.teamCapLiabilities ??= {
       [season.teamId]: { deadMoney: season.deadMoney, futureDead: season.futureDead },
     };
+    restoreWeeklyDecision(season);
     if (season.phase !== "camp") continue;
     ensureMinimumRoster(season, season.teamId);
     for (const teamId of Object.keys(season.teams)) {
