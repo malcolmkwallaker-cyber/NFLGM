@@ -84,10 +84,10 @@ describe("weekly desk", () => {
     state.teams.KC.roster = yourRoster(state).slice(0, 25);
     state.capMode = "hard";
     state.deadMoney = state.capLimit - committedPayroll(yourRoster(state)) - 6;
-    restoreWeeklyDecision(state);
-    expect(state.activeDecision?.id).toBe("week-roster");
-    expect(state.activeDecision?.options.some((option) => option.id === "street-sign")).toBe(true);
-    const signed = applyAction(state, { type: "decide", choiceId: "street-sign" });
+    const ready = migrateProfile({ ...freshProfile(), season: state }).season!;
+    expect(ready.activeDecision?.id).toBe("week-roster");
+    expect(ready.activeDecision?.options.some((option) => option.id === "street-sign")).toBe(true);
+    const signed = applyAction(ready, { type: "decide", choiceId: "street-sign" });
     const acquired = yourRoster(signed).at(-1)!;
     expect(acquired.id).toMatch(/^weekly-fa-KC-/);
     expect(acquired.years).toBe(1);
@@ -95,7 +95,7 @@ describe("weekly desk", () => {
     const noRoom = structuredClone(state);
     noRoom.activeDecision = null;
     noRoom.deadMoney += 6;
-    restoreWeeklyDecision(noRoom);
-    expect(noRoom.activeDecision?.options.some((option) => option.id === "street-sign")).toBe(false);
+    const underReview = migrateProfile({ ...freshProfile(), season: noRoom }).season!;
+    expect(underReview.activeDecision?.options.some((option) => option.id === "street-sign")).toBe(false);
   });
 });
