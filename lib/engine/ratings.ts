@@ -9,35 +9,36 @@ export function effectiveOvr(p: Player): number {
   return p.ovr;
 }
 
-function best(roster: Player[], pos: Pos, n: number): number {
+export const rotationSlots: Record<Pos, number> = { QB: 1, RB: 1, WR: 2, TE: 1, OL: 3, DL: 2, EDGE: 2, LB: 2, CB: 2, S: 1, K: 1 };
+
+function best(roster: Player[], pos: Pos, promotedId?: string): number {
   const list = roster
     .filter((p) => p.pos === pos)
-    .map(effectiveOvr)
-    .sort((a, b) => b - a);
+    .sort((a, b) => Number(b.id === promotedId) - Number(a.id === promotedId) || effectiveOvr(b) - effectiveOvr(a));
   if (!list.length) return 64;
-  const take = list.slice(0, n);
-  return take.reduce((s, v) => s + v, 0) / take.length;
+  const take = list.slice(0, rotationSlots[pos]);
+  return take.reduce((s, player) => s + effectiveOvr(player), 0) / take.length;
 }
 
-export function offenseRating(roster: Player[], staff?: Partial<{ hc: StaffMember; oc: StaffMember }>, extras = 0): number {
-  const qb = best(roster, "QB", 1);
+export function offenseRating(roster: Player[], staff?: Partial<{ hc: StaffMember; oc: StaffMember }>, extras = 0, promotedId?: string): number {
+  const qb = best(roster, "QB", promotedId);
   const skill =
-    best(roster, "RB", 1) * 0.18 +
-    best(roster, "WR", 2) * 0.42 +
-    best(roster, "TE", 1) * 0.16 +
-    best(roster, "OL", 3) * 0.24;
+    best(roster, "RB", promotedId) * 0.18 +
+    best(roster, "WR", promotedId) * 0.42 +
+    best(roster, "TE", promotedId) * 0.16 +
+    best(roster, "OL", promotedId) * 0.24;
   let rating = qb * 0.42 + skill * 0.58;
   if (staff?.hc) rating += (staff.hc.leadership - 3) * 0.7;
   if (staff?.oc) rating += (staff.oc.aggression - 3) * 0.35 + (staff.oc.development - 3) * 0.25;
   return clamp(rating + extras, 50, 99);
 }
 
-export function defenseRating(roster: Player[], staff?: Partial<{ hc: StaffMember; dc: StaffMember }>, extras = 0): number {
+export function defenseRating(roster: Player[], staff?: Partial<{ hc: StaffMember; dc: StaffMember }>, extras = 0, promotedId?: string): number {
   const front =
-    best(roster, "DL", 2) * 0.34 +
-    best(roster, "EDGE", 2) * 0.36 +
-    best(roster, "LB", 2) * 0.3;
-  const cover = best(roster, "CB", 2) * 0.62 + best(roster, "S", 1) * 0.38;
+    best(roster, "DL", promotedId) * 0.34 +
+    best(roster, "EDGE", promotedId) * 0.36 +
+    best(roster, "LB", promotedId) * 0.3;
+  const cover = best(roster, "CB", promotedId) * 0.62 + best(roster, "S", promotedId) * 0.38;
   let rating = front * 0.55 + cover * 0.45;
   if (staff?.hc) rating += (staff.hc.leadership - 3) * 0.55;
   if (staff?.dc) rating += (staff.dc.aggression - 3) * 0.4 + (staff.dc.leadership - 3) * 0.3;
@@ -56,11 +57,15 @@ export function teamRatings(state: SeasonState, teamId: string): { off: number; 
   const ident =
     mine && state.identity === "aggressive" ? 1.1 : mine && state.identity === "conservative" ? -0.4 : 0;
   const mod = mine ? state.teamMod : 0;
-  const off = team.lockOff && !mine ? team.lockOff : offenseRating(team.roster, staff, chem + ident + mod);
+  const focus = mine && state.phase === "regular";
+  const promotedId = focus && typeof state.flags["weekly-promotion"] === "string" ? state.flags["weekly-promotion"] : undefined;
+  const weeklyOff = focus ? Number(state.flags["weekly-off"] ?? 0) : 0;
+  const weeklyDef = focus ? Number(state.flags["weekly-def"] ?? 0) : 0;
+  const off = team.lockOff && !mine ? team.lockOff : offenseRating(team.roster, staff, chem + ident + mod + weeklyOff, promotedId);
   const def =
     team.lockDef && !mine
       ? team.lockDef
-      : defenseRating(team.roster, staff, chem + mod + (mine && state.identity === "conservative" ? 0.8 : 0));
+      : defenseRating(team.roster, staff, chem + mod + weeklyDef + (mine && state.identity === "conservative" ? 0.8 : 0), promotedId);
   return {
     off: team.lockOff && team.roster.length === 0 ? team.lockOff : off,
     def: team.lockDef && team.roster.length === 0 ? team.lockDef : def,

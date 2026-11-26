@@ -6,7 +6,7 @@ import { capHealth, capSpace, committedPayroll, marketAsk, offerYears, payroll, 
 import { makeHeadlines, resultHeadlines } from "@/lib/engine/headlines";
 import { recordUserPlayerStats } from "@/lib/engine/player-stats";
 import { interpretFreeText } from "@/lib/engine/keywords";
-import { teamRatings } from "@/lib/engine/ratings";
+import { effectiveOvr, rotationSlots, teamRatings } from "@/lib/engine/ratings";
 import { buildSchedule } from "@/lib/engine/schedule";
 import { clamp, hashSeed, makeRng, shuffle } from "@/lib/engine/rng";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -1894,11 +1894,165 @@ function doCamp(state: SeasonState, cutIds: string[]): SeasonState {
 function prepareWeek(state: SeasonState) {
   const rippleIndex = state.ripples.findIndex((r) => r.week === state.week);
   if (rippleIndex >= 0) {
-    state.activeDecision = state.ripples[rippleIndex]?.decision ?? null;
-    state.ripples.splice(rippleIndex, 1);
+    const [ripple] = state.ripples.splice(rippleIndex, 1);
+    state.activeDecision = weeklyTradeoffs(ripple?.decision ?? weeklyDecision(state));
     return;
   }
-  state.activeDecision = scriptedDecision(state);
+  state.activeDecision = weeklyTradeoffs(scriptedDecision(state) ?? weeklyDecision(state));
+}
+
+// Event cards still take the week's single slot. Stored cards from older saves
+// keep their option IDs and tags, including any trade or historical event.
+function weeklyTradeoffs(decision: Decision): Decision {
+  const amendments: Record<string, Partial<Choice>> = {
+    "identity:balanced": { fans: -1, detail: "Take the points and take the shots when the math is real. Aggressive fans wanted a stronger statement." },
+    "identity:aggressive": { owner: -1, detail: "Fourth-and-short is a play, not a punt. The owner worries about the extra risk." },
+    "injury:play": { locker: -1, detail: "Play at reduced effectiveness and accept the reinjury risk. Teammates question pushing an injured player." },
+    "injury:sit": { detail: "Protect the player and sit him for several weeks. Fans lose a star and teammates see you prioritize health." },
+    "owner-check:push": { locker: -1, detail: "Promise to chase wins. The room feels the extra pressure." },
+    "owner-check:standard": { owner: -1, detail: "Protect the locker room. The owner wanted a more immediate commitment." },
+    "deadline:keep": { owner: -1, detail: "Keep the player to win now, but give up the draft asset and cap relief." },
+    "extension:pay": { ...(decision.options.find((option) => option.id === "pay")?.owner !== -3 ? { owner: -1 } : {}),
+      detail: `${decision.options.find((option) => option.id === "pay")?.detail.split(" Owner ")[0] ?? ""} The owner takes on a longer commitment.` },
+    "rest:play": { locker: -1, detail: "Play for a better seed, but the veterans lose their break." },
+    "warner:warner": { owner: -1, detail: "Hand the cheap backup the keys. The owner is nervous about putting the season in an unproven quarterback's hands." },
+    "young-montana:joe": { owner: -1, detail: "Give the offense one voice. The owner worries the backup will get no development snaps." },
+  };
+  return {
+    ...decision,
+    options: decision.options.map((option) => {
+      const update = amendments[`${decision.id}:${option.id}`];
+      if (decision.id.startsWith("vet-") && option.id === "own") {
+        return { ...option, fans: -1, detail: "The standard applies to everyone, but supporters still miss the veteran." };
+      }
+      if (!update || (decision.id === "injury" && decision.kicker === "Injury call")) return option;
+      if (decision.id === "extension" && option.id === "pay" && option.detail.endsWith("The owner takes on a longer commitment.")) return option;
+      return { ...option, ...update };
+    }),
+  };
+}
+
+export function restoreWeeklyDecision(state: SeasonState): void {
+  if (state.phase !== "regular") return;
+  if (state.activeDecision) {
+    state.activeDecision = weeklyTradeoffs(state.activeDecision);
+    return;
+  }
+  if (state.shop || state.flags[`desk-resolved:${state.week}`]) return;
+  // Version 1 saves recorded completed choices in the decision log. Preseason
+  // actions also use week 1, so don't mistake them for a resolved weekly desk.
+  const completed = state.decisions.some((entry) => entry.week === state.week &&
+    !/^(Owner meeting|Hire (HC|OC|DC|SCOUT)|Cap|Free agency|Trade|Draft|Camp)$/.test(entry.title));
+  if (!completed) prepareWeek(state);
+}
+
+function weeklyDecision(state: SeasonState): Decision {
+  switch ((state.week - 2) % 4) {
+    case 0: return matchupFocus(state);
+    case 1: return practiceFocus(state);
+    case 2: return weeklyInjury(state) ?? practiceFocus(state);
+    default: return rosterDecision(state);
+  }
+}
+
+function matchupFocus(state: SeasonState): Decision {
+  const game = weekMatchup(state);
+  const opponent = game ? teamById(game.home === state.teamId ? game.away : game.home, state.directory) : null;
+  return {
+    id: "week-matchup",
+    kicker: "Matchup focus",
+    title: opponent ? `Where do you attack ${opponent.city}?` : "Where do you put the film time?",
+    body: opponent
+      ? `Against the ${opponent.name}, the staff can install extra looks for only one unit. This week's focus makes that unit stronger and leaves less time for the other.`
+      : "Without a matchup on the board, the coaches will put the extra time into practice instead.",
+    options: [
+      { id: "attack", label: "Give the offense the extra install", detail: "Offense gets a one-week boost; the defense has less preparation.", owner: -1, fans: 2, locker: 0, tag: "weekly-unit:1:-0.5", log: "Gave the extra matchup install to the offense." },
+      { id: "contain", label: "Build the plan around the defense", detail: "Defense gets a one-week boost; the offense has less preparation.", owner: 1, fans: -1, locker: 1, tag: "weekly-unit:-0.5:1", log: "Gave the extra matchup install to the defense." },
+    ],
+  };
+}
+
+function practiceFocus(state: SeasonState): Decision {
+  const roster = yourRoster(state);
+  const offense = roster.filter((p) => ["QB", "RB", "WR", "TE", "OL"].includes(p.pos));
+  const defense = roster.filter((p) => !offense.includes(p) && p.pos !== "K");
+  const offensiveGroup = offense.filter((p) => p.pos === "OL").length > 1 ? "offensive line" : "receivers";
+  const defensiveGroup = defense.filter((p) => p.pos === "CB" || p.pos === "S").length > 1 ? "secondary" : "defensive front";
+  return {
+    id: "week-practice",
+    kicker: "Practice focus",
+    title: "Who gets the last full-speed period?",
+    body: `The ${offensiveGroup} and the ${defensiveGroup} both asked for extra reps. There is time for only one group.`,
+    options: [
+      { id: "reps-offense", label: `Give the ${offensiveGroup} the reps`, detail: "The added reps sharpen the offense this week; defensive captains lose their period.", owner: 1, fans: 0, locker: -1, tag: "weekly-unit:0.7:0", log: `The ${offensiveGroup} got the last full-speed period.` },
+      { id: "reps-defense", label: `Give the ${defensiveGroup} the reps`, detail: "The added reps sharpen the defense this week; the offense misses a chance to rehearse.", owner: -1, fans: 0, locker: 2, tag: "weekly-unit:0:0.7", log: `The ${defensiveGroup} got the last full-speed period.` },
+    ],
+  };
+}
+
+function weeklyInjury(state: SeasonState): Decision | null {
+  const healthy = yourRoster(state).filter((player) => !player.injured && !player.limited && player.pos !== "K");
+  const experienced = healthy.filter((player) => player.ovr >= 74).sort((a, b) => b.ovr - a.ovr).slice(0, 5);
+  if (!experienced.length) return null;
+  const rng = makeRng(hashSeed(state.seed, state.year, "weekly-injury", state.week));
+  const player = rng.pick(experienced);
+  return {
+    id: "injury",
+    kicker: "Injury call",
+    title: `${player.name} is questionable`,
+    body: `Medical staff says your ${player.pos} can dress at reduced effectiveness, but a setback could cost more games. Resting him costs his availability this week.`,
+    options: [
+      { id: "play", label: `Play ${player.name}`, detail: "Play at reduced effectiveness and risk aggravating the injury.", owner: 1, fans: 2, locker: -1, tag: `playhurt:${player.id}`, log: `Played ${player.name} through a questionable designation.` },
+      { id: "sit", label: `Rest ${player.name} for one week`, detail: "The player is out this week and is projected back next week.", owner: 0, fans: -2, locker: 2, tag: `sitweek:${player.id}`, log: `Held ${player.name} out for one week.` },
+    ],
+  };
+}
+
+function weeklyStreetPlayer(state: SeasonState): Player {
+  const roster = yourRoster(state);
+  const order: Pos[] = ["OL", "CB", "DL", "EDGE", "LB", "WR", "S", "RB", "TE", "QB", "K"];
+  const pos = [...needs(roster)][0] ?? order.sort((a, b) => roster.filter((p) => p.pos === a).length - roster.filter((p) => p.pos === b).length)[0];
+  const rng = makeRng(hashSeed(state.seed, state.teamId, state.year, "weekly-signing", state.week));
+  const ovr = 65 + rng.int(5);
+  return {
+    id: `weekly-fa-${state.teamId}-${state.year}-${state.week}`,
+    name: `${rng.pick(FIRSTS)} ${rng.pick(LASTS)}`,
+    pos, ovr, age: 25 + rng.int(5), cap: rookieCapHit(state, 4), years: 1,
+    potential: ovr + 2, real: false,
+  };
+}
+
+function canSignWeeklyPlayer(state: SeasonState, player: Player): boolean {
+  const roster = yourRoster(state);
+  return roster.length < 26 && !roster.some((candidate) => candidate.id === player.id) &&
+    (state.capMode !== "hard" || capSpace(state) >= player.cap);
+}
+
+function rosterDecision(state: SeasonState): Decision {
+  const roster = yourRoster(state);
+  const street = weeklyStreetPlayer(state);
+  const depth = roster.filter((p) => !p.injured && !p.limited && p.pos !== "K" &&
+    roster.filter((starter) => starter.pos === p.pos && effectiveOvr(starter) > p.ovr).length >= rotationSlots[p.pos])
+    .sort((a, b) => b.potential - a.potential || a.age - b.age)[0];
+  const options: Choice[] = [
+    { id: "stand-pat", label: "Keep the rotation as it is", detail: "Protect continuity and cap room, but leave the depth concern unanswered.", owner: 1, fans: -1, locker: 0, log: "Kept the existing roster rotation." },
+  ];
+  if (canSignWeeklyPlayer(state, street)) {
+    options.push({ id: "street-sign", label: `Sign ${street.name} · ${street.pos}`,
+      detail: `Add a depth player on a one-year deal, ${formatMoney(street.cap)} in current cap room. The room you spend here won't be available for another move.`,
+      owner: -1, fans: 2, locker: 0, tag: "weekly-sign", log: `Signed ${street.name} for ${formatMoney(street.cap)} this season.` });
+  }
+  if (depth) {
+    options.push({ id: "try-depth", label: `Give ${depth.name} a bigger role`,
+      detail: `Move the reserve ${depth.pos} up for this week. The unit takes a small short-term rating hit, but depth players see a path to snaps.`,
+      owner: 0, fans: -1, locker: 2, tag: `weekly-promote:${depth.id}`, log: `Gave ${depth.name} a one-game rotation promotion.` });
+  }
+  if (options.length === 1) return practiceFocus(state);
+  return {
+    id: "week-roster", kicker: "Roster move", title: "Do you use your depth?",
+    body: "The position coaches want another option in the rotation. Cap room, roster spots and continuity all matter.",
+    options,
+  };
 }
 
 function scriptedDecision(state: SeasonState): Decision | null {
@@ -2038,6 +2192,7 @@ function doDecide(state: SeasonState, choiceId: string): SeasonState {
   const choice = decision.options.find((o) => o.id === choiceId);
   if (!choice) throw new Error("That is not an option");
   applyChoice(state, decision, choice);
+  state.flags[`desk-resolved:${state.week}`] = true;
   state.activeDecision = null;
   return state;
 }
@@ -2056,13 +2211,28 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
       state.flags[`aggravate-${id}`] = rng.next() < 0.35;
     }
   }
-  if (choice.tag?.startsWith("sit:")) {
-    const id = choice.tag.slice(4);
+  if (choice.tag?.startsWith("sit:") || choice.tag?.startsWith("sitweek:")) {
+    const oneWeek = choice.tag.startsWith("sitweek:");
+    const id = choice.tag.split(":")[1] ?? "";
     const player = findPlayer(yourRoster(state), id);
     if (player) {
       player.injured = true;
-      state.flags[`return-${id}`] = state.week + 3;
+      state.flags[`return-${id}`] = state.week + (oneWeek ? 1 : 3);
     }
+  }
+  if (choice.tag?.startsWith("weekly-unit:")) {
+    const [, offense, defense] = choice.tag.split(":");
+    state.flags["weekly-off"] = Number(offense);
+    state.flags["weekly-def"] = Number(defense);
+  }
+  if (choice.tag?.startsWith("weekly-promote:")) {
+    const id = choice.tag.slice("weekly-promote:".length);
+    if (findPlayer(yourRoster(state), id)) state.flags["weekly-promotion"] = id;
+  }
+  if (choice.tag === "weekly-sign") {
+    const player = weeklyStreetPlayer(state);
+    if (!canSignWeeklyPlayer(state, player)) throw new Error("That signing no longer fits the roster or cap");
+    state.teams[state.teamId].roster.push(player);
   }
   if (choice.tag === "trim") {
     const victim = yourRoster(state).slice().sort((a, b) => a.ovr - b.ovr)[0];
@@ -2156,7 +2326,7 @@ export function playerAvailabilityLabel(state: SeasonState, player: Player): str
 
 export function pendingInjuryPlayer(state: SeasonState): Player | undefined {
   if (state.activeDecision?.id !== "injury") return undefined;
-  const tag = state.activeDecision.options.find((option) => option.tag?.startsWith("playhurt:") || option.tag?.startsWith("sit:"))?.tag;
+  const tag = state.activeDecision.options.find((option) => option.tag?.startsWith("playhurt:") || option.tag?.startsWith("sit:") || option.tag?.startsWith("sitweek:"))?.tag;
   const playerId = tag?.split(":")[1];
   return playerId ? findPlayer(yourRoster(state), playerId) : undefined;
 }
@@ -2256,6 +2426,9 @@ function doPlayWeek(state: SeasonState): SeasonState {
     }
   }
   resolveLimitedPlayers(state);
+  delete state.flags["weekly-off"];
+  delete state.flags["weekly-def"];
+  delete state.flags["weekly-promotion"];
   if (yours) {
     const rng = makeRng(hashSeed(state.seed, "hl", state.week));
     state.headlines = resultHeadlines(state, yours.won, yours.score, yours.opp, rng);
@@ -2276,6 +2449,7 @@ function doPlayWeek(state: SeasonState): SeasonState {
   if (state.meters.owner <= FIRING_THRESHOLD) return state;
   if (state.week >= state.seasonLength) return startPlayoffs(state);
   state.week += 1;
+  heal(state);
   prepareWeek(state);
   return state;
 }

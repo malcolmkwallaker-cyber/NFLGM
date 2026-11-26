@@ -1065,7 +1065,7 @@ function Regular({
       ) : null}
       {decision ? (
         <div className="space-y-3 rounded-2xl border border-primary/30 bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-primary">{decision.kicker}</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-primary">{decision.id === "deadline" ? "Trade deadline, after Week 9" : `Week ${season.week} · ${decision.kicker}`}</p>
           <h2 className="font-display text-3xl tracking-wide">{decision.title}</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">{decision.body}</p>
           {decision.options.map((option) => (
@@ -1078,12 +1078,15 @@ function Regular({
             >
               <span className="block font-medium">{option.label}</span>
               <span className="mt-1 block text-sm text-muted-foreground">
-                {decision.id === "deadline" ? (
+                {decision.id === "deadline" && option.id === "deal" ? (
                   <>
-                    <TradeApproval impact={meterImpactPreview(season, option)} />
-                    {option.id === "deal" && tradedPlayer ? <span className="mt-1 block">Cap room {money(beforeTradeRoom)} to {money(afterTradeRoom)}. The outside market is closed for the season.</span> : null}
+                    {option.detail.split(" Brief reaction:")[0]}
+                    {tradedPlayer ? <> Cap room {money(beforeTradeRoom)} to {money(afterTradeRoom)}. The outside market is closed for the season.</> : null}
                   </>
-                ) : option.detail}
+                ) : decision.id === "extension" ? option.detail.split(/ Owner [0+−]/)[0] : option.detail}
+                <span className="mt-1 block" data-testid="weekly-choice-effects">
+                  <TradeApproval impact={meterImpactPreview(season, option)} />
+                </span>
               </span>
             </button>
           ))}

@@ -628,7 +628,7 @@ describe("audit regressions", () => {
 
   it("asks for explicit acceptance after listening to contract-year trade calls", () => {
     let state = advanceTo(createSeason({ teamId: "DAL", gmName: "Listen Audit", seed: 1227 }), "regular");
-    for (let guard = 0; guard < 20 && state.activeDecision?.id !== "extension"; guard += 1) {
+    for (let guard = 0; guard < 40 && state.activeDecision?.id !== "extension"; guard += 1) {
       if (state.activeDecision) state = applyAction(state, { type: "decide", choiceId: state.activeDecision.options[0]?.id ?? "wait" });
       else state = applyAction(state, { type: "play-week" });
     }
@@ -1522,8 +1522,9 @@ describe("audit regressions", () => {
     expect(state.activeDecision?.id).toBe("injury");
     const play = state.activeDecision?.options.find((option) => option.id === "play");
     const sit = state.activeDecision?.options.find((option) => option.id === "sit");
-    expect(play?.detail).toContain("Owner +1; fans +2; locker +1");
-    expect(sit?.detail).toContain("Fans −2 for sitting a star; locker +1 for protecting him");
+    expect(play?.detail).toContain("reinjury risk");
+    expect({ owner: play?.owner, fans: play?.fans, locker: play?.locker }).toEqual({ owner: 1, fans: 2, locker: -1 });
+    expect(sit?.detail).toContain("prioritize health");
     expect({ owner: sit?.owner, fans: sit?.fans, locker: sit?.locker }).toEqual({ owner: 0, fans: -2, locker: 1 });
     const playerId = play?.tag?.slice("playhurt:".length);
     if (!playerId) throw new Error("Play-through injury fixture missing");
@@ -1671,17 +1672,19 @@ describe("audit regressions", () => {
     state = applyAction(state, { type: "decide", choiceId: state.activeDecision?.options[0]?.id ?? "balanced" });
     state = applyAction(state, { type: "play-week" });
     expect(state.week).toBe(2);
-    expect(state.activeDecision).toBeNull();
+    expect(state.activeDecision?.id).toBe("week-matchup");
+    expect(applyAction(state, { type: "sim", until: "playoffs" }).results).toEqual(state.results);
+    state = applyAction(state, { type: "decide", choiceId: "attack" });
 
     const stopped = applyAction(state, { type: "sim", until: "playoffs" });
     expect(stopped.phase).toBe("regular");
-    expect(stopped.week).toBe(4);
-    expect(stopped.activeDecision?.id).toBe("injury");
-    expect(stopped.results.filter((result) => result.round === "regular")).toHaveLength(3 * 16);
+    expect(stopped.week).toBe(3);
+    expect(stopped.activeDecision?.id).toBe("week-practice");
+    expect(stopped.results.filter((result) => result.round === "regular")).toHaveLength(2 * 16);
 
     const reloaded = migrateProfile({ ...freshProfile(), active: "season", season: JSON.parse(JSON.stringify(stopped)) });
-    expect(reloaded.season?.week).toBe(4);
-    expect(reloaded.season?.activeDecision?.id).toBe("injury");
+    expect(reloaded.season?.week).toBe(3);
+    expect(reloaded.season?.activeDecision?.id).toBe("week-practice");
     expect(simulateUntil(state, "playoffs").phase).not.toBe("regular");
   });
 
