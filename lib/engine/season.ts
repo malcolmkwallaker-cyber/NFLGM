@@ -2186,6 +2186,58 @@ function clinched(state: SeasonState): boolean {
   return you.wins >= 10 || you.wins > you.losses + (state.seasonLength - state.week);
 }
 
+const LATE_STAKES_WEEK = 12;
+const METER_SOFT_LIMIT = 85;
+const PLAYOFF_READINESS = "playoff-readiness";
+
+function modernRegularSeason(state: SeasonState) {
+  return state.phase === "regular" && state.mode !== "historical";
+}
+
+function regularMeterGain(before: number, change: number) {
+  if (change <= 0) return change;
+  const ordinary = Math.min(change, Math.max(0, METER_SOFT_LIMIT - before));
+  return ordinary + Math.floor((change - ordinary) / 2);
+}
+
+export function playoffReadiness(state: SeasonState): number {
+  const value = state.flags[PLAYOFF_READINESS];
+  return state.mode !== "historical" && typeof value === "number" && Number.isFinite(value)
+    ? clamp(Math.trunc(value), -6, 6) : 0;
+}
+
+export function lateSeasonStakes(state: SeasonState) {
+  return modernRegularSeason(state) && state.week >= LATE_STAKES_WEEK;
+}
+
+function readinessChange(decision: Decision, choice: Choice): number {
+  // Protecting availability or giving depth meaningful reps prepares the
+  // roster for January, even when the approval meters are already full.
+  if (decision.id === "injury" || decision.id === "rest") return choice.id === "sit" || choice.id === "rest" ? 1 : -1;
+  if (decision.id === "extension") return choice.id === "pay" ? 1 : choice.id === "shop" ? -1 : 0;
+  if (decision.id === "week-roster") return choice.id === "stand-pat" ? -1 : 1;
+  if (decision.id === "week-practice" || decision.id === "week-matchup") return 1;
+  return 0;
+}
+
+export function weeklyChoicePreview(state: SeasonState, decision: Decision, choice: Choice) {
+  const late = lateSeasonStakes(state);
+  const before = playoffReadiness(state);
+  const after = late ? clamp(before + readinessChange(decision, choice), -6, 6) : before;
+  const requested = (change: number) => change * (late ? 2 : 1);
+  const impact = (["owner", "fans", "locker"] as const).map((meter) => {
+    const raw = requested(choice[meter] ?? 0);
+    const adjusted = modernRegularSeason(state) && decision.id !== "deadline"
+      ? regularMeterGain(state.meters[meter], raw) : raw;
+    return { requested: raw, adjusted, applied: clamp(Math.round(state.meters[meter] + adjusted), 0, meter === "fans" ? 100 : 96) - state.meters[meter] };
+  });
+  return { owner: impact[0], fans: impact[1], locker: impact[2], readiness: { before, after } };
+}
+
+export function playoffReadinessRating(state: SeasonState): number {
+  return playoffReadiness(state) * 0.35;
+}
+
 function doDecide(state: SeasonState, choiceId: string): SeasonState {
   const decision = state.activeDecision;
   if (!decision) throw new Error("Nothing to decide");
@@ -2199,6 +2251,7 @@ function doDecide(state: SeasonState, choiceId: string): SeasonState {
 
 function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
   const beforeMeters = { ...state.meters };
+  const impact = weeklyChoicePreview(state, decision, choice);
   let choiceLog = choice.log;
   if (choice.identity) state.identity = choice.identity as Identity;
   if (choice.tag?.startsWith("mod:")) state.teamMod += Number(choice.tag.slice(4));
@@ -2282,17 +2335,30 @@ function applyChoice(state: SeasonState, decision: Decision, choice: Choice) {
       };
     }
   }
-  bump(state, choice.owner ?? 0, choice.fans ?? 0, choice.locker ?? 0);
+  if (impact.readiness.before !== impact.readiness.after) {
+    state.flags[PLAYOFF_READINESS] = impact.readiness.after;
+    choiceLog += ` Playoff readiness ${formatSigned(impact.readiness.before)} → ${formatSigned(impact.readiness.after)}.`;
+  }
+  bump(state, impact.owner.applied, impact.fans.applied, impact.locker.applied);
   pushDecision(state, decision.id === "deadline" ? "Trade deadline" : decision.title, choice.label, choiceLog, choice.swing ?? choice.owner ?? 0);
   state.headlines = makeHeadlines(state, (choice.owner ?? 0) + (choice.fans ?? 0) >= 0 ? "positive" : "negative", {
     beat: choice.log,
     national: `${gmSubject(state.gmName)} made a call: ${choice.label}.`,
-    analytics: `Owner ${beforeMeters.owner} → ${state.meters.owner} (${meterEffect(beforeMeters.owner, state.meters.owner, choice.owner ?? 0, 96)}), fans ${beforeMeters.fans} → ${state.meters.fans} (${meterEffect(beforeMeters.fans, state.meters.fans, choice.fans ?? 0, 100)}), locker ${beforeMeters.locker} → ${state.meters.locker} (${meterEffect(beforeMeters.locker, state.meters.locker, choice.locker ?? 0, 96)}).`,
+    analytics: `Owner ${beforeMeters.owner} → ${state.meters.owner} (${weeklyEffect(impact.owner, beforeMeters.owner, state.meters.owner, 96)}), fans ${beforeMeters.fans} → ${state.meters.fans} (${weeklyEffect(impact.fans, beforeMeters.fans, state.meters.fans, 100)}), locker ${beforeMeters.locker} → ${state.meters.locker} (${weeklyEffect(impact.locker, beforeMeters.locker, state.meters.locker, 96)}).${impact.readiness.before === impact.readiness.after ? "" : ` Playoff readiness ${formatSigned(impact.readiness.before)} → ${formatSigned(impact.readiness.after)}.`}`,
   });
 }
 
 function formatSigned(value: number): string {
   return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : "0";
+}
+
+function weeklyEffect(effect: { requested: number; adjusted: number }, before: number, after: number, ceiling: number): string {
+  if (effect.requested === effect.adjusted || (before === ceiling && effect.requested > 0)) {
+    return meterEffect(before, after, effect.requested, ceiling);
+  }
+  const applied = after - before;
+  const capNote = after === ceiling && applied !== effect.adjusted ? `, capped at ${ceiling}` : "";
+  return `${formatSigned(applied)} applied${capNote}; ${formatSigned(effect.requested)} before high-meter slowdown`;
 }
 
 function meterEffect(before: number, after: number, requested: number, ceiling: number): string {
@@ -2417,9 +2483,8 @@ function doPlayWeek(state: SeasonState): SeasonState {
         lockerRequested,
         lockerReasons,
       };
-      bump(state, ownerChange.delta, won ? 2 : -2, won ? 1 : -1);
-      if (margin >= 14) bump(state, 0, 1, 1);
-      if (margin <= -14) bump(state, 0, -1, -1);
+      const adjust = (before: number, delta: number) => modernRegularSeason(state) ? regularMeterGain(before, delta) : delta;
+      bump(state, adjust(meterBefore.owner, ownerChange.delta), adjust(meterBefore.fans, fanRequested), adjust(meterBefore.locker, lockerRequested));
       state.flags[`owner-week:${state.week}`] = ownerChange.reasons.join(", ");
       state.flags[`owner-week-before:${state.week}`] = meterBefore.owner;
       state.flags[`owner-week-requested:${state.week}`] = ownerChange.delta;
@@ -2436,11 +2501,13 @@ function doPlayWeek(state: SeasonState): SeasonState {
     const ownerBeforeGame = Number(state.flags[`owner-week-before:${state.week}`] ?? state.meters.owner);
     const ownerRequested = Number(state.flags[`owner-week-requested:${state.week}`] ?? state.meters.owner - ownerBeforeGame);
     const ownerApplied = state.meters.owner - ownerBeforeGame;
+    const resultEffect = (before: number, after: number, requested: number, ceiling: number) =>
+      weeklyEffect({ requested, adjusted: modernRegularSeason(state) ? regularMeterGain(before, requested) : requested }, before, after, ceiling);
     const ownerExplanation = ownerApplied === ownerRequested
       ? ownerReasons
-      : `${ownerReasons}; ${meterEffect(ownerBeforeGame, state.meters.owner, ownerRequested, 96)}`;
-    const fanExplanation = `${yours.fanReasons.join(", ")}${state.meters.fans - yours.meterBefore.fans === yours.fanRequested ? "" : `; ${meterEffect(yours.meterBefore.fans, state.meters.fans, yours.fanRequested, 100)}`}`;
-    const lockerExplanation = `${yours.lockerReasons.join(", ")}${state.meters.locker - yours.meterBefore.locker === yours.lockerRequested ? "" : `; ${meterEffect(yours.meterBefore.locker, state.meters.locker, yours.lockerRequested, 96)}`}`;
+      : `${ownerReasons}; ${resultEffect(ownerBeforeGame, state.meters.owner, ownerRequested, 96)}`;
+    const fanExplanation = `${yours.fanReasons.join(", ")}${state.meters.fans - yours.meterBefore.fans === yours.fanRequested ? "" : `; ${resultEffect(yours.meterBefore.fans, state.meters.fans, yours.fanRequested, 100)}`}`;
+    const lockerExplanation = `${yours.lockerReasons.join(", ")}${state.meters.locker - yours.meterBefore.locker === yours.lockerRequested ? "" : `; ${resultEffect(yours.meterBefore.locker, state.meters.locker, yours.lockerRequested, 96)}`}`;
     const analytics = state.headlines.find((headline) => headline.outlet === "analytics");
     if (analytics) analytics.text = `Week ${state.week}: Owner ${ownerBeforeGame} → ${state.meters.owner}: ${ownerExplanation}. Fans ${yours.meterBefore.fans} → ${state.meters.fans}: ${fanExplanation}. Locker ${yours.meterBefore.locker} → ${state.meters.locker}: ${lockerExplanation}.`;
     state.log.push(`${yours.won ? "Beat" : "Lost to"} ${yours.opp} ${yours.score}.`);
@@ -2475,9 +2542,14 @@ function snapScore(n: number): number {
 
 function simulateMatch(state: SeasonState, home: string, away: string, key: string) {
   const rng = makeRng(hashSeed(state.seed, state.year, key, home, away));
-  const hr = teamRatings(state, home);
-  const ar = teamRatings(state, away);
   const postseason = !key.startsWith("w");
+  const withReadiness = (id: string) => {
+    const rating = teamRatings(state, id);
+    const prep = postseason && id === state.teamId ? playoffReadinessRating(state) : 0;
+    return { off: rating.off + prep, def: rating.def + prep };
+  };
+  const hr = withReadiness(home);
+  const ar = withReadiness(away);
   const variance = state.mode === "historical" ? 22 : postseason ? 12 : 18;
   const noise = () => (rng.next() + rng.next() + rng.next() - 1.5) * variance;
   let homeScore = snapScore(expectedPoints(hr.off, ar.def) + 1.6 + noise());

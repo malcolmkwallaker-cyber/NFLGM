@@ -13,7 +13,7 @@ import { capSpace, committedPayroll, marketAsk, offerYears, salaryScale } from "
 import { ROLE_LABEL } from "@/lib/data/staff";
 import { teamById, teamLabel } from "@/lib/data/teams";
 import { seasonShareText } from "@/lib/share";
-import { advancedLines, campCapSpaceAfterCuts, campCutDeadMoney, campCutProtections, capCutDeadMoney, divisionTable, draftCapImpact, draftFinishOverage, freeAgentNegotiationPreview, meterImpactPreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, shopTradeImpactPreview, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel,  weekMatchup, yourRoster } from "@/lib/engine/season";
+import { advancedLines, campCapSpaceAfterCuts, campCutDeadMoney, campCutProtections, capCutDeadMoney, divisionTable, draftCapImpact, draftFinishOverage, freeAgentNegotiationPreview, meterImpactPreview, lateSeasonStakes, playoffReadiness, playoffReadinessRating, weeklyChoicePreview, pendingInjuryPlayer, playerAvailabilityLabel, playerContractLabel, playerRatingLabel, priorityLabel, rosterDepthWarnings, rosterForDisplay, seasonDrivers, shopTradeImpactPreview, staffImpactPreview, standings, suggestedCuts, teamRecord, tradeImpactPreview, tradeIncomingName, tradeOutgoingLabel, tradeValueLabel,  weekMatchup, yourRoster } from "@/lib/engine/season";
 import type { Phase, Player, Pos, Prospect, SeasonState, StaffRole } from "@/lib/types";
 import { hasFullAccess } from "@/lib/access";
 import { formatContractYears, formatMoney, formatPlayoffRound } from "@/lib/format";
@@ -1063,33 +1063,45 @@ function Regular({
           </div>
         </article>
       ) : null}
+      {lateSeasonStakes(season) ? (
+        <div className="rounded-xl border border-primary/30 bg-card p-3 text-sm" data-testid="playoff-readiness">
+          <p className="font-semibold">Playoff readiness {signed(playoffReadiness(season))}</p>
+          <p className="text-muted-foreground">Choices from Week 12 have larger approval swings and can build or cost preparation. Readiness adjusts your offense and defense in playoff games, not your seed or qualification. Approval gains slow above 85.</p>
+        </div>
+      ) : null}
       {decision ? (
         <div className="space-y-3 rounded-2xl border border-primary/30 bg-card p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-primary">{decision.id === "deadline" ? "Trade deadline, after Week 9" : `Week ${season.week} · ${decision.kicker}`}</p>
           <h2 className="font-display text-3xl tracking-wide">{decision.title}</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">{decision.body}</p>
-          {decision.options.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              data-testid={`choice-${option.id}`}
-              className="block w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-left hover:border-primary/60"
-              onClick={() => dispatch({ type: "decide", choiceId: option.id })}
-            >
-              <span className="block font-medium">{option.label}</span>
-              <span className="mt-1 block text-sm text-muted-foreground">
-                {decision.id === "deadline" && option.id === "deal" ? (
-                  <>
-                    {option.detail.split(" Brief reaction:")[0]}
-                    {tradedPlayer ? <> Cap room {money(beforeTradeRoom)} to {money(afterTradeRoom)}. The outside market is closed for the season.</> : null}
-                  </>
-                ) : decision.id === "extension" ? option.detail.split(/ Owner [0+−]/)[0] : option.detail}
-                <span className="mt-1 block" data-testid="weekly-choice-effects">
-                  <TradeApproval impact={meterImpactPreview(season, option)} />
+          {decision.options.map((option) => {
+            const impact = weeklyChoicePreview(season, decision, option);
+            return (
+              <button
+                key={option.id}
+                type="button"
+                data-testid={`choice-${option.id}`}
+                className="block w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-left hover:border-primary/60"
+                onClick={() => dispatch({ type: "decide", choiceId: option.id })}
+              >
+                <span className="block font-medium">{option.label}</span>
+                <span className="mt-1 block text-sm text-muted-foreground">
+                  {decision.id === "deadline" && option.id === "deal" ? (
+                    <>
+                      {option.detail.split(" Brief reaction:")[0]}
+                      {tradedPlayer ? <> Cap room {money(beforeTradeRoom)} to {money(afterTradeRoom)}. The outside market is closed for the season.</> : null}
+                    </>
+                  ) : decision.id === "extension" || decision.id === "injury" ? option.detail.split(/ (?:Owner|Fans) [0+−]/)[0] : option.detail}
+                  <span className="mt-1 block" data-testid="weekly-choice-effects">
+                    {decision.id === "deadline" ? <TradeApproval impact={impact} /> : <>
+                      Owner {signed(impact.owner.applied)} · Fans {signed(impact.fans.applied)} · Locker {signed(impact.locker.applied)}
+                    </>}
+                    {lateSeasonStakes(season) ? <> · Playoff readiness {signed(impact.readiness.after - impact.readiness.before)}</> : null}
+                  </span>
                 </span>
-              </span>
-            </button>
-          ))}
+              </button>
+            );
+          })}
           <p role="status" className="text-xs text-muted-foreground">Resolve this desk decision before playing or simming ahead.</p>
         </div>
       ) : (
@@ -1161,6 +1173,7 @@ function Playoffs({ season }: { season: SeasonState }) {
       <p className="text-sm leading-relaxed text-muted-foreground">
         Regular-season records set seeds and home field. Current roster strength, staff effects, injuries, and deterministic game variance decide each matchup, so upsets remain possible.
       </p>
+      {season.mode !== "historical" ? <p className="text-sm" data-testid="playoff-readiness">Playoff readiness {signed(playoffReadiness(season))} · {signed(Number(playoffReadinessRating(season).toFixed(2)))} to offense and defense ratings in your playoff games.</p> : null}
       <ul className="space-y-1 text-sm">
         {(playoff?.seeds.AFC ?? []).map((seed) => (
           <li key={`A-${seed.teamId}`} className={seed.teamId === season.teamId ? "text-primary" : ""}>
