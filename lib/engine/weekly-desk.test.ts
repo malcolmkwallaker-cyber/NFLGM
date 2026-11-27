@@ -166,8 +166,8 @@ describe("late-season stakes", () => {
     expect(state.grade).toMatchObject({ wins: 14, losses: 3 });
   });
 
-  it("changes the deterministic playoff simulation without changing the existing bracket", () => {
-    let state = campStart("KC", 1403389971);
+  it.each([["KC", 1403389971, "divisional"], ["SEA", 3868239877, "wildcard"]] as const)("changes %s playoff simulation without changing the existing bracket", (team, seed, round) => {
+    let state = campStart(team, seed);
     for (let i = 0; i < 80 && state.phase !== "playoffs"; i++) {
       const suggested = suggestAction(state);
       if (!suggested) throw new Error("Could not reach playoffs");
@@ -177,6 +177,7 @@ describe("late-season stakes", () => {
     if (!state.playoff?.pending.some(game => game.home === state.teamId || game.away === state.teamId)) state = applyAction(state, { type: "playoff" });
     const match = state.playoff?.pending.find(game => game.home === state.teamId || game.away === state.teamId);
     if (!match) throw new Error("Missing playoff fixture game");
+    expect(match.round).toBe(round);
     const high = applyAction({ ...state, flags: { ...state.flags, "playoff-readiness": 6 } }, { type: "playoff" });
     const low = applyAction({ ...state, flags: { ...state.flags, "playoff-readiness": -6 } }, { type: "playoff" });
     const firstResult = (s: SeasonState) => s.results.find(g => g.round === match.round && g.home === match.home && g.away === match.away);

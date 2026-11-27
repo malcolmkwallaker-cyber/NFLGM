@@ -2545,7 +2545,7 @@ function simulateMatch(state: SeasonState, home: string, away: string, key: stri
   const postseason = !key.startsWith("w");
   const withReadiness = (id: string) => {
     const rating = teamRatings(state, id);
-    const prep = postseason && id === state.teamId ? playoffReadinessRating(state) : 0;
+    const prep = state.phase === "playoffs" && id === state.teamId ? playoffReadinessRating(state) : 0;
     return { off: rating.off + prep, def: rating.def + prep };
   };
   const hr = withReadiness(home);
