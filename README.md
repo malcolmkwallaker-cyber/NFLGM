@@ -110,7 +110,7 @@ Stubbed or simplified:
 
 ## In-house analytics
 
-The game can record cookieless, first-party statistics. Collection defaults off on both the browser and server. Both switches below must be explicitly enabled after approval. Nothing here sets a cookie or calls a third party. A failed request cannot interrupt play.
+The game can record cookieless, first-party statistics. Collection defaults off on both the browser and server. Both switches below must be explicitly enabled after approval. Nothing in this first-party collector sets a cookie or calls a third party. A failed request cannot interrupt play. Google Analytics 4 is separate: it stays off unless `NEXT_PUBLIC_GA_MEASUREMENT_ID` is a valid measurement ID and the visitor allows it. See `docs/GOOGLE_ANALYTICS.md`.
 
 The browser keeps a random id in `sessionStorage` for the open tab. It can also keep a random seed in `localStorage` and send only a hash of that seed plus the UTC date. The seed never leaves the device. Yesterday’s hash and the hash from seven days earlier are sent with it so the dashboard can compute D1 and D7 return. These are pseudonymous identifiers: the linked hashes can connect visits across days. Do Not Track and Global Privacy Control skip measurement entirely.
 
@@ -141,6 +141,7 @@ Set these in the Netlify UI. Do not commit them.
 | Variable | Where it is read | Purpose |
 | --- | --- | --- |
 | `NEXT_PUBLIC_ANALYTICS` | Game bundle, at build time | Set to `on` to make the browser send events. Any other value, including unset, keeps the game silent. Changing it requires a new deploy. |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | Game bundle, at build time | GA4 measurement ID (`G-…`). Unset or invalid skips the tag. A valid ID still waits for the visitor to allow measurement. Set it in the Netlify UI under Site configuration → Environment variables, then redeploy so the static build inlines it. |
 | `ANALYTICS_COLLECTION` | Collector function, runtime | Must equal `on` before any request body is read or database connection is opened. Unset or `off` rejects collection silently. Keep production off pending approval. |
 | `ANALYTICS_DASHBOARD_TOKEN` | Dashboard function, at runtime | Password for `/analytics/`. Use at least 12 characters, for example the output of `openssl rand -base64 24`. |
 
